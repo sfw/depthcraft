@@ -12,6 +12,32 @@ struct QuizFlowView: View {
     @State private var clozeAnswers: [String: String] = [:]
     @State private var graded = false
     @State private var itemResults: [String: Bool] = [:]
+    @State private var navigateToNext = false
+
+    private var nextLesson: (unitId: String, lessonId: String, title: String)? {
+        guard let course = store.course else { return nil }
+        guard let currentUnit = course.curriculum.units.first(where: { $0.id == unitId }) else { return nil }
+        let lessons = store.lessons(for: currentUnit)
+        if let currentIndex = lessons.firstIndex(where: { $0.id == lessonId }),
+           currentIndex + 1 < lessons.count {
+            let next = lessons[currentIndex + 1]
+            return (unitId, next.id, next.title)
+        }
+        let orderedUnits = store.orderedUnits()
+        if let unitIndex = orderedUnits.firstIndex(where: { $0.id == unitId }),
+           unitIndex + 1 < orderedUnits.count {
+            let nextUnit = orderedUnits[unitIndex + 1]
+            if let firstLesson = store.lessons(for: nextUnit).first {
+                return (nextUnit.id, firstLesson.id, firstLesson.title)
+            }
+        }
+        return nil
+    }
+
+    private var isUnitComplete: Bool {
+        guard let unit = store.course?.curriculum.units.first(where: { $0.id == unitId }) else { return false }
+        return store.progress?.units[unitId]?.completed == true
+    }
 
     var body: some View {
         List {
@@ -55,8 +81,34 @@ struct QuizFlowView: View {
                         .font(.headline)
 
                         if passed {
-                            Button("Back to lesson") { dismiss() }
-                                .buttonStyle(.bordered)
+                            if isUnitComplete {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.teal)
+                                    Text("Unit complete")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.teal)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            if let next = nextLesson {
+                                NavigationLink(isActive: $navigateToNext) {
+                                    LessonPlayerView(unitId: next.unitId, lessonId: next.lessonId)
+                                } label: {
+                                    EmptyView()
+                                }
+                                Button {
+                                    navigateToNext = true
+                                } label: {
+                                    Label("Next lesson", systemImage: "arrow.forward.circle.fill")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.teal)
+                            } else {
+                                Button("Back to course") { dismiss() }
+                                    .buttonStyle(.bordered)
+                            }
                         } else {
                             Button("Try again") {
                                 graded = false

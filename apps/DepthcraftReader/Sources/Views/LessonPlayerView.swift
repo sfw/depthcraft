@@ -9,7 +9,7 @@ struct LessonPlayerView: View {
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
-    @State private var markedRead = false
+    @State private var hasScrolledToEnd = false
 
     private var lesson: CurriculumLesson? {
         store.course?.curriculum.lessons[lessonId]
@@ -20,8 +20,10 @@ struct LessonPlayerView: View {
             if let loadError {
                 ContentUnavailableView("Lesson unavailable", systemImage: "doc.questionmark", description: Text(loadError))
             } else {
-                LessonWebView(html: html)
-                    .ignoresSafeArea(edges: .bottom)
+                LessonWebView(html: html, estimatedMinutes: lesson?.estimatedMinutes, onScrolledToEnd: {
+                    hasScrolledToEnd = true
+                })
+                .ignoresSafeArea(edges: .bottom)
 
                 Divider()
 
@@ -31,16 +33,18 @@ struct LessonPlayerView: View {
                             .foregroundStyle(.teal)
                             .font(.subheadline.weight(.semibold))
                     } else {
-                        Text("Study, then check understanding")
+                        Text("Study, then continue to quiz")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button {
-                        markReadOnce()
+                        if hasScrolledToEnd {
+                            store.markLessonRead(lessonId: lessonId, unitId: unitId)
+                        }
                         showQuiz = true
                     } label: {
-                        Label(quiz == nil ? "Quiz unavailable" : "Take quiz", systemImage: "checkmark.circle")
+                        Label(quiz == nil ? "Quiz unavailable" : "Continue to quiz", systemImage: "arrow.right.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.teal)
@@ -60,16 +64,8 @@ struct LessonPlayerView: View {
         }
         .task {
             await load()
+            store.updateLastVisited(lessonId: lessonId, unitId: unitId)
         }
-        .onDisappear {
-            markReadOnce()
-        }
-    }
-
-    private func markReadOnce() {
-        guard !markedRead else { return }
-        markedRead = true
-        store.markLessonRead(lessonId: lessonId, unitId: unitId)
     }
 
     @MainActor
@@ -77,12 +73,9 @@ struct LessonPlayerView: View {
         guard let course = store.course else { return }
         do {
             let md = try PackageLoader.lessonMarkdown(course: course, unitId: unitId, lessonId: lessonId)
-            html = MarkdownHTML.render(md, title: lesson?.title ?? "")
+            html = MarkdownHTML.render(md, title: lesson?.title ?? "", estimatedMinutes: lesson?.estimatedMinutes)
             quiz = try PackageLoader.quiz(course: course, unitId: unitId, lessonId: lessonId)
             loadError = nil
-            // Mark read shortly after open so resume works even if they don't finish.
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            markReadOnce()
         } catch {
             loadError = error.localizedDescription
         }

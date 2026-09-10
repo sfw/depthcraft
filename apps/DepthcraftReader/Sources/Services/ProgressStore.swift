@@ -59,6 +59,12 @@ final class ProgressStore {
         save(progress)
     }
 
+    func updateLastVisited(_ progress: inout DeviceProgress, lessonId: String, unitId: String) {
+        progress.lastLessonId = lessonId
+        progress.lastUnitId = unitId
+        save(progress)
+    }
+
     func markQuizPassed(_ progress: inout DeviceProgress, lessonId: String, unitId: String, curriculum: Curriculum) {
         var lesson = progress.lessons[lessonId] ?? .empty
         lesson.quizPassed = true
