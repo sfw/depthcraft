@@ -20,6 +20,7 @@ struct GenerationView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOpenPackage = false
+    @State private var lastFailedRequest: GenerationRequest?
     
     init() {
         let store = APIKeyStore()
@@ -35,6 +36,8 @@ struct GenerationView: View {
                 approvalSection
             } else if orchestrator.progress.phase == .completed {
                 completedSection
+            } else if orchestrator.progress.phase == .failed {
+                failedSection
             } else {
                 progressSection
             }
@@ -44,9 +47,6 @@ struct GenerationView: View {
             Button("OK") {
                 errorMessage = nil
                 showingError = false
-                if orchestrator.progress.phase == .failed {
-                    orchestrator.reset()
-                }
             }
         } message: {
             if let error = orchestrator.progress.error {
@@ -198,6 +198,42 @@ struct GenerationView: View {
         }
     }
     
+    private var failedSection: some View {
+        Group {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text("Generation Failed")
+                            .font(.headline)
+                    }
+                    
+                    if let error = orchestrator.progress.error {
+                        Text(error)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            
+            Section {
+                Button {
+                    retryGeneration()
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                
+                Button("Back to Setup", role: .cancel) {
+                    orchestrator.reset()
+                }
+            }
+        }
+    }
+    
     private func providerPicker(provider: Binding<LLMProvider>, model: Binding<String>) -> some View {
         Group {
             Picker("Provider", selection: provider) {
@@ -236,6 +272,8 @@ struct GenerationView: View {
                 quizWriterConfig: LLMConfiguration(provider: quizProvider, model: quizModel, apiKey: ""),
                 generateUnitIds: nil
             )
+            
+            lastFailedRequest = request
             
             Task {
                 await orchestrator.startGeneration(request: request)
@@ -278,12 +316,31 @@ struct GenerationView: View {
                 generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds)
             )
             
+            lastFailedRequest = request
+            
             Task {
                 await orchestrator.continueGeneration(request: request)
             }
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
+        }
+    }
+    
+    private func retryGeneration() {
+        guard let request = lastFailedRequest else {
+            orchestrator.reset()
+            return
+        }
+        
+        Task {
+            if orchestrator.draftCurriculum != nil {
+                // Was in generation phase (post-approve)
+                await orchestrator.continueGeneration(request: request)
+            } else {
+                // Was in planning phase
+                await orchestrator.startGeneration(request: request)
+            }
         }
     }
     
