@@ -3,7 +3,6 @@ import WebKit
 
 struct LessonWebView: UIViewRepresentable {
     let html: String
-    let estimatedMinutes: Int?
     let onScrolledToEnd: () -> Void
 
     func makeUIView(context: Context) -> WKWebView {

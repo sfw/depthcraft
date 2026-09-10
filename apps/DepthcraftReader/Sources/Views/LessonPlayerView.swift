@@ -20,7 +20,7 @@ struct LessonPlayerView: View {
             if let loadError {
                 ContentUnavailableView("Lesson unavailable", systemImage: "doc.questionmark", description: Text(loadError))
             } else {
-                LessonWebView(html: html, estimatedMinutes: lesson?.estimatedMinutes, onScrolledToEnd: {
+                LessonWebView(html: html, onScrolledToEnd: {
                     hasScrolledToEnd = true
                 })
                 .ignoresSafeArea(edges: .bottom)
@@ -39,9 +39,7 @@ struct LessonPlayerView: View {
                     }
                     Spacer()
                     Button {
-                        if hasScrolledToEnd {
-                            store.markLessonRead(lessonId: lessonId, unitId: unitId)
-                        }
+                        store.markLessonRead(lessonId: lessonId, unitId: unitId)
                         showQuiz = true
                     } label: {
                         Label(quiz == nil ? "Quiz unavailable" : "Continue to quiz", systemImage: "arrow.right.circle.fill")
