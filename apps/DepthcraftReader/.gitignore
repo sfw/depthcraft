@@ -1,0 +1,5 @@
+DepthcraftReader.xcodeproj/
+DerivedData/
+*.xcuserdata
+xcuserdata/
+.DS_Store
