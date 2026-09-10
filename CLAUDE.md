@@ -1,25 +1,24 @@
-# Depthcraft — Claude Code handoff
+# Depthcraft — builder handoff
 
-## Org chart (do not skip)
+## Org chart
 
 | Role | Who | Job |
 |------|-----|-----|
-| Eng lead | **Lab Partner** (Scott’s Grok Bot) | Oversees builders, answers eng questions, reviews PRs, gives direction |
+| Eng lead | **Lab Partner** (Scott’s Grok Bot) | Dispatches builder agents, answers questions, reviews PRs, gives direction, updates Scott |
 | Product | **Product Designer** (via Lab Partner) | UX/scope/completion rules — builders do **not** ping Product Designer directly |
-| Builder | **You (Claude Code on Mac)** | Implement on a branch, open PRs, ask Lab Partner when stuck |
-| Human | Scott | Dogfood, screenshots, merge when Lab Partner says merge-ready |
+| Builder | **Cursor cloud agents** (and any other agents Lab Partner launches) | Implement on a branch, open PRs, escalate to Lab Partner when stuck |
+| Human | Scott | Dogfood, screenshots, high-level calls — **does not** run Claude Code or babysit builders |
 
-Scott should not be the relay. If you need a decision, escalate to Lab Partner (issue/`needs-lab-partner` or PR comment `@` / clear ask). Lab Partner asks Product Designer for product forks.
+Scott is not the relay. Questions → Lab Partner (PR comment or issue labeled `needs-lab-partner`). Product forks → Lab Partner asks Product Designer, then posts the lock.
 
 ## How to work
 
 1. Branch off `main` — never dump big UI straight onto `main`.
 2. Open a **PR** early; keep it updated.
-3. Questions / blockers → GitHub **issue** with label `needs-lab-partner` (create the label if missing), body = question + options you considered. Do not guess past a product fork.
-4. After meaningful UI: ask Scott to drop iPad simulator screenshots of home / unit / lesson / quiz into the Lab Partner chat for UX critique.
-5. Wait for Lab Partner review comments before treating work as done.
+3. Blockers → issue with label `needs-lab-partner` (create label if missing).
+4. Do not guess past a product fork.
 
-## Open the app
+## Open the app (Scott / Mac dogfood)
 
 ```bash
 cd apps/DepthcraftReader
@@ -39,24 +38,14 @@ Course experience, **not** a markdown file browser:
 - Airplane mode: zero network on the study path
 - Out of scope for v0.1 reader: primers, demos, chat, accounts, iCloud, generation pipeline
 
-## Product nits for this pass (from Product Designer)
+## Product nits (active)
 
-1. **Read intent ≠ open.** Do not treat ~0.8s open as "studied." Resume may track last opened lesson; **completion** still requires meaningful read intent **and** quiz pass (e.g. scroll-end **or** explicit Continue to quiz before read counts).
-2. **Thicken lesson chrome.** Study typography in the WebView HTML (measure, type scale, margins) + **estimated minutes** in the lesson header.
-3. **Course session handoff.** After quiz pass, strong **Next lesson** / unit checkmark so it feels like one continuous course session.
+1. **Read intent ≠ open.** Resume may track last opened lesson; **completion** requires meaningful read intent **and** quiz pass (scroll-end and/or Continue-to-quiz before read counts).
+2. **Thicken lesson chrome.** Study typography (measure, type scale, margins) + **estimated minutes** in the lesson header.
+3. **Course session handoff.** After quiz pass, strong **Next lesson** / unit checkmark.
 
 ## Package contract
 
 - Schema: `schema/0.1.0/`
-- Dogfood fixture: `Fixtures/ai-harness-design.depthcraft/` (topic: AI harness design for educational systems)
-- Cloze grade: Unicode casefold + trim
-- MC grade: `correctId` match
-
-## Repo layout
-
-```
-schema/0.1.0/
-Fixtures/ai-harness-design.depthcraft/
-apps/DepthcraftReader/   # SwiftUI + project.yml (XcodeGen)
-CLAUDE.md
-```
+- Dogfood fixture: `Fixtures/ai-harness-design.depthcraft/`
+- Cloze: Unicode casefold + trim; MC: `correctId` match
