@@ -80,9 +80,15 @@ struct CourseHomeView: View {
 
                 Section {
                     NavigationLink {
+                        GenerationView()
+                    } label: {
+                        Label("Generate Course", systemImage: "sparkles")
+                    }
+                    
+                    NavigationLink {
                         SettingsStubView()
                     } label: {
-                        Label("Settings (BYOK stub)", systemImage: "key")
+                        Label("Settings", systemImage: "key")
                     }
                 } footer: {
                     Text("Airplane-mode study only — no network required. Progress stays on this device, keyed by packageId.")
