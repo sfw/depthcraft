@@ -1,24 +1,23 @@
 import SwiftUI
 
-struct NextLessonDestination: Hashable, Identifiable {
-    let unitId: String
-    let lessonId: String
-    var id: String { "\(unitId)_\(lessonId)" }
-}
-
 struct LessonPlayerView: View {
     @EnvironmentObject private var store: CourseStore
+    @Environment(\.navigationPath) private var environmentNavigationPath
     let unitId: String
     let lessonId: String
+    var navigationPath: Binding<[NavigationDestination]>?
 
     @State private var html: String = ""
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
-    @State private var navigateToNextLesson: NextLessonDestination? = nil
 
     private var lesson: CurriculumLesson? {
         store.course?.curriculum.lessons[lessonId]
+    }
+    
+    private var activeNavigationPath: Binding<[NavigationDestination]> {
+        navigationPath ?? environmentNavigationPath
     }
 
     var body: some View {
@@ -63,16 +62,14 @@ struct LessonPlayerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showQuiz) {
             if let quiz {
-                QuizFlowView(unitId: unitId, lessonId: lessonId, quiz: quiz, onNavigateToNextLesson: { nextUnit, nextLesson in
-                    showQuiz = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        navigateToNextLesson = NextLessonDestination(unitId: nextUnit, lessonId: nextLesson)
-                    }
-                })
+                QuizFlowView(
+                    unitId: unitId,
+                    lessonId: lessonId,
+                    quiz: quiz,
+                    navigationPath: activeNavigationPath,
+                    onDismissQuiz: { showQuiz = false }
+                )
             }
-        }
-        .navigationDestination(item: $navigateToNextLesson) { next in
-            LessonPlayerView(unitId: next.unitId, lessonId: next.lessonId)
         }
         .task {
             await load()

@@ -7,7 +7,8 @@ struct QuizFlowView: View {
     let unitId: String
     let lessonId: String
     let quiz: QuizDocument
-    let onNavigateToNextLesson: (String, String) -> Void
+    let navigationPath: Binding<[NavigationDestination]>
+    let onDismissQuiz: () -> Void
 
     @State private var mcSelections: [String: String] = [:]
     @State private var clozeAnswers: [String: String] = [:]
@@ -93,7 +94,7 @@ struct QuizFlowView: View {
                             }
                             if let next = nextLesson {
                                 Button {
-                                    onNavigateToNextLesson(next.unitId, next.lessonId)
+                                    navigateToNextLesson(nextUnitId: next.unitId, nextLessonId: next.lessonId)
                                 } label: {
                                     Label("Next lesson", systemImage: "arrow.forward.circle.fill")
                                         .frame(maxWidth: .infinity)
@@ -194,5 +195,17 @@ struct QuizFlowView: View {
         if results.values.allSatisfy({ $0 }) {
             store.markQuizPassed(lessonId: lessonId, unitId: unitId)
         }
+    }
+    
+    private func navigateToNextLesson(nextUnitId: String, nextLessonId: String) {
+        // Dismiss the quiz sheet first
+        onDismissQuiz()
+        
+        // Remove the current lesson from the path (last item should be the current lesson)
+        // and replace it with the next lesson, so Back goes to the previous lesson, not the completed one
+        if !navigationPath.wrappedValue.isEmpty {
+            navigationPath.wrappedValue.removeLast()
+        }
+        navigationPath.wrappedValue.append(.lesson(unitId: nextUnitId, lessonId: nextLessonId))
     }
 }
