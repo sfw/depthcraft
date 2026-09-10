@@ -7,8 +7,10 @@ final class CourseStore: ObservableObject {
     @Published var progress: DeviceProgress?
     @Published var errorMessage: String?
     @Published var isLoading = false
-
+    @Published var availablePackages: [URL] = []
+    
     private let progressStore = ProgressStore()
+    private let fileManager = FileManager.default
 
     func loadBundledCourseIfNeeded() {
         guard course == nil else { return }
@@ -26,8 +28,46 @@ final class CourseStore: ObservableObject {
                 unitIds: unitIds
             )
             errorMessage = nil
+            refreshAvailablePackages()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+    
+    func loadPackage(from url: URL) {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let loaded = try PackageLoader.load(from: url)
+            course = loaded
+            let lessonIds = Array(loaded.curriculum.lessons.keys)
+            let unitIds = loaded.curriculum.units.map(\.id)
+            progress = progressStore.load(
+                packageId: loaded.manifest.packageId,
+                lessonIds: lessonIds,
+                unitIds: unitIds
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    func refreshAvailablePackages() {
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        do {
+            let contents = try fileManager.contentsOfDirectory(
+                at: documentsURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+            
+            availablePackages = contents.filter { url in
+                url.pathExtension == "depthcraft" || url.lastPathComponent.hasSuffix(".depthcraft")
+            }
+        } catch {
+            availablePackages = []
         }
     }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct GenerationView: View {
     @StateObject private var orchestrator: GenerationOrchestrator
     @StateObject private var keyStore = APIKeyStore()
+    @EnvironmentObject private var courseStore: CourseStore
     
     @State private var topic = "AI harness design for educational systems"
     @State private var locale = "en-CA"
@@ -17,6 +18,7 @@ struct GenerationView: View {
     @State private var quizModel = "gpt-4o"
     
     @State private var errorAlert: String?
+    @State private var showingOpenPackage = false
     
     init() {
         let store = APIKeyStore()
@@ -45,6 +47,13 @@ struct GenerationView: View {
             if let error = orchestrator.progress.error {
                 Text(error)
             }
+        }
+        .alert("Package Loaded", isPresented: $showingOpenPackage) {
+            Button("OK") {
+                showingOpenPackage = false
+            }
+        } message: {
+            Text("The generated course has been loaded into the reader. Tap OK to return to the course home.")
         }
     }
     
@@ -90,44 +99,30 @@ struct GenerationView: View {
     private var approvalSection: some View {
         Group {
             if let curriculum = orchestrator.draftCurriculum {
-                Section("Draft Curriculum") {
-                    Text("Review the planned curriculum and approve to continue generation.")
+                VStack {
+                    Text("Curriculum planned. Tap below to edit and approve.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .padding()
                     
-                    ForEach(curriculum.units) { unit in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(unit.title)
-                                .font(.headline)
-                            
-                            ForEach(unit.lessonIds, id: \.self) { lessonId in
-                                if let lesson = curriculum.lessons[lessonId] {
-                                    HStack {
-                                        Text("•")
-                                        Text(lesson.title)
-                                        Spacer()
-                                        if let minutes = lesson.estimatedMinutes {
-                                            Text("\(minutes) min")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .font(.subheadline)
-                                }
+                    NavigationLink {
+                        CurriculumEditorView(
+                            curriculum: Binding(
+                                get: { orchestrator.draftCurriculum ?? curriculum },
+                                set: { orchestrator.draftCurriculum = $0 }
+                            ),
+                            onApprove: { selectedUnitIds in
+                                continueGeneration(selectedUnitIds: selectedUnitIds)
+                            },
+                            onCancel: {
+                                orchestrator.reset()
                             }
-                        }
-                        .padding(.vertical, 4)
+                        )
+                    } label: {
+                        Label("Edit & Approve Curriculum", systemImage: "pencil.circle")
+                            .font(.headline)
                     }
-                }
-                
-                Section {
-                    Button("Approve & Generate") {
-                        continueGeneration()
-                    }
-                    
-                    Button("Cancel", role: .destructive) {
-                        orchestrator.reset()
-                    }
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -175,6 +170,14 @@ struct GenerationView: View {
                 }
                 
                 Section {
+                    Button {
+                        openGeneratedPackage(output.packageURL)
+                    } label: {
+                        Label("Open in Reader", systemImage: "book.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    
                     Button("Generate Another") {
                         orchestrator.reset()
                     }
@@ -226,7 +229,7 @@ struct GenerationView: View {
         }
     }
     
-    private func continueGeneration() {
+    private func continueGeneration(selectedUnitIds: Set<String>) {
         do {
             let lessonKey = try keyStore.getKey(for: lessonProvider)
             guard let lessonKey else {
@@ -252,7 +255,7 @@ struct GenerationView: View {
                 plannerConfig: LLMConfiguration(provider: plannerProvider, model: plannerModel, apiKey: plannerKey),
                 lessonWriterConfig: LLMConfiguration(provider: lessonProvider, model: lessonModel, apiKey: lessonKey),
                 quizWriterConfig: LLMConfiguration(provider: quizProvider, model: quizModel, apiKey: quizKey),
-                generateUnitIds: nil
+                generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds)
             )
             
             Task {
@@ -261,5 +264,10 @@ struct GenerationView: View {
         } catch {
             errorAlert = error.localizedDescription
         }
+    }
+    
+    private func openGeneratedPackage(_ url: URL) {
+        courseStore.loadPackage(from: url)
+        showingOpenPackage = true
     }
 }

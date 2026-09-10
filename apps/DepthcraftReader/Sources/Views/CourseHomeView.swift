@@ -85,6 +85,14 @@ struct CourseHomeView: View {
                         Label("Generate Course", systemImage: "sparkles")
                     }
                     
+                    if !store.availablePackages.isEmpty {
+                        NavigationLink {
+                            PackageSwitcherView()
+                        } label: {
+                            Label("Switch Package", systemImage: "folder")
+                        }
+                    }
+                    
                     NavigationLink {
                         SettingsStubView()
                     } label: {
