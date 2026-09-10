@@ -17,7 +17,7 @@ struct GenerationView: View {
     @State private var quizProvider: LLMProvider = .openai
     @State private var quizModel = "gpt-4o"
     
-    @State private var errorAlert: String?
+    @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOpenPackage = false
     
@@ -40,13 +40,24 @@ struct GenerationView: View {
             }
         }
         .navigationTitle("Generate Course")
-        .alert("Error", isPresented: .constant(orchestrator.progress.error != nil)) {
+        .alert("Error", isPresented: $showingError) {
             Button("OK") {
-                orchestrator.reset()
+                errorMessage = nil
+                showingError = false
+                if orchestrator.progress.phase == .failed {
+                    orchestrator.reset()
+                }
             }
         } message: {
             if let error = orchestrator.progress.error {
                 Text(error)
+            } else if let error = errorMessage {
+                Text(error)
+            }
+        }
+        .onChange(of: orchestrator.progress.error) { _, newError in
+            if newError != nil {
+                showingError = true
             }
         }
         .alert("Package Loaded", isPresented: $showingOpenPackage) {
@@ -212,7 +223,8 @@ struct GenerationView: View {
         do {
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorAlert = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                showingError = true
                 return
             }
             
@@ -229,7 +241,8 @@ struct GenerationView: View {
                 await orchestrator.startGeneration(request: request)
             }
         } catch {
-            errorAlert = error.localizedDescription
+            errorMessage = error.localizedDescription
+            showingError = true
         }
     }
     
@@ -237,19 +250,22 @@ struct GenerationView: View {
         do {
             let lessonKey = try keyStore.getKey(for: lessonProvider)
             guard let lessonKey else {
-                errorAlert = "No API key configured for \(lessonProvider.displayName)"
+                errorMessage = "No API key configured for \(lessonProvider.displayName)"
+                showingError = true
                 return
             }
             
             let quizKey = try keyStore.getKey(for: quizProvider)
             guard let quizKey else {
-                errorAlert = "No API key configured for \(quizProvider.displayName)"
+                errorMessage = "No API key configured for \(quizProvider.displayName)"
+                showingError = true
                 return
             }
             
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorAlert = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                showingError = true
                 return
             }
             
@@ -266,7 +282,8 @@ struct GenerationView: View {
                 await orchestrator.continueGeneration(request: request)
             }
         } catch {
-            errorAlert = error.localizedDescription
+            errorMessage = error.localizedDescription
+            showingError = true
         }
     }
     
