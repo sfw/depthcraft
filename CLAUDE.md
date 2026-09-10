@@ -1,6 +1,23 @@
 # Depthcraft — Claude Code handoff
 
-Mac + Xcode + Claude Code owns the **iPad reader** iteration. Lab Partner / Product Designer own schema, fixtures, and product locks.
+## Org chart (do not skip)
+
+| Role | Who | Job |
+|------|-----|-----|
+| Eng lead | **Lab Partner** (Scott’s Grok Bot) | Oversees builders, answers eng questions, reviews PRs, gives direction |
+| Product | **Product Designer** (via Lab Partner) | UX/scope/completion rules — builders do **not** ping Product Designer directly |
+| Builder | **You (Claude Code on Mac)** | Implement on a branch, open PRs, ask Lab Partner when stuck |
+| Human | Scott | Dogfood, screenshots, merge when Lab Partner says merge-ready |
+
+Scott should not be the relay. If you need a decision, escalate to Lab Partner (issue/`needs-lab-partner` or PR comment `@` / clear ask). Lab Partner asks Product Designer for product forks.
+
+## How to work
+
+1. Branch off `main` — never dump big UI straight onto `main`.
+2. Open a **PR** early; keep it updated.
+3. Questions / blockers → GitHub **issue** with label `needs-lab-partner` (create the label if missing), body = question + options you considered. Do not guess past a product fork.
+4. After meaningful UI: ask Scott to drop iPad simulator screenshots of home / unit / lesson / quiz into the Lab Partner chat for UX critique.
+5. Wait for Lab Partner review comments before treating work as done.
 
 ## Open the app
 
@@ -28,8 +45,6 @@ Course experience, **not** a markdown file browser:
 2. **Thicken lesson chrome.** Study typography in the WebView HTML (measure, type scale, margins) + **estimated minutes** in the lesson header.
 3. **Course session handoff.** After quiz pass, strong **Next lesson** / unit checkmark so it feels like one continuous course session.
 
-When you have simulator screenshots of home / unit / lesson / quiz, Scott can send them to Product Designer for a sharper UX critique.
-
 ## Package contract
 
 - Schema: `schema/0.1.0/`
@@ -43,4 +58,5 @@ When you have simulator screenshots of home / unit / lesson / quiz, Scott can se
 schema/0.1.0/
 Fixtures/ai-harness-design.depthcraft/
 apps/DepthcraftReader/   # SwiftUI + project.yml (XcodeGen)
+CLAUDE.md
 ```
