@@ -17,7 +17,7 @@ struct CurriculumEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Edit unit and lesson titles and order below. Check units to generate (uncheck to skip for cost control).")
+                    Text("Edit unit and lesson titles below. Check units to generate (uncheck to skip for cost control).")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } header: {

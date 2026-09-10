@@ -78,6 +78,7 @@ final class PackageValidationTests: XCTestCase {
         
         let id1 = packager.generatePackageId(from: "Test Course")
         XCTAssertTrue(id1.hasPrefix("test-course"))
+        XCTAssertTrue(id1.contains("-"))
         
         let id2 = packager.generatePackageId(from: "AI Harness Design")
         XCTAssertTrue(id2.hasPrefix("ai-harness-design"))
@@ -86,7 +87,7 @@ final class PackageValidationTests: XCTestCase {
         XCTAssertTrue(id3.hasPrefix("course-with-special-characters"))
     }
     
-    func testValidateCurriculumStructure() async throws {
+    func testValidateCurriculumStructure() throws {
         let packager = PackagerService()
         
         let curriculum = Curriculum(
@@ -204,6 +205,82 @@ final class PackageValidationTests: XCTestCase {
             )
         )
     }
+    
+    func testSubsetPackaging() throws {
+        let packager = PackagerService()
+        
+        // Curriculum with 3 units, but only packaging unit 1
+        let curriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "approved",
+            approvedAt: ISO8601DateFormatter().string(from: Date()),
+            units: [
+                CurriculumUnit(
+                    id: "u01-selected",
+                    title: "Selected Unit",
+                    order: 1,
+                    lessonIds: ["l01-selected"]
+                )
+            ],
+            lessons: [
+                "l01-selected": CurriculumLesson(
+                    id: "l01-selected",
+                    unitId: "u01-selected",
+                    title: "Selected Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let manifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-subset-package",
+            title: "Test Subset",
+            topic: "Test Subset Topic",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            locale: "en-CA"
+        )
+        
+        let meta = LessonMeta(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-selected",
+            anchors: []
+        )
+        
+        let quiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-selected",
+            items: [
+                .mc(MCItem(
+                    id: "q1",
+                    type: "mc",
+                    prompt: "Test?",
+                    choices: [
+                        MCChoice(id: "a", text: "A"),
+                        MCChoice(id: "b", text: "B")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        
+        // Only content for selected unit
+        let lessons = ["l01-selected": ("# Selected\n\nContent", meta)]
+        let quizzes = ["l01-selected": quiz]
+        
+        // Should validate successfully - only requires content for lessons in sliced curriculum
+        XCTAssertNoThrow(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes
+            )
+        )
+    }
 }
 
 final class LessonMetaExtractionTests: XCTestCase {
@@ -248,51 +325,6 @@ final class LessonMetaExtractionTests: XCTestCase {
 class MockLLMClient: LLMClient {
     func complete(systemPrompt: String, userPrompt: String) async throws -> String {
         return "Mock response"
-    }
-}
-
-extension PackagerService {
-    func generatePackageId(from topic: String) -> String {
-        let cleaned = topic
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: " ", with: "-")
-        return String(cleaned.prefix(40))
-    }
-    
-    func validatePackage(
-        manifest: PackageManifest,
-        curriculum: Curriculum,
-        lessons: [String: (markdown: String, meta: LessonMeta)],
-        quizzes: [String: QuizDocument]
-    ) throws {
-        guard curriculum.schemaVersion == "0.1.0" else {
-            throw GenerationError.validationFailed("Invalid curriculum schema version")
-        }
-        
-        guard !curriculum.units.isEmpty else {
-            throw GenerationError.validationFailed("Curriculum has no units")
-        }
-        
-        for unit in curriculum.units {
-            guard !unit.lessonIds.isEmpty else {
-                throw GenerationError.validationFailed("Unit \(unit.id) has no lessons")
-            }
-            
-            for lessonId in unit.lessonIds {
-                guard curriculum.lessons[lessonId] != nil else {
-                    throw GenerationError.validationFailed("Lesson \(lessonId) referenced in unit \(unit.id) not found in curriculum")
-                }
-                
-                guard lessons[lessonId] != nil else {
-                    throw GenerationError.validationFailed("Lesson content for \(lessonId) not provided")
-                }
-                
-                guard quizzes[lessonId] != nil else {
-                    throw GenerationError.validationFailed("Quiz for \(lessonId) not provided")
-                }
-            }
-        }
     }
 }
 

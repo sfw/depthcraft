@@ -89,7 +89,7 @@ struct GenerationView: View {
                 .disabled(!canStartPlanning)
             } footer: {
                 if !canStartPlanning {
-                    Text("Configure at least one API key in Settings")
+                    Text("Configure API key for \(plannerProvider.displayName) in Settings")
                         .foregroundStyle(.red)
                 }
             }
@@ -201,7 +201,10 @@ struct GenerationView: View {
     }
     
     private var canStartPlanning: Bool {
-        keyStore.hasAnthropicKey || keyStore.hasOpenAIKey || keyStore.hasOpenRouterKey
+        guard let key = try? keyStore.getKey(for: plannerProvider), key != nil else {
+            return false
+        }
+        return true
     }
     
     private func startPlanning() {

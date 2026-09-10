@@ -64,7 +64,7 @@ class PackagerService: PackagerRole {
         return packageURL
     }
     
-    private func generatePackageId(from topic: String) -> String {
+    func generatePackageId(from topic: String) -> String {
         let cleaned = topic
             .lowercased()
             .replacingOccurrences(of: "[^a-z0-9 ]", with: "", options: .regularExpression)
@@ -74,7 +74,7 @@ class PackagerService: PackagerRole {
         return "\(prefix)-\(Int(timestamp))"
     }
     
-    private func validatePackage(
+    func validatePackage(
         manifest: PackageManifest,
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
@@ -115,7 +115,7 @@ class PackagerService: PackagerRole {
         }
     }
     
-    private func assemblePackage(
+    func assemblePackage(
         packageId: String,
         manifest: PackageManifest,
         curriculum: Curriculum,

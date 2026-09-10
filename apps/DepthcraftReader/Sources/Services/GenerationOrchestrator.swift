@@ -48,17 +48,25 @@ class GenerationOrchestrator: ObservableObject {
     }
     
     func continueGeneration(request: GenerationRequest) async {
-        guard let curriculum = draftCurriculum else {
+        guard var curriculum = draftCurriculum else {
             progress.error = "No draft curriculum to continue from"
             progress.phase = .failed
             return
         }
         
+        // Stamp approval
+        curriculum.status = "approved"
+        curriculum.approvedAt = ISO8601DateFormatter().string(from: Date())
+        draftCurriculum = curriculum
+        
         let unitsToGenerate: [CurriculumUnit]
+        let selectedUnitIds: Set<String>
         if let generateUnitIds = request.generateUnitIds {
             unitsToGenerate = curriculum.units.filter { generateUnitIds.contains($0.id) }
+            selectedUnitIds = Set(generateUnitIds)
         } else {
             unitsToGenerate = curriculum.units
+            selectedUnitIds = Set(curriculum.units.map { $0.id })
         }
         
         let lessonsToGenerate = unitsToGenerate.flatMap { unit in
@@ -128,6 +136,19 @@ class GenerationOrchestrator: ObservableObject {
             progress.currentItem = "Packaging course"
             progress.completedItems = totalLessons
             
+            // Slice curriculum to only selected units for packaging
+            let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+            let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
+            let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+            
+            let slicedCurriculum = Curriculum(
+                schemaVersion: curriculum.schemaVersion,
+                status: curriculum.status,
+                approvedAt: curriculum.approvedAt,
+                units: selectedUnits,
+                lessons: selectedLessons
+            )
+            
             let packager = PackagerService()
             let plannerRun = RoleRun(
                 provider: request.plannerConfig.provider.rawValue,
@@ -160,7 +181,7 @@ class GenerationOrchestrator: ObservableObject {
             let packageURL = try await packager.packageCourse(
                 topic: request.topic,
                 locale: request.locale,
-                curriculum: curriculum,
+                curriculum: slicedCurriculum,
                 lessons: lessons,
                 quizzes: quizzes,
                 roleRuns: metadata
