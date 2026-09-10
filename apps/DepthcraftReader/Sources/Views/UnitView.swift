@@ -23,9 +23,7 @@ struct UnitView: View {
 
                 Section("Lessons") {
                     ForEach(store.lessons(for: unit)) { lesson in
-                        NavigationLink {
-                            LessonPlayerView(unitId: unitId, lessonId: lesson.id)
-                        } label: {
+                        NavigationLink(value: NavigationDestination.lesson(unitId: unitId, lessonId: lesson.id)) {
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: statusIcon(for: lesson.id))
                                     .foregroundStyle(statusColor(for: lesson.id))

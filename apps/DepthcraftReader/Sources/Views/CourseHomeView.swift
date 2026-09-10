@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CourseHomeView: View {
     @EnvironmentObject private var store: CourseStore
+    @Environment(\.navigationPath) private var navigationPath
 
     var body: some View {
         List {
@@ -24,8 +25,8 @@ struct CourseHomeView: View {
 
                         if let resume = store.resumeTarget(),
                            let lesson = course.curriculum.lessons[resume.lessonId] {
-                            NavigationLink {
-                                LessonPlayerView(unitId: resume.unitId, lessonId: resume.lessonId)
+                            Button {
+                                navigationPath.wrappedValue.append(.lesson(unitId: resume.unitId, lessonId: resume.lessonId))
                             } label: {
                                 Label("Resume · \(lesson.title)", systemImage: "play.fill")
                                     .font(.headline)
@@ -40,9 +41,7 @@ struct CourseHomeView: View {
 
                 Section("Units") {
                     ForEach(store.orderedUnits()) { unit in
-                        NavigationLink {
-                            UnitView(unitId: unit.id)
-                        } label: {
+                        NavigationLink(value: NavigationDestination.unit(unitId: unit.id)) {
                             HStack(spacing: 14) {
                                 ZStack {
                                     Circle()
