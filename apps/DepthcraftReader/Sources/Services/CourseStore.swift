@@ -60,6 +60,12 @@ final class CourseStore: ObservableObject {
         self.progress = progress
     }
 
+    func updateLastVisited(lessonId: String, unitId: String) {
+        guard var progress else { return }
+        progressStore.updateLastVisited(&progress, lessonId: lessonId, unitId: unitId)
+        self.progress = progress
+    }
+
     func markQuizPassed(lessonId: String, unitId: String) {
         guard var progress, let course else { return }
         progressStore.markQuizPassed(&progress, lessonId: lessonId, unitId: unitId, curriculum: course.curriculum)

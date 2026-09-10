@@ -2,8 +2,9 @@ import Foundation
 
 enum MarkdownHTML {
     /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr).
-    static func render(_ markdown: String, title: String) -> String {
+    static func render(_ markdown: String, title: String, estimatedMinutes: Int?) -> String {
         let body = convert(markdown)
+        let minutesLabel = estimatedMinutes.map { " · \($0) min" } ?? ""
         return """
         <!DOCTYPE html>
         <html lang="en">
@@ -37,71 +38,72 @@ enum MarkdownHTML {
             color: var(--fg);
             font-family: ui-serif, Georgia, "Times New Roman", serif;
             font-size: 20px;
-            line-height: 1.65;
+            line-height: 1.7;
             -webkit-text-size-adjust: 100%;
           }
           .page {
-            max-width: 38rem;
+            max-width: 40rem;
             margin: 0 auto;
-            padding: 1.75rem 1.5rem 3rem;
+            padding: 2rem 1.5rem 3.5rem;
           }
           .eyebrow {
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--accent);
-            margin: 0 0 0.5rem;
+            margin: 0 0 0.75rem;
             font-weight: 600;
           }
           h1 {
-            font-size: 1.85rem;
+            font-size: 2rem;
             line-height: 1.2;
-            margin: 0 0 1.25rem;
+            margin: 0 0 1.5rem;
             font-weight: 700;
           }
           h2 {
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-            font-size: 1.15rem;
-            margin: 2rem 0 0.75rem;
+            font-size: 1.25rem;
+            margin: 2.5rem 0 0.9rem;
             font-weight: 650;
             color: var(--fg);
           }
           h3 {
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-            font-size: 1.05rem;
-            margin: 1.5rem 0 0.5rem;
+            font-size: 1.1rem;
+            margin: 1.75rem 0 0.6rem;
           }
-          p { margin: 0 0 1rem; }
+          p { margin: 0 0 1.25rem; }
           strong { font-weight: 700; }
           em { font-style: italic; }
           code {
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 0.88em;
             background: var(--code-bg);
-            padding: 0.1em 0.35em;
+            padding: 0.15em 0.4em;
             border-radius: 0.3em;
           }
           pre {
             background: var(--code-bg);
-            padding: 0.9rem 1rem;
+            padding: 1rem 1.1rem;
             border-radius: 0.6rem;
             overflow-x: auto;
             font-size: 0.9rem;
-            line-height: 1.45;
+            line-height: 1.5;
+            margin: 1.5rem 0;
           }
           pre code { background: transparent; padding: 0; }
-          ul, ol { margin: 0 0 1rem; padding-left: 1.35rem; }
-          li { margin: 0.25rem 0; }
+          ul, ol { margin: 0 0 1.25rem; padding-left: 1.5rem; }
+          li { margin: 0.35rem 0; }
           hr {
             border: none;
             border-top: 1px solid var(--rule);
-            margin: 2rem 0;
+            margin: 2.5rem 0;
           }
           a { color: var(--accent); }
           blockquote {
-            margin: 0 0 1rem;
-            padding: 0.25rem 0 0.25rem 1rem;
+            margin: 0 0 1.25rem;
+            padding: 0.3rem 0 0.3rem 1.2rem;
             border-left: 3px solid var(--accent);
             color: var(--muted);
           }
@@ -109,7 +111,7 @@ enum MarkdownHTML {
         </head>
         <body>
           <article class="page">
-            <p class="eyebrow">Lesson</p>
+            <p class="eyebrow">Lesson\(minutesLabel)</p>
             \(body)
           </article>
         </body>
