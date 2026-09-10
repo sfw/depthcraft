@@ -9,7 +9,6 @@ struct LessonPlayerView: View {
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
-    @State private var hasScrolledToEnd = false
 
     private var lesson: CurriculumLesson? {
         store.course?.curriculum.lessons[lessonId]
@@ -21,7 +20,7 @@ struct LessonPlayerView: View {
                 ContentUnavailableView("Lesson unavailable", systemImage: "doc.questionmark", description: Text(loadError))
             } else {
                 LessonWebView(html: html, onScrolledToEnd: {
-                    hasScrolledToEnd = true
+                    store.markLessonRead(lessonId: lessonId, unitId: unitId)
                 })
                 .ignoresSafeArea(edges: .bottom)
 
