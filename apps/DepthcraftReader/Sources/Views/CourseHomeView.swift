@@ -78,8 +78,8 @@ struct CourseHomeView: View {
                 }
 
                 Section {
-                    Button {
-                        // Settings navigation - keeping as stub for now
+                    NavigationLink {
+                        SettingsStubView()
                     } label: {
                         Label("Settings (BYOK stub)", systemImage: "key")
                     }
