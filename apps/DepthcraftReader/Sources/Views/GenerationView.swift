@@ -18,6 +18,7 @@ struct GenerationView: View {
     @State private var quizModel = "gpt-4o"
     
     @State private var errorAlert: String?
+    @State private var showingError = false
     @State private var showingOpenPackage = false
     
     init() {

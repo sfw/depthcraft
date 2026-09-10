@@ -48,11 +48,26 @@ class GenerationOrchestrator: ObservableObject {
     }
     
     func continueGeneration(request: GenerationRequest) async {
+        // Re-entrancy guard: if already generating, ignore
+        if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .packaging {
+            return
+        }
+        
         guard var curriculum = draftCurriculum else {
             progress.error = "No draft curriculum to continue from"
             progress.phase = .failed
             return
         }
+        
+        // Set phase immediately so UI updates even before any await
+        let totalLessons = curriculum.units.flatMap { $0.lessonIds }.count
+        progress = GenerationProgress(
+            phase: .writingLessons,
+            currentItem: "Starting generation...",
+            completedItems: 0,
+            totalItems: totalLessons,
+            error: nil
+        )
         
         // Stamp approval
         curriculum.status = "approved"
@@ -75,13 +90,13 @@ class GenerationOrchestrator: ObservableObject {
             }
         }
         
-        let totalLessons = lessonsToGenerate.count
+        let actualTotalLessons = lessonsToGenerate.count
         
         progress = GenerationProgress(
             phase: .writingLessons,
             currentItem: "Writing lessons",
             completedItems: 0,
-            totalItems: totalLessons,
+            totalItems: actualTotalLessons,
             error: nil
         )
         

@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct CurriculumEditorView: View {
+    @Environment(\.dismiss) private var dismiss
     @Binding var curriculum: Curriculum
     @State private var selectedUnitIds: Set<String>
+    @State private var isSubmitting = false
     let onApprove: (Set<String>) -> Void
     let onCancel: () -> Void
     
@@ -38,11 +40,12 @@ struct CurriculumEditorView: View {
                     Button("Approve & Generate Selected") {
                         approveCurriculum()
                     }
-                    .disabled(selectedUnitIds.isEmpty)
+                    .disabled(selectedUnitIds.isEmpty || isSubmitting)
                     
                     Button("Cancel", role: .destructive) {
                         onCancel()
                     }
+                    .disabled(isSubmitting)
                 }
             }
             .navigationTitle("Review Curriculum")
@@ -161,7 +164,9 @@ struct CurriculumEditorView: View {
     }
     
     private func approveCurriculum() {
-        let generateUnitIds = selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds)
+        guard !isSubmitting else { return }
+        isSubmitting = true
+        dismiss()
         onApprove(selectedUnitIds)
     }
 }
