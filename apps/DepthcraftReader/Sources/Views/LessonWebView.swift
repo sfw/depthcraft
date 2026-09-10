@@ -41,13 +41,23 @@ struct LessonWebView: UIViewRepresentable {
             }
         }
 
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            checkIfAtEnd(webView.scrollView)
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            checkIfAtEnd(scrollView)
+        }
+
+        private func checkIfAtEnd(_ scrollView: UIScrollView) {
             guard !hasNotifiedEnd else { return }
             let contentHeight = scrollView.contentSize.height
             let scrollViewHeight = scrollView.bounds.height
             let offset = scrollView.contentOffset.y
             let bottomThreshold: CGFloat = 80
-            if contentHeight > 0, offset + scrollViewHeight >= contentHeight - bottomThreshold {
+            
+            // If content fits without scrolling, or user has scrolled near end
+            if contentHeight > 0 && (contentHeight <= scrollViewHeight || offset + scrollViewHeight >= contentHeight - bottomThreshold) {
                 hasNotifiedEnd = true
                 onScrolledToEnd?()
             }

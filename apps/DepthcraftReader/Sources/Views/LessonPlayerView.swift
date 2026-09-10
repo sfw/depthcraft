@@ -1,5 +1,11 @@
 import SwiftUI
 
+struct NextLessonDestination: Hashable, Identifiable {
+    let unitId: String
+    let lessonId: String
+    var id: String { "\(unitId)_\(lessonId)" }
+}
+
 struct LessonPlayerView: View {
     @EnvironmentObject private var store: CourseStore
     let unitId: String
@@ -9,6 +15,7 @@ struct LessonPlayerView: View {
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
+    @State private var navigateToNextLesson: NextLessonDestination? = nil
 
     private var lesson: CurriculumLesson? {
         store.course?.curriculum.lessons[lessonId]
@@ -56,8 +63,16 @@ struct LessonPlayerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showQuiz) {
             if let quiz {
-                QuizFlowView(unitId: unitId, lessonId: lessonId, quiz: quiz)
+                QuizFlowView(unitId: unitId, lessonId: lessonId, quiz: quiz, onNavigateToNextLesson: { nextUnit, nextLesson in
+                    showQuiz = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        navigateToNextLesson = NextLessonDestination(unitId: nextUnit, lessonId: nextLesson)
+                    }
+                })
             }
+        }
+        .navigationDestination(item: $navigateToNextLesson) { next in
+            LessonPlayerView(unitId: next.unitId, lessonId: next.lessonId)
         }
         .task {
             await load()

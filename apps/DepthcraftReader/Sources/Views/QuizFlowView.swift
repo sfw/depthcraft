@@ -7,12 +7,12 @@ struct QuizFlowView: View {
     let unitId: String
     let lessonId: String
     let quiz: QuizDocument
+    let onNavigateToNextLesson: (String, String) -> Void
 
     @State private var mcSelections: [String: String] = [:]
     @State private var clozeAnswers: [String: String] = [:]
     @State private var graded = false
     @State private var itemResults: [String: Bool] = [:]
-    @State private var navigateToNext = false
 
     private var nextLesson: (unitId: String, lessonId: String, title: String)? {
         guard let course = store.course else { return nil }
@@ -92,13 +92,8 @@ struct QuizFlowView: View {
                                 .padding(.vertical, 4)
                             }
                             if let next = nextLesson {
-                                NavigationLink(isActive: $navigateToNext) {
-                                    LessonPlayerView(unitId: next.unitId, lessonId: next.lessonId)
-                                } label: {
-                                    EmptyView()
-                                }
                                 Button {
-                                    navigateToNext = true
+                                    onNavigateToNextLesson(next.unitId, next.lessonId)
                                 } label: {
                                     Label("Next lesson", systemImage: "arrow.forward.circle.fill")
                                         .frame(maxWidth: .infinity)
