@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://depthcraft.dev/schema/0.1.0/progress.schema.json",
+  "title": "DepthcraftProgress",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "lessons", "units"],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "lessons": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["completed", "quizPassed"],
+        "properties": {
+          "completed": { "type": "boolean" },
+          "quizPassed": { "type": "boolean" },
+          "completedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["completed"],
+        "properties": {
+          "completed": { "type": "boolean" },
+          "completedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

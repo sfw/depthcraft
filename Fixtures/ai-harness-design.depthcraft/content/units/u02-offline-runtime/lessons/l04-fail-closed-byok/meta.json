@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l04-fail-closed-byok",
+  "anchors": [
+    { "id": "a-keys", "heading": "Keys stay on device", "kind": "section" },
+    { "id": "a-fail-closed", "heading": "Fail closed", "kind": "warning" },
+    { "id": "a-boundaries", "heading": "Boundaries", "kind": "concept" }
+  ]
+}

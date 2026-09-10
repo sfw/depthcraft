@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l03-package-as-contract",
+  "items": [
+    {
+      "id": "q1",
+      "type": "mc",
+      "prompt": "During airplane-mode study, the reader should:",
+      "choices": [
+        { "id": "a", "text": "Call the planner to refresh stale lessons" },
+        { "id": "b", "text": "Read only the local package with no agent calls" },
+        { "id": "c", "text": "Sync from Obsidian vault APIs" },
+        { "id": "d", "text": "Upgrade schemaVersion in place" }
+      ],
+      "correctId": "b"
+    },
+    {
+      "id": "q2",
+      "type": "cloze",
+      "prompt": "Heading stubs for future primers live in _____.json.",
+      "answers": ["meta"]
+    }
+  ]
+}

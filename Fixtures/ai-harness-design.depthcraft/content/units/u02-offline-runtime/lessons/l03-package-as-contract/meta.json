@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l03-package-as-contract",
+  "anchors": [
+    { "id": "a-online-offline", "heading": "Online writes, offline reads", "kind": "section" },
+    { "id": "a-schema-version", "heading": "Schema version matters", "kind": "concept" },
+    { "id": "a-anchors", "heading": "Anchors without chat", "kind": "section" }
+  ]
+}

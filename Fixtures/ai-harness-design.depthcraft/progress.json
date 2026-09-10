@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessons": {
+    "l01-what-is-a-harness": { "completed": false, "quizPassed": false },
+    "l02-orchestration-vs-generation": { "completed": false, "quizPassed": false },
+    "l03-package-as-contract": { "completed": false, "quizPassed": false },
+    "l04-fail-closed-byok": { "completed": false, "quizPassed": false }
+  },
+  "units": {
+    "u01-foundations": { "completed": false },
+    "u02-offline-runtime": { "completed": false }
+  }
+}

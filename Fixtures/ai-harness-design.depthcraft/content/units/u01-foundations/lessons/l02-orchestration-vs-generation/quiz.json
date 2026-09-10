@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l02-orchestration-vs-generation",
+  "items": [
+    {
+      "id": "q1",
+      "type": "mc",
+      "prompt": "What does whole-map approve gate before body generation?",
+      "choices": [
+        { "id": "a", "text": "The curriculum tree the human edited" },
+        { "id": "b", "text": "Each quiz explanation string" },
+        { "id": "c", "text": "OpenRouter account billing" },
+        { "id": "d", "text": "WebView CSS theme" }
+      ],
+      "correctId": "a"
+    },
+    {
+      "id": "q2",
+      "type": "cloze",
+      "prompt": "Discrete roles in v0.1 run planner → lesson writer → _____ writer → packager.",
+      "answers": ["quiz"]
+    }
+  ]
+}

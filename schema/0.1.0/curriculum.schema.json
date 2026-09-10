@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://depthcraft.dev/schema/0.1.0/curriculum.schema.json",
+  "title": "DepthcraftCurriculum",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "units", "lessons"],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "status": { "type": "string", "enum": ["draft", "approved", "built"] },
+    "approvedAt": { "type": "string", "format": "date-time" },
+    "generateUnitIds": {
+      "type": "array",
+      "description": "Optional cost subset after whole-map approve. Empty/omitted = generate all units.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "order", "lessonIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "order": { "type": "integer", "minimum": 1 },
+          "lessonIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "lessons": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "unitId", "title", "order", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "unitId": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "order": { "type": "integer", "minimum": 1 },
+          "status": { "type": "string", "enum": ["draft", "approved", "built"] },
+          "estimatedMinutes": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

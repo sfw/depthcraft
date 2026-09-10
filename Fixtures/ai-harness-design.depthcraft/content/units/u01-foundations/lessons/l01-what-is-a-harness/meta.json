@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l01-what-is-a-harness",
+  "anchors": [
+    { "id": "a-the-job", "heading": "The job", "kind": "section" },
+    { "id": "a-not-the-model", "heading": "Not the model", "kind": "concept" },
+    { "id": "a-educational-twist", "heading": "Educational twist", "kind": "section" }
+  ]
+}

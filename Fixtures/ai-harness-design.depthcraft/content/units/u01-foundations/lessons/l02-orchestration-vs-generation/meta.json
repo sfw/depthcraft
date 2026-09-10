@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l02-orchestration-vs-generation",
+  "anchors": [
+    { "id": "a-split", "heading": "Split the work", "kind": "section" },
+    { "id": "a-discrete-roles", "heading": "Why discrete roles", "kind": "concept" },
+    { "id": "a-approve", "heading": "Approve before generate", "kind": "section" }
+  ]
+}

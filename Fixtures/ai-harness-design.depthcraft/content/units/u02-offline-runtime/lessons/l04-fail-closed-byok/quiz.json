@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l04-fail-closed-byok",
+  "items": [
+    {
+      "id": "q1",
+      "type": "mc",
+      "prompt": "A failed quiz-writer role should:",
+      "choices": [
+        { "id": "a", "text": "Mark the lesson built with an empty quiz" },
+        { "id": "b", "text": "Leave the lesson draft and surface the error" },
+        { "id": "c", "text": "Fall back to a Depthcraft cloud key" },
+        { "id": "d", "text": "Delete the curriculum map" }
+      ],
+      "correctId": "b"
+    },
+    {
+      "id": "q2",
+      "type": "cloze",
+      "prompt": "v0.1 BYOK providers are Anthropic, OpenAI, and _____.",
+      "answers": ["openrouter", "OpenRouter"]
+    }
+  ]
+}

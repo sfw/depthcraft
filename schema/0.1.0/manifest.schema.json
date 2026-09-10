@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://depthcraft.dev/schema/0.1.0/manifest.schema.json",
+  "title": "DepthcraftPackageManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "packageId", "title", "topic", "createdAt", "locale"],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "packageId": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "topic": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "locale": { "type": "string", "minLength": 2 },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "planner": { "$ref": "#/$defs/roleRun" },
+        "lessonWriter": { "$ref": "#/$defs/roleRun" },
+        "quizWriter": { "$ref": "#/$defs/roleRun" },
+        "packager": { "$ref": "#/$defs/roleRun" }
+      }
+    }
+  },
+  "$defs": {
+    "roleRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "provider": { "type": "string", "enum": ["anthropic", "openai", "openrouter"] },
+        "model": { "type": "string", "minLength": 1 },
+        "ranAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

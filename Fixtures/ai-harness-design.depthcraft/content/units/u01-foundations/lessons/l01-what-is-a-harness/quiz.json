@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "0.1.0",
+  "lessonId": "l01-what-is-a-harness",
+  "items": [
+    {
+      "id": "q1",
+      "type": "mc",
+      "prompt": "In an educational product, what is the harness primarily responsible for?",
+      "choices": [
+        { "id": "a", "text": "Writing the most persuasive lesson prose" },
+        { "id": "b", "text": "Control plane: roles, validation, and durable artifacts" },
+        { "id": "c", "text": "Hosting the LLM weights on-device" },
+        { "id": "d", "text": "Replacing the curriculum map with chat history" }
+      ],
+      "correctId": "b",
+      "explain": "The harness is the control plane; prose quality is secondary to valid structure."
+    },
+    {
+      "id": "q2",
+      "type": "cloze",
+      "prompt": "The model proposes; the _____ constrains and validates.",
+      "answers": ["harness"],
+      "explain": "Casefold + trim only in v0.1 — exact accepted string is \"harness\"."
+    }
+  ]
+}

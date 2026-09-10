@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "0.1.0",
+  "status": "built",
+  "approvedAt": "2026-09-10T01:55:00Z",
+  "units": [
+    {
+      "id": "u01-foundations",
+      "title": "Foundations",
+      "order": 1,
+      "lessonIds": ["l01-what-is-a-harness", "l02-orchestration-vs-generation"]
+    },
+    {
+      "id": "u02-offline-runtime",
+      "title": "Offline Runtime",
+      "order": 2,
+      "lessonIds": ["l03-package-as-contract", "l04-fail-closed-byok"]
+    }
+  ],
+  "lessons": {
+    "l01-what-is-a-harness": {
+      "id": "l01-what-is-a-harness",
+      "unitId": "u01-foundations",
+      "title": "What is a harness?",
+      "order": 1,
+      "status": "built",
+      "estimatedMinutes": 12
+    },
+    "l02-orchestration-vs-generation": {
+      "id": "l02-orchestration-vs-generation",
+      "unitId": "u01-foundations",
+      "title": "Orchestration vs generation",
+      "order": 2,
+      "status": "built",
+      "estimatedMinutes": 14
+    },
+    "l03-package-as-contract": {
+      "id": "l03-package-as-contract",
+      "unitId": "u02-offline-runtime",
+      "title": "The package as a contract",
+      "order": 1,
+      "status": "built",
+      "estimatedMinutes": 15
+    },
+    "l04-fail-closed-byok": {
+      "id": "l04-fail-closed-byok",
+      "unitId": "u02-offline-runtime",
+      "title": "Fail-closed BYOK and role boundaries",
+      "order": 2,
+      "status": "built",
+      "estimatedMinutes": 12
+    }
+  }
+}

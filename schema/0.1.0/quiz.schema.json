@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://depthcraft.dev/schema/0.1.0/quiz.schema.json",
+  "title": "DepthcraftQuiz",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "lessonId", "items"],
+  "properties": {
+    "schemaVersion": { "const": "0.1.0" },
+    "lessonId": { "type": "string", "minLength": 1 },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/mcItem" },
+          { "$ref": "#/$defs/clozeItem" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "mcItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "prompt", "choices", "correctId"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "mc" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "text": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "correctId": { "type": "string", "minLength": 1 },
+        "explain": { "type": "string" }
+      }
+    },
+    "clozeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "prompt", "answers"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "cloze" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "answers": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Accepted strings after Unicode casefold + trim. No synonyms beyond explicit list entries in v0.1.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "explain": { "type": "string" }
+      }
+    }
+  }
+}
