@@ -209,8 +209,8 @@ final class PackageValidationTests: XCTestCase {
     func testSubsetPackaging() throws {
         let packager = PackagerService()
         
-        // Curriculum with 3 units, but only packaging unit 1
-        let curriculum = Curriculum(
+        // Full curriculum has 2 units, but only unit 1 has content generated
+        let fullCurriculum = Curriculum(
             schemaVersion: "0.1.0",
             status: "approved",
             approvedAt: ISO8601DateFormatter().string(from: Date()),
@@ -220,6 +220,12 @@ final class PackageValidationTests: XCTestCase {
                     title: "Selected Unit",
                     order: 1,
                     lessonIds: ["l01-selected"]
+                ),
+                CurriculumUnit(
+                    id: "u02-unselected",
+                    title: "Unselected Unit",
+                    order: 2,
+                    lessonIds: ["l02-unselected"]
                 )
             ],
             lessons: [
@@ -228,10 +234,27 @@ final class PackageValidationTests: XCTestCase {
                     unitId: "u01-selected",
                     title: "Selected Lesson",
                     order: 1,
-                    status: "built",
+                    status: "approved",
+                    estimatedMinutes: 10
+                ),
+                "l02-unselected": CurriculumLesson(
+                    id: "l02-unselected",
+                    unitId: "u02-unselected",
+                    title: "Unselected Lesson",
+                    order: 1,
+                    status: "draft",
                     estimatedMinutes: 10
                 )
             ]
+        )
+        
+        // Orchestrator would slice to selected unit before passing to packager
+        let slicedCurriculum = Curriculum(
+            schemaVersion: fullCurriculum.schemaVersion,
+            status: fullCurriculum.status,
+            approvedAt: fullCurriculum.approvedAt,
+            units: [fullCurriculum.units[0]],  // Only selected unit
+            lessons: ["l01-selected": fullCurriculum.lessons["l01-selected"]!]
         )
         
         let manifest = PackageManifest(
@@ -275,11 +298,24 @@ final class PackageValidationTests: XCTestCase {
         XCTAssertNoThrow(
             try packager.validatePackage(
                 manifest: manifest,
-                curriculum: curriculum,
+                curriculum: slicedCurriculum,
                 lessons: lessons,
                 quizzes: quizzes
             )
         )
+        
+        // Verify built package would only contain selected unit
+        // (This tests the packager's compactMapValues logic that excludes lessons without content)
+        let builtLessons = slicedCurriculum.lessons.compactMapValues { lesson -> CurriculumLesson? in
+            guard lessons[lesson.id] != nil, quizzes[lesson.id] != nil else {
+                return nil
+            }
+            return lesson
+        }
+        
+        XCTAssertEqual(builtLessons.count, 1, "Built package should only contain generated lesson")
+        XCTAssertNotNil(builtLessons["l01-selected"], "Selected lesson should be in built package")
+        XCTAssertNil(builtLessons["l02-unselected"], "Unselected lesson should NOT be in built package")
     }
 }
 

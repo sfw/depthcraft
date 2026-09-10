@@ -23,26 +23,33 @@ class PackagerService: PackagerRole {
             locale: locale
         )
         
-        let updatedLessons = curriculum.lessons.mapValues { lesson -> CurriculumLesson in
-            if lessons[lesson.id] != nil {
-                return CurriculumLesson(
-                    id: lesson.id,
-                    unitId: lesson.unitId,
-                    title: lesson.title,
-                    order: lesson.order,
-                    status: "built",
-                    estimatedMinutes: lesson.estimatedMinutes
-                )
+        // Only include lessons that were actually generated (have content + quiz)
+        // Ensures built package = only what learner can study
+        let builtLessons = curriculum.lessons.compactMapValues { lesson -> CurriculumLesson? in
+            guard lessons[lesson.id] != nil, quizzes[lesson.id] != nil else {
+                return nil  // Exclude lessons without content
             }
-            return lesson
+            return CurriculumLesson(
+                id: lesson.id,
+                unitId: lesson.unitId,
+                title: lesson.title,
+                order: lesson.order,
+                status: "built",
+                estimatedMinutes: lesson.estimatedMinutes
+            )
+        }
+        
+        // Only include units that have at least one built lesson
+        let builtUnits = curriculum.units.filter { unit in
+            unit.lessonIds.contains { builtLessons[$0] != nil }
         }
         
         let updatedCurriculum = Curriculum(
             schemaVersion: curriculum.schemaVersion,
             status: "built",
             approvedAt: curriculum.approvedAt,
-            units: curriculum.units,
-            lessons: updatedLessons
+            units: builtUnits,
+            lessons: builtLessons
         )
         
         try validatePackage(

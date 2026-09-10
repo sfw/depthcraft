@@ -136,7 +136,9 @@ class GenerationOrchestrator: ObservableObject {
             progress.currentItem = "Packaging course"
             progress.completedItems = totalLessons
             
-            // Slice curriculum to only selected units for packaging
+            // Slice curriculum to only selected units before packaging
+            // Product lock: built package = only what learner can study (no draft stubs)
+            // If generateUnitIds is subset, unselected units are NOT in the package at all
             let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
             let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
             let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
