@@ -42,9 +42,9 @@ enum MarkdownHTML {
             -webkit-text-size-adjust: 100%;
           }
           .page {
-            max-width: 40rem;
+            max-width: 38rem;
             margin: 0 auto;
-            padding: 2rem 1.5rem 3.5rem;
+            padding: 2rem 2rem 4rem;
           }
           .eyebrow {
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
