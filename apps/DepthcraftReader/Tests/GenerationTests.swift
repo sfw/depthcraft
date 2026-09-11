@@ -722,3 +722,253 @@ extension LessonWriterService {
         return LessonMeta(schemaVersion: "0.1.0", lessonId: lessonId, anchors: anchors)
     }
 }
+
+// MARK: - JSON Extraction Tests
+
+final class JSONExtractionTests: XCTestCase {
+    
+    func testExtractCleanJSON() {
+        let input = """
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test",
+          "items": []
+        }
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractJSONWithMarkdownFences() {
+        let input = """
+        ```json
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test",
+          "items": []
+        }
+        ```
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("```"))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractJSONWithTrailingCommentary() {
+        let input = """
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test",
+          "items": []
+        }
+        
+        This quiz tests understanding of key concepts.
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("This quiz"))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractJSONWithLeadingCommentary() {
+        let input = """
+        Here is the quiz in JSON format:
+        
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test",
+          "items": []
+        }
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("Here is"))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractJSONWithBothLeadingAndTrailing() {
+        let input = """
+        Here's your quiz:
+        
+        ```json
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test",
+          "items": []
+        }
+        ```
+        
+        Let me know if you need changes!
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("Here's"))
+        XCTAssertFalse(extracted!.contains("Let me know"))
+        XCTAssertFalse(extracted!.contains("```"))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractComplexQuizJSON() {
+        let input = """
+        ```json
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test-lesson",
+          "items": [
+            {
+              "id": "q1",
+              "type": "mc",
+              "prompt": "What is AI?",
+              "choices": [
+                {"id": "a", "text": "Artificial Intelligence"},
+                {"id": "b", "text": "Automated Interaction"}
+              ],
+              "correctId": "a",
+              "explain": "AI stands for Artificial Intelligence"
+            }
+          ]
+        }
+        ```
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+        
+        // Verify it can decode to QuizDocument
+        guard let data = extracted!.data(using: .utf8) else {
+            XCTFail("Could not encode as UTF-8")
+            return
+        }
+        
+        XCTAssertNoThrow(try JSONDecoder().decode(QuizDocument.self, from: data))
+    }
+    
+    func testExtractJSONArray() {
+        let input = """
+        [
+          {"id": "1", "name": "Test"},
+          {"id": "2", "name": "Another"}
+        ]
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .array)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testRejectInvalidJSON() {
+        let inputs = [
+            "This is not JSON at all",
+            "{ invalid json",
+            "{ \"missing\": \"closing bracket\"",
+            "[1, 2, 3",
+            "null",
+            "123",
+            "\"just a string\""
+        ]
+        
+        for input in inputs {
+            let extracted = JSONExtractor.extractJSON(from: input)
+            // Either no extraction, or extracted but invalid
+            if let extracted = extracted {
+                let validation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .any)
+                if validation.isValid {
+                    XCTFail("Should not validate invalid JSON: \(input)")
+                }
+            }
+        }
+    }
+    
+    func testValidationErrorMessages() {
+        let invalidJSON = "{ invalid }"
+        let validation = JSONExtractor.validateJSONStructure(invalidJSON, expectedTopLevelType: .object)
+        XCTAssertFalse(validation.isValid)
+        XCTAssertNotNil(validation.errorMessage)
+        XCTAssertTrue(validation.errorMessage!.contains("parse error") || validation.errorMessage!.contains("JSON"))
+    }
+    
+    func testExtractJSONWithCapitalJSONLanguageTag() {
+        let input = """
+        ```JSON
+        {"test": "value"}
+        ```
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("```"))
+    }
+    
+    func testExtractJSONWithSpacedLanguageTag() {
+        let input = """
+        ``` json
+        {"test": "value"}
+        ```
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("```"))
+    }
+    
+    func testExtractJSONWithNoLanguageTag() {
+        let input = """
+        ```
+        {"test": "value"}
+        ```
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("```"))
+    }
+    
+    func testHandleEmptyInput() {
+        XCTAssertNil(JSONExtractor.extractJSON(from: ""))
+        XCTAssertNil(JSONExtractor.extractJSON(from: "   "))
+        XCTAssertNil(JSONExtractor.extractJSON(from: "\n\n"))
+    }
+    
+    func testExtractNestedJSON() {
+        let input = """
+        Here's a response with nested objects:
+        {
+          "outer": {
+            "inner": {
+              "value": "test"
+            }
+          },
+          "array": [1, 2, 3]
+        }
+        And some trailing text.
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+}
