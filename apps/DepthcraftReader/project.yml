@@ -17,10 +17,10 @@ targets:
     platform: iOS
     sources:
       - path: Sources
-      - path: Resources
+      - path: Resources/demo-kits
         type: folder
         buildPhase: resources
-        name: Resources
+        name: demo-kits
       - path: ../../Fixtures/ai-harness-design.depthcraft
         type: folder
         buildPhase: resources
