@@ -145,10 +145,7 @@ struct QuizFlowView: View {
             .font(.body.weight(.medium))
         ForEach(item.choices) { choice in
             let isSelected = mcSelections[item.id] == choice.id
-            Button {
-                guard !graded else { return }
-                mcSelections[item.id] = choice.id
-            } label: {
+            if graded {
                 HStack {
                     Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                         .foregroundStyle(isSelected ? Color.teal : Color.secondary)
@@ -157,8 +154,22 @@ struct QuizFlowView: View {
                         .multilineTextAlignment(.leading)
                     Spacer()
                 }
+                .padding(.vertical, 8)
+            } else {
+                Button {
+                    mcSelections[item.id] = choice.id
+                } label: {
+                    HStack {
+                        Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(isSelected ? Color.teal : Color.secondary)
+                        Text(choice.text)
+                            .foregroundStyle(isSelected ? Color.teal : Color(uiColor: .label))
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
             }
-            .disabled(graded)
         }
         if graded {
             resultRow(correct: itemResults[item.id] == true, explain: item.explain)
