@@ -143,17 +143,16 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         
         // Try 3: bundleURL/demo-kits/{kitId}/{path}
-        if let bundleURL = Bundle.main.bundleURL {
-            let candidate = bundleURL
-                .appendingPathComponent("demo-kits", isDirectory: true)
-                .appendingPathComponent(kitId, isDirectory: true)
-                .appendingPathComponent(resourcePath)
-            if fm.fileExists(atPath: candidate.path) {
-                #if DEBUG
-                print("✅ Kit found at bundleURL/demo-kits: \(candidate.path)")
-                #endif
-                return candidate
-            }
+        let bundleURL = Bundle.main.bundleURL
+        let candidate3 = bundleURL
+            .appendingPathComponent("demo-kits", isDirectory: true)
+            .appendingPathComponent(kitId, isDirectory: true)
+            .appendingPathComponent(resourcePath)
+        if fm.fileExists(atPath: candidate3.path) {
+            #if DEBUG
+            print("✅ Kit found at bundleURL/demo-kits: \(candidate3.path)")
+            #endif
+            return candidate3
         }
         
         // Try 4: path(forResource:ofType:inDirectory:)
@@ -183,9 +182,7 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
             print("   Tried: \(resourceURL.path)/demo-kits/\(kitId)/\(resourcePath)")
             print("   Tried: \(resourceURL.path)/Resources/demo-kits/\(kitId)/\(resourcePath)")
         }
-        if let bundleURL = Bundle.main.bundleURL {
-            print("   Tried: \(bundleURL.path)/demo-kits/\(kitId)/\(resourcePath)")
-        }
+        print("   Tried: \(bundleURL.path)/demo-kits/\(kitId)/\(resourcePath)")
         #endif
         
         return nil
