@@ -10,10 +10,19 @@ This PR implements **kit injection** for Depthcraft Reader, allowing generated d
 
 Implemented `KitSchemeHandler` (WKURLSchemeHandler) to intercept and serve `kit:` URL requests:
 
-- **Pattern**: `kit:<kitId>/<path>` → `Resources/demo-kits/<kitId>/<path>`
-- **Example**: `kit:three-v0/three.module.min.js` → `Resources/demo-kits/three-v0/three.module.min.js`
+- **Pattern**: `kit:<kitId>/<path>` → app bundle `demo-kits/<kitId>/<path>`
+- **Example**: `kit:three-v0/three.module.min.js` → Three.js module from bundle
+- **Response**: `HTTPURLResponse` with CORS headers for ES module compatibility:
+  - `Access-Control-Allow-Origin: *` — allows cross-scheme module imports from `file://`
+  - `Content-Type: application/javascript` — proper MIME type for ES modules
+  - Status `200` — required for WebKit to accept module scripts
+  - Plain `URLResponse` is insufficient; ES module imports require HTTP response
 - **Allowlist**: Only kits specified in `demo.json`'s `kit` field are accessible
-- **MIME types**: Automatically determined from file extension (`.js`, `.json`, `.css`, etc.)
+- **Path resolution**: Robust bundle lookup tries multiple locations:
+  1. `resourceURL/demo-kits/{kitId}/{path}` — flat copy (XcodeGen may flatten)
+  2. `resourceURL/Resources/demo-kits/{kitId}/{path}` — nested under Resources
+  3. `bundleURL/demo-kits/{kitId}/{path}` — bundleURL fallback
+  4. `path(forResource:ofType:inDirectory:)` — iOS bundle API fallback
 
 ### 2. Demo Loading Flow
 
