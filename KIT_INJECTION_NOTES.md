@@ -37,14 +37,17 @@ Kit failures (missing kit, invalid path, I/O errors) → JavaScript import fails
 ## Package Structure
 
 ```
-Resources/
-└── demo-kits/
-    └── three-v0/          # Three.js v0.170.0
-        ├── three.module.min.js
-        └── kit.js         # Optional helper wrapper
+Resources/demo-kits/three-v0/
+├── three.module.min.js  (691KB, Three.js v0.170.0)
+└── kit.js              (optional helper wrapper)
 ```
 
-**Resources/ packaging**: The `demo-kits/` folder is bundled via XcodeGen's `buildPhase: resources` in `project.yml`. No iOS "Resources" naming trap (which can empty Info.plist) because it's under the existing Resources folder structure handled by XcodeGen.
+**Bundle verification**: XcodeGen's `buildPhase: resources` with `type: folder` copies the **contents** of `Resources/` into the app bundle's resource directory:
+- Source path: `apps/DepthcraftReader/Resources/demo-kits/three-v0/three.module.min.js`
+- Bundle path: `Bundle.main.resourceURL/demo-kits/three-v0/three.module.min.js` ✅
+- Code accesses via: `bundleURL.appendingPathComponent("demo-kits")...`
+
+**No iOS Resources/ trap**: Using XcodeGen's explicit `buildPhase: resources` (not Xcode's automatic resource detection) avoids the Info.plist conflicts that can occur when naming a folder "Resources" in certain project structures. The folder name is our project convention and is handled correctly by the build system.
 
 ## Allowlist Implementation
 
