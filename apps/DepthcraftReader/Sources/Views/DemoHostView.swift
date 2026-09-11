@@ -141,30 +141,29 @@ struct DemoWebView: UIViewRepresentable {
         }]
         """
         
+        let coordinator = context.coordinator
         let store = WKContentRuleListStore.default()
         store.compileContentRuleList(
             forIdentifier: "DemoSandboxRules",
             encodedContentRuleList: blockRules
         ) { [weak webView] ruleList, error in
             DispatchQueue.main.async {
-                guard let webView = webView else { return }
+                guard let webView else { return }
                 
-                if let ruleList = ruleList {
+                if let ruleList {
                     // Add to LIVE webView's userContentController (not pre-create config)
                     webView.configuration.userContentController.add(ruleList)
                     #if DEBUG
                     print("✅ Content rules added to live webView")
                     #endif
-                } else if let error = error {
+                } else if let error {
                     #if DEBUG
                     print("⚠️ Failed to compile content rules: \(error)")
                     #endif
                 }
                 
                 // Load demo after rules are active (or failed)
-                if let coordinator = context.coordinator {
-                    coordinator.loadDemo(into: webView)
-                }
+                coordinator.loadDemo(into: webView)
             }
         }
         
