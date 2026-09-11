@@ -16,41 +16,39 @@ struct CurriculumEditorView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
+            Section {
+                Text("Edit unit and lesson titles below. Check units to generate (uncheck to skip for cost control).")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Draft Curriculum")
+            }
+            
+            ForEach(Array(curriculum.units.enumerated()), id: \.element.id) { index, unit in
                 Section {
-                    Text("Edit unit and lesson titles below. Check units to generate (uncheck to skip for cost control).")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Draft Curriculum")
-                }
-                
-                ForEach(Array(curriculum.units.enumerated()), id: \.element.id) { index, unit in
-                    Section {
-                        unitEditor(unit: binding(for: unit.id), index: index)
-                    }
-                }
-                
-                Section {
-                    costSummary
-                }
-                
-                Section {
-                    Button("Approve & Generate Selected") {
-                        approveCurriculum()
-                    }
-                    .disabled(selectedUnitIds.isEmpty || isSubmitting)
-                    
-                    Button("Cancel", role: .destructive) {
-                        onCancel()
-                    }
-                    .disabled(isSubmitting)
+                    unitEditor(unit: binding(for: unit.id), index: index)
                 }
             }
-            .navigationTitle("Review Curriculum")
-            .navigationBarTitleDisplayMode(.inline)
+            
+            Section {
+                costSummary
+            }
+            
+            Section {
+                Button("Approve & Generate Selected") {
+                    approveCurriculum()
+                }
+                .disabled(selectedUnitIds.isEmpty || isSubmitting)
+                
+                Button("Cancel", role: .destructive) {
+                    onCancel()
+                }
+                .disabled(isSubmitting)
+            }
         }
+        .navigationTitle("Review Curriculum")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     private func unitEditor(unit: Binding<CurriculumUnit>, index: Int) -> some View {
