@@ -12,9 +12,11 @@ struct CourseHomeView: View {
                         Text(course.manifest.title)
                             .font(.largeTitle.weight(.bold))
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(course.manifest.topic)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                        if course.manifest.title != course.manifest.topic {
+                            Text(course.manifest.topic)
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                         ProgressView(value: store.courseProgressFraction()) {
                             Text("Course progress")
                         } currentValueLabel: {

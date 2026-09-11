@@ -4,6 +4,7 @@ struct GenerationView: View {
     @StateObject private var orchestrator: GenerationOrchestrator
     @StateObject private var keyStore = APIKeyStore()
     @EnvironmentObject private var courseStore: CourseStore
+    @Environment(\.dismiss) private var dismiss
     
     @State private var topic = "AI harness design for educational systems"
     @State private var locale = "en-CA"
@@ -69,9 +70,10 @@ struct GenerationView: View {
         .alert("Package Loaded", isPresented: $showingOpenPackage) {
             Button("OK") {
                 showingOpenPackage = false
+                dismiss()
             }
         } message: {
-            Text("The generated course has been loaded into the reader. Tap OK to return to the course home.")
+            Text("The generated course has been loaded. Tap OK to return to the course home.")
         }
         .onAppear {
             // Load custom endpoint config from keyStore
@@ -270,19 +272,13 @@ struct GenerationView: View {
         Group {
             if let output = orchestrator.output {
                 Section("Generation Complete") {
-                    LabeledContent("Package", value: output.manifest.packageId)
                     LabeledContent("Title", value: output.manifest.title)
                     LabeledContent("Units", value: "\(output.curriculum.units.count)")
                     LabeledContent("Lessons", value: "\(output.curriculum.lessons.count)")
                     
-                    Text("Package saved to Documents folder")
+                    Text("Saved on this iPad")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    
-                    Text(output.packageURL.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
                 }
                 
                 Section {
@@ -593,6 +589,11 @@ struct GenerationView: View {
     
     private func openGeneratedPackage(_ url: URL) {
         courseStore.loadPackage(from: url)
-        showingOpenPackage = true
+        if courseStore.errorMessage == nil {
+            showingOpenPackage = true
+        } else {
+            errorMessage = courseStore.errorMessage
+            showingError = true
+        }
     }
 }
