@@ -219,6 +219,7 @@ struct DemoWebView: UIViewRepresentable {
             let kitHandler = KitSchemeHandler(allowedKits: [manifest.kit])
             config.setURLSchemeHandler(kitHandler, forURLScheme: "kit")
             context.coordinator.allowedKitId = manifest.kit
+            context.coordinator.kitHandler = kitHandler  // Retain handler
             #if DEBUG
             print("✅ Registered kit: scheme handler for kit '\(manifest.kit)'")
             #endif
@@ -339,6 +340,7 @@ struct DemoWebView: UIViewRepresentable {
         var lastKey: UUID?
         var allowedDirectory: URL?
         var allowedKitId: String?
+        var kitHandler: KitSchemeHandler?  // Retain scheme handler
         weak var pendingWebView: WKWebView?
         var contentCheckTimer: Timer?
         

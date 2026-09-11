@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soft-Fail Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #dc2626;
+      color: white;
+      font-family: system-ui;
+    }
+  </style>
+</head>
+<body>
+  <h1>This should not render</h1>
+  <p>If you see this, the soft-fail did NOT work.</p>
+  
+  <script type="module">
+    // Attempt to import from nonexistent kit - should fail and trigger fallback
+    try {
+      const THREE = await import('kit:nonexistent-kit/three.module.min.js');
+      document.body.innerHTML += '<p>❌ FAIL: Kit import succeeded (should have failed)</p>';
+    } catch (error) {
+      // Expected: import fails, error is caught
+      if (window.webkit?.messageHandlers?.demoError) {
+        window.webkit.messageHandlers.demoError.postMessage(`Expected failure: ${error.message}`);
+      }
+      throw error;  // Re-throw to trigger soft-fail UI
+    }
+  </script>
+</body>
+</html>
