@@ -29,7 +29,12 @@ class GenerationOrchestrator: ObservableObject {
             let plannerClient = try LLMClientFactory.createClient(config: request.plannerConfig)
             let planner = PlannerService(client: plannerClient, temperature: request.plannerConfig.temperature)
             
-            let curriculum = try await planner.plan(topic: request.topic, locale: request.locale)
+            let curriculum = try await planner.plan(
+                topic: request.topic,
+                locale: request.locale,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel
+            )
             
             draftCurriculum = curriculum
             
