@@ -62,15 +62,15 @@ class PlannerService: PlannerRole {
         let depthGuidance: String
         switch depthLevel {
         case .brief:
-            depthGuidance = "Keep the curriculum BRIEF: 1-2 units with 2-3 concise lessons each. Estimate 8-12 minutes per lesson. Cover only the most essential topics."
+            depthGuidance = "Keep the curriculum BRIEF. Cover only the most essential topics. Estimate 8-12 minutes per lesson."
         case .standard:
-            depthGuidance = "Create a STANDARD curriculum: 2-3 units with 2-3 lessons each. Estimate 10-15 minutes per lesson. Balance breadth and depth appropriately."
+            depthGuidance = "Create a STANDARD curriculum. Balance breadth and depth appropriately. Estimate 10-15 minutes per lesson."
         case .deep:
-            depthGuidance = "Create a DEEP curriculum: 3-4 units with 3-4 lessons each. Estimate 12-18 minutes per lesson. Go deeper into important concepts."
+            depthGuidance = "Create a DEEP curriculum. Go deeper into important concepts with more comprehensive coverage. Estimate 12-18 minutes per lesson."
         case .thorough:
-            depthGuidance = "Create a THOROUGH curriculum: 4-5 units with 3-5 lessons each. Estimate 15-20 minutes per lesson. Cover the topic comprehensively with detailed exploration."
+            depthGuidance = "Create a THOROUGH curriculum. Cover the topic comprehensively with detailed exploration of key areas. Estimate 15-20 minutes per lesson."
         case .exhaustive:
-            depthGuidance = "Create an EXHAUSTIVE curriculum: 5-6 units with 4-6 lessons each. Estimate 18-25 minutes per lesson. Provide extensive, comprehensive coverage with deep dives into all major aspects."
+            depthGuidance = "Create an EXHAUSTIVE curriculum. Provide extensive, comprehensive coverage with deep dives into all major aspects. Estimate 18-25 minutes per lesson."
         }
         
         let userPrompt = """
