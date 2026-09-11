@@ -118,31 +118,43 @@ struct DemoWebView: UIViewRepresentable {
         config.defaultWebpagePreferences = preferences
         
         // Sandbox: block http/https resource loads via content rules
+        // Compile rules synchronously before creating WebView
         let blockRules = """
         [{
             "trigger": {
-                "url-filter": ".*",
-                "resource-type": ["script", "image", "style-sheet", "raw", "font", "fetch", "xhr"]
+                "url-filter": "^https?://.*",
+                "resource-type": ["script", "image", "style-sheet", "raw", "font"]
             },
             "action": {
                 "type": "block"
-            },
-            "condition": {
-                "url-filter": "^https?://.*"
             }
         }]
         """
-        WKContentRuleListStore.default().compileContentRuleList(
+        
+        // Try to add pre-compiled rules (best-effort; may already exist)
+        let store = WKContentRuleListStore.default()
+        let semaphore = DispatchSemaphore(value: 0)
+        var compiledRuleList: WKContentRuleList?
+        
+        store.compileContentRuleList(
             forIdentifier: "DemoSandboxRules",
             encodedContentRuleList: blockRules
         ) { ruleList, error in
             if let ruleList = ruleList {
-                config.userContentController.add(ruleList)
+                compiledRuleList = ruleList
             } else if let error = error {
                 #if DEBUG
                 print("⚠️ Failed to compile content rules: \(error)")
                 #endif
             }
+            semaphore.signal()
+        }
+        
+        // Wait for compilation (timeout after 1 second)
+        _ = semaphore.wait(timeout: .now() + 1.0)
+        
+        if let ruleList = compiledRuleList {
+            config.userContentController.add(ruleList)
         }
         
         let webView = WKWebView(frame: .zero, configuration: config)

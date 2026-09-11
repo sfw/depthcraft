@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct LessonContentView: View {
     let course: LoadedCourse
@@ -201,7 +202,8 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     
     private func createHTMLWebView(html: String) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        // Enable JS for height measurement only (navigation still locked down)
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         webView.backgroundColor = .clear
@@ -255,6 +257,15 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         checkIfAtEnd(scrollView)
     }
     
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // After layout settles, check if content fits
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.checkIfAtEnd(self.scrollView)
+        }
+    }
+    
     private func checkIfAtEnd(_ scrollView: UIScrollView) {
         guard !hasNotifiedEnd else { return }
         let contentHeight = scrollView.contentSize.height
@@ -262,10 +273,23 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         let offset = scrollView.contentOffset.y
         let bottomThreshold: CGFloat = 80
         
-        // If content fits without scrolling, or user has scrolled near end
-        if contentHeight > 0 && (contentHeight <= scrollViewHeight || offset + scrollViewHeight >= contentHeight - bottomThreshold) {
-            hasNotifiedEnd = true
-            onScrolledToEnd()
+        // Only fire if:
+        // 1. Content fits without scrolling (after layout settles), OR
+        // 2. User has scrolled near end
+        // Match LessonWebView: content must be measured (contentHeight > 0) and either fit or scrolled
+        if contentHeight > 0 {
+            if contentHeight <= scrollViewHeight {
+                // Content fits - only mark read after layout settles (viewDidLayoutSubviews)
+                // Don't fire on first scrollViewDidScroll before content is laid out
+                if scrollView.contentSize != .zero {
+                    hasNotifiedEnd = true
+                    onScrolledToEnd()
+                }
+            } else if offset + scrollViewHeight >= contentHeight - bottomThreshold {
+                // User scrolled near bottom
+                hasNotifiedEnd = true
+                onScrolledToEnd()
+            }
         }
     }
 }
