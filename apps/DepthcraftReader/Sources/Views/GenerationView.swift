@@ -255,6 +255,8 @@ struct GenerationView: View {
                 Button("Start Planning") {
                     startPlanning()
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
                 .disabled(!canStartPlanning)
             } footer: {
                 if !hasAnyProviderConfigured {
@@ -295,6 +297,7 @@ struct GenerationView: View {
                             .font(.headline)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(.teal)
                 }
             }
         }
@@ -343,6 +346,7 @@ struct GenerationView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(.teal)
                     
                     Button("Generate Another") {
                         orchestrator.reset()
@@ -380,6 +384,7 @@ struct GenerationView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.teal)
                 
                 Button("Back to Setup", role: .cancel) {
                     orchestrator.reset()
