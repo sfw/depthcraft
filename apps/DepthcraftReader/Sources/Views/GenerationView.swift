@@ -426,6 +426,7 @@ struct GenerationView: View {
             }
             
             Slider(value: temperature, in: 0.0...2.0, step: 0.1)
+                .tint(.teal)
         }
     }
     
