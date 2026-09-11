@@ -21,52 +21,20 @@
     canvas {
       display: block;
     }
-    #debug-status {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.8);
-      color: #0f0;
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      padding: 8px;
-      border-radius: 4px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 1000;
-    }
-    #debug-status div {
-      margin: 2px 0;
-    }
   </style>
 </head>
 <body>
-  <div id="debug-status"></div>
   <div id="demo-container"></div>
   
   <!-- KIT_INJECT -->
   
   <script type="module">
-    // Debug logging helper
-    function debugLog(msg) {
-      console.log(`[CUBE DEMO] ${msg}`);
-      const debugDiv = document.getElementById('debug-status');
-      if (debugDiv) {
-        debugDiv.innerHTML += `<div>${msg}</div>`;
-      }
-    }
-    
-    debugLog('Module script starting...');
-    
     // Import Three.js
     let THREE;
     try {
       const module = await import('./three.module.min.js');
       THREE = module;
-      debugLog('✅ Three.js imported successfully');
     } catch (error) {
-      debugLog(`❌ Failed to import Three.js: ${error.message}`);
       if (window.webkit?.messageHandlers?.demoError) {
         window.webkit.messageHandlers.demoError.postMessage(`Three.js import failed: ${error.message}`);
       }
@@ -75,7 +43,6 @@
     
     // Demo: Rotating cube to illustrate 3D coordinate system
     const container = document.getElementById('demo-container');
-    debugLog(`Container found: ${!!container}`);
     
     let scene, camera, renderer, cube, geometry;
     
@@ -84,45 +51,21 @@
       const width = container.clientWidth;
       const height = container.clientHeight;
       
-      debugLog(`Attempting init: container ${width}x${height}`);
-      
       if (width === 0 || height === 0) {
         // Layout not ready, retry next frame
         requestAnimationFrame(initThreeJS);
         return;
       }
       
-      debugLog(`✅ Container has size: ${width}x${height}`);
-      
       try {
         // Scene setup with known dimensions
         scene = new THREE.Scene();
-        debugLog('✅ Scene created');
-        
         camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-        debugLog('✅ Camera created');
-        
-        // Try WebGL renderer
-        try {
-          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-          debugLog('✅ WebGL renderer created');
-        } catch (e) {
-          debugLog(`❌ WebGL renderer failed: ${e.message}`);
-          throw e;
-        }
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         
         renderer.setSize(width, height);
-        debugLog(`✅ Renderer size set: ${width}x${height}`);
-        
         renderer.setPixelRatio(window.devicePixelRatio);
-        debugLog(`✅ Pixel ratio set: ${window.devicePixelRatio}`);
-        
         container.appendChild(renderer.domElement);
-        debugLog('✅ Canvas appended to container');
-        
-        // Log actual canvas dimensions
-        const canvas = renderer.domElement;
-        debugLog(`Canvas dimensions: ${canvas.width}x${canvas.height}, style: ${canvas.style.width}x${canvas.style.height}`);
         
         // Create a cube with colorful faces
         geometry = new THREE.BoxGeometry(2, 2, 2);
@@ -136,35 +79,22 @@
         ];
         cube = new THREE.Mesh(geometry, materials);
         scene.add(cube);
-        debugLog('✅ Cube created and added to scene');
         
         // Add edges for clarity
         const edges = new THREE.EdgesGeometry(geometry);
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
         const wireframe = new THREE.LineSegments(edges, lineMaterial);
         cube.add(wireframe);
-        debugLog('✅ Wireframe edges added');
         
         camera.position.z = 5;
-        debugLog('✅ Camera positioned at z=5');
         
         // Start animation
-        debugLog('Starting animation loop...');
         animate();
         
         // Handle resize
         window.addEventListener('resize', onWindowResize);
         
-        debugLog('🎉 Initialization complete!');
-        
-        // Hide debug status after success
-        setTimeout(() => {
-          const debugDiv = document.getElementById('debug-status');
-          if (debugDiv) debugDiv.style.display = 'none';
-        }, 3000);
-        
       } catch (error) {
-        debugLog(`❌ Init error: ${error.message}`);
         if (window.webkit?.messageHandlers?.demoError) {
           window.webkit.messageHandlers.demoError.postMessage(`Init failed: ${error.message}`);
         }
@@ -195,7 +125,6 @@
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
-      debugLog(`Resized to ${width}x${height}`);
     }
     
     // Expose reset function for Reset button
@@ -204,12 +133,10 @@
         cube.rotation.x = 0;
         cube.rotation.y = 0;
         camera.position.z = 5;
-        debugLog('Demo reset');
       }
     };
     
     // Start initialization (deferred until layout)
-    debugLog('Calling initThreeJS...');
     initThreeJS();
   </script>
 </body>
