@@ -22,8 +22,8 @@ class GenerationOrchestrator: ObservableObject {
         )
         
         do {
-            let plannerClient = LLMClientFactory.createClient(config: request.plannerConfig)
-            let planner = PlannerService(client: plannerClient)
+            let plannerClient = try LLMClientFactory.createClient(config: request.plannerConfig)
+            let planner = PlannerService(client: plannerClient, temperature: request.plannerConfig.temperature)
             
             let curriculum = try await planner.plan(topic: request.topic, locale: request.locale)
             
@@ -104,8 +104,8 @@ class GenerationOrchestrator: ObservableObject {
         var quizzes: [String: QuizDocument] = [:]
         
         do {
-            let lessonClient = LLMClientFactory.createClient(config: request.lessonWriterConfig)
-            let lessonWriter = LessonWriterService(client: lessonClient)
+            let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
+            let lessonWriter = LessonWriterService(client: lessonClient, temperature: request.lessonWriterConfig.temperature)
             
             for (index, lesson) in lessonsToGenerate.enumerated() {
                 guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
@@ -128,8 +128,8 @@ class GenerationOrchestrator: ObservableObject {
             progress.currentItem = "Writing quizzes"
             progress.completedItems = 0
             
-            let quizClient = LLMClientFactory.createClient(config: request.quizWriterConfig)
-            let quizWriter = QuizWriterService(client: quizClient)
+            let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
+            let quizWriter = QuizWriterService(client: quizClient, temperature: request.quizWriterConfig.temperature)
             
             for (index, lesson) in lessonsToGenerate.enumerated() {
                 guard let (markdown, _) = lessons[lesson.id] else {

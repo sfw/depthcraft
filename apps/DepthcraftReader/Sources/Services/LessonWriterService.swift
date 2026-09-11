@@ -2,9 +2,11 @@ import Foundation
 
 class LessonWriterService: LessonWriterRole {
     private let client: LLMClient
+    private let temperature: Double
     
-    init(client: LLMClient) {
+    init(client: LLMClient, temperature: Double = 0.7) {
         self.client = client
+        self.temperature = temperature
     }
     
     func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
@@ -31,7 +33,7 @@ class LessonWriterService: LessonWriterRole {
         Output ONLY the markdown content.
         """
         
-        let markdown = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt)
+        let markdown = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature)
         let meta = extractMeta(from: markdown, lessonId: lesson.id)
         
         return (markdown, meta)

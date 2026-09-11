@@ -106,10 +106,17 @@ class APIKeyStore: ObservableObject {
     @Published var hasAnthropicKey: Bool = false
     @Published var hasOpenAIKey: Bool = false
     @Published var hasOpenRouterKey: Bool = false
+    @Published var hasCustomKey: Bool = false
+    @Published var customBaseURL: String = ""
+    @Published var customModel: String = ""
     
     private let anthropicKey = "llm.anthropic.apikey"
     private let openaiKey = "llm.openai.apikey"
     private let openrouterKey = "llm.openrouter.apikey"
+    private let customKey = "llm.custom.apikey"
+    
+    private let customBaseURLKey = "llm.custom.baseurl"
+    private let customModelKey = "llm.custom.model"
     
     init() {
         refreshStatus()
@@ -119,6 +126,9 @@ class APIKeyStore: ObservableObject {
         hasAnthropicKey = (try? KeychainStorage.load(key: anthropicKey)) != nil
         hasOpenAIKey = (try? KeychainStorage.load(key: openaiKey)) != nil
         hasOpenRouterKey = (try? KeychainStorage.load(key: openrouterKey)) != nil
+        hasCustomKey = (try? KeychainStorage.load(key: customKey)) != nil
+        customBaseURL = UserDefaults.standard.string(forKey: customBaseURLKey) ?? ""
+        customModel = UserDefaults.standard.string(forKey: customModelKey) ?? ""
     }
     
     func getKey(for provider: LLMProvider) throws -> String? {
@@ -138,11 +148,32 @@ class APIKeyStore: ObservableObject {
         refreshStatus()
     }
     
+    func getCustomBaseURL() -> String? {
+        let url = UserDefaults.standard.string(forKey: customBaseURLKey)
+        return url?.isEmpty == false ? url : nil
+    }
+    
+    func setCustomBaseURL(_ value: String) {
+        UserDefaults.standard.set(value, forKey: customBaseURLKey)
+        customBaseURL = value
+    }
+    
+    func getCustomModel() -> String? {
+        let model = UserDefaults.standard.string(forKey: customModelKey)
+        return model?.isEmpty == false ? model : nil
+    }
+    
+    func setCustomModel(_ value: String) {
+        UserDefaults.standard.set(value, forKey: customModelKey)
+        customModel = value
+    }
+    
     private func keyString(for provider: LLMProvider) -> String {
         switch provider {
         case .anthropic: return anthropicKey
         case .openai: return openaiKey
         case .openrouter: return openrouterKey
+        case .custom: return customKey
         }
     }
 }

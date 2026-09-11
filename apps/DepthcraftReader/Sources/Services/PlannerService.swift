@@ -2,9 +2,11 @@ import Foundation
 
 class PlannerService: PlannerRole {
     private let client: LLMClient
+    private let temperature: Double
     
-    init(client: LLMClient) {
+    init(client: LLMClient, temperature: Double = 0.7) {
         self.client = client
+        self.temperature = temperature
     }
     
     func plan(topic: String, locale: String) async throws -> Curriculum {
@@ -52,7 +54,7 @@ class PlannerService: PlannerRole {
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """
         
-        let response = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt)
+        let response = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature)
         
         let cleaned = response
             .trimmingCharacters(in: .whitespacesAndNewlines)

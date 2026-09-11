@@ -6,12 +6,14 @@ enum LLMProvider: String, Codable, CaseIterable {
     case anthropic
     case openai
     case openrouter
+    case custom
     
     var displayName: String {
         switch self {
         case .anthropic: return "Anthropic"
         case .openai: return "OpenAI"
         case .openrouter: return "OpenRouter"
+        case .custom: return "Custom (OpenAI-compatible)"
         }
     }
 }
@@ -20,6 +22,16 @@ struct LLMConfiguration {
     let provider: LLMProvider
     let model: String
     let apiKey: String
+    let temperature: Double
+    let customBaseURL: String?
+    
+    init(provider: LLMProvider, model: String, apiKey: String, temperature: Double = 0.7, customBaseURL: String? = nil) {
+        self.provider = provider
+        self.model = model
+        self.apiKey = apiKey
+        self.temperature = temperature
+        self.customBaseURL = customBaseURL
+    }
 }
 
 // MARK: - Role run metadata

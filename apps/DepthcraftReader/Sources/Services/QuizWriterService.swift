@@ -2,9 +2,11 @@ import Foundation
 
 class QuizWriterService: QuizWriterRole {
     private let client: LLMClient
+    private let temperature: Double
     
-    init(client: LLMClient) {
+    init(client: LLMClient, temperature: Double = 0.7) {
         self.client = client
+        self.temperature = temperature
     }
     
     func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson) async throws -> QuizDocument {
@@ -58,7 +60,7 @@ class QuizWriterService: QuizWriterRole {
         Output ONLY the JSON quiz, no markdown fences or explanatory text.
         """
         
-        let response = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt)
+        let response = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature)
         
         let cleaned = response
             .trimmingCharacters(in: .whitespacesAndNewlines)

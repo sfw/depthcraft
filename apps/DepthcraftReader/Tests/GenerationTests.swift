@@ -359,8 +359,116 @@ final class LessonMetaExtractionTests: XCTestCase {
 }
 
 class MockLLMClient: LLMClient {
-    func complete(systemPrompt: String, userPrompt: String) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
         return "Mock response"
+    }
+}
+
+final class CustomClientTests: XCTestCase {
+    
+    func testCustomClientURLNormalization() {
+        // Base URL without trailing slash
+        let client1 = CustomOpenAIClient(
+            apiKey: "test-key",
+            model: "test-model",
+            baseURL: "https://api.example.com/v1"
+        )
+        XCTAssertEqual(client1.baseURL, "https://api.example.com/v1")
+        
+        // Base URL with trailing slash - should be normalized
+        let client2 = CustomOpenAIClient(
+            apiKey: "test-key",
+            model: "test-model",
+            baseURL: "https://api.example.com/v1/"
+        )
+        XCTAssertEqual(client2.baseURL, "https://api.example.com/v1")
+        
+        // Multiple trailing slashes
+        let client3 = CustomOpenAIClient(
+            apiKey: "test-key",
+            model: "test-model",
+            baseURL: "https://api.example.com/v1///"
+        )
+        XCTAssertEqual(client3.baseURL, "https://api.example.com/v1//")
+    }
+    
+    func testRateLimitErrorMessage() {
+        let error = LLMClientError.rateLimitError(
+            provider: "Anthropic",
+            status: 429,
+            message: "Rate limit exceeded"
+        )
+        
+        let description = error.errorDescription ?? ""
+        XCTAssertTrue(description.contains("Anthropic"))
+        XCTAssertTrue(description.contains("429"))
+        XCTAssertTrue(description.contains("rate limit"))
+        XCTAssertTrue(description.contains("quota"))
+    }
+    
+    func testRateLimitErrorMessageWithoutDetails() {
+        let error = LLMClientError.rateLimitError(
+            provider: "OpenAI",
+            status: 429,
+            message: nil
+        )
+        
+        let description = error.errorDescription ?? ""
+        XCTAssertTrue(description.contains("OpenAI"))
+        XCTAssertTrue(description.contains("429"))
+        XCTAssertTrue(description.contains("quota"))
+    }
+    
+    func testLLMConfigurationWithTemperature() {
+        let config = LLMConfiguration(
+            provider: .anthropic,
+            model: "claude-3-5-sonnet-20241022",
+            apiKey: "test-key",
+            temperature: 0.9
+        )
+        
+        XCTAssertEqual(config.temperature, 0.9)
+        XCTAssertNil(config.customBaseURL)
+    }
+    
+    func testLLMConfigurationWithCustomBaseURL() {
+        let config = LLMConfiguration(
+            provider: .custom,
+            model: "moonshot-v1-8k",
+            apiKey: "test-key",
+            temperature: 0.7,
+            customBaseURL: "https://api.moonshot.cn/v1"
+        )
+        
+        XCTAssertEqual(config.customBaseURL, "https://api.moonshot.cn/v1")
+        XCTAssertEqual(config.model, "moonshot-v1-8k")
+    }
+    
+    func testLLMClientFactoryCustom() throws {
+        let config = LLMConfiguration(
+            provider: .custom,
+            model: "test-model",
+            apiKey: "test-key",
+            temperature: 0.7,
+            customBaseURL: "https://api.example.com/v1"
+        )
+        
+        let client = try LLMClientFactory.createClient(config: config)
+        XCTAssertTrue(client is CustomOpenAIClient)
+    }
+    
+    func testLLMClientFactoryCustomRequiresBaseURL() {
+        let config = LLMConfiguration(
+            provider: .custom,
+            model: "test-model",
+            apiKey: "test-key",
+            temperature: 0.7,
+            customBaseURL: nil
+        )
+        
+        XCTAssertThrowsError(try LLMClientFactory.createClient(config: config)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("base URL"))
+        }
     }
 }
 

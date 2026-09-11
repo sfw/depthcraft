@@ -10,12 +10,18 @@ struct GenerationView: View {
     
     @State private var plannerProvider: LLMProvider = .anthropic
     @State private var plannerModel = "claude-3-5-sonnet-20241022"
+    @State private var plannerTemperature = 0.7
     
     @State private var lessonProvider: LLMProvider = .anthropic
     @State private var lessonModel = "claude-3-5-sonnet-20241022"
+    @State private var lessonTemperature = 0.7
     
     @State private var quizProvider: LLMProvider = .openai
     @State private var quizModel = "gpt-4o"
+    @State private var quizTemperature = 0.7
+    
+    @State private var customBaseURL = ""
+    @State private var customModel = ""
     
     @State private var errorMessage: String?
     @State private var showingError = false
@@ -67,6 +73,11 @@ struct GenerationView: View {
         } message: {
             Text("The generated course has been loaded into the reader. Tap OK to return to the course home.")
         }
+        .onAppear {
+            // Load custom endpoint config from keyStore
+            customBaseURL = keyStore.customBaseURL
+            customModel = keyStore.customModel
+        }
     }
     
     private var setupSection: some View {
@@ -83,15 +94,27 @@ struct GenerationView: View {
             }
             
             Section("Planner") {
-                providerPicker(provider: $plannerProvider, model: $plannerModel)
+                roleConfiguration(
+                    provider: $plannerProvider,
+                    model: $plannerModel,
+                    temperature: $plannerTemperature
+                )
             }
             
             Section("Lesson Writer") {
-                providerPicker(provider: $lessonProvider, model: $lessonModel)
+                roleConfiguration(
+                    provider: $lessonProvider,
+                    model: $lessonModel,
+                    temperature: $lessonTemperature
+                )
             }
             
             Section("Quiz Writer") {
-                providerPicker(provider: $quizProvider, model: $quizModel)
+                roleConfiguration(
+                    provider: $quizProvider,
+                    model: $quizModel,
+                    temperature: $quizTemperature
+                )
             }
             
             Section {
@@ -234,7 +257,7 @@ struct GenerationView: View {
         }
     }
     
-    private func providerPicker(provider: Binding<LLMProvider>, model: Binding<String>) -> some View {
+    private func roleConfiguration(provider: Binding<LLMProvider>, model: Binding<String>, temperature: Binding<Double>) -> some View {
         Group {
             Picker("Provider", selection: provider) {
                 ForEach(LLMProvider.allCases, id: \.self) { p in
@@ -242,16 +265,44 @@ struct GenerationView: View {
                 }
             }
             
-            TextField("Model", text: model)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            if provider.wrappedValue == .custom {
+                TextField("Base URL", text: $customBaseURL)
+                    .textContentType(.URL)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                
+                TextField("Model", text: $customModel)
+                    .autocapitalization(.none)
+                    .autocorrectionDisabled()
+            } else {
+                TextField("Model", text: model)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+            
+            HStack {
+                Text("Temperature")
+                Spacer()
+                Text(String(format: "%.1f", temperature.wrappedValue))
+                    .foregroundStyle(.secondary)
+            }
+            
+            Slider(value: temperature, in: 0.0...2.0, step: 0.1)
         }
     }
     
     private var canStartPlanning: Bool {
+        // Check for API key
         guard let key = try? keyStore.getKey(for: plannerProvider), key != nil else {
             return false
         }
+        
+        // If custom provider, also need base URL and model
+        if plannerProvider == .custom {
+            return !customBaseURL.isEmpty && !customModel.isEmpty
+        }
+        
         return true
     }
     
@@ -264,12 +315,45 @@ struct GenerationView: View {
                 return
             }
             
+            // Validate custom endpoint config
+            if plannerProvider == .custom {
+                guard !customBaseURL.isEmpty else {
+                    errorMessage = "Custom endpoint requires a base URL"
+                    showingError = true
+                    return
+                }
+                guard !customModel.isEmpty else {
+                    errorMessage = "Custom endpoint requires a model"
+                    showingError = true
+                    return
+                }
+            }
+            
+            let effectiveModel = plannerProvider == .custom ? customModel : plannerModel
+            let effectiveBaseURL = plannerProvider == .custom ? customBaseURL : nil
+            
             let request = GenerationRequest(
                 topic: topic,
                 locale: locale,
-                plannerConfig: LLMConfiguration(provider: plannerProvider, model: plannerModel, apiKey: plannerKey),
-                lessonWriterConfig: LLMConfiguration(provider: lessonProvider, model: lessonModel, apiKey: ""),
-                quizWriterConfig: LLMConfiguration(provider: quizProvider, model: quizModel, apiKey: ""),
+                plannerConfig: LLMConfiguration(
+                    provider: plannerProvider,
+                    model: effectiveModel,
+                    apiKey: plannerKey,
+                    temperature: plannerTemperature,
+                    customBaseURL: effectiveBaseURL
+                ),
+                lessonWriterConfig: LLMConfiguration(
+                    provider: lessonProvider,
+                    model: lessonModel,
+                    apiKey: "",
+                    temperature: lessonTemperature
+                ),
+                quizWriterConfig: LLMConfiguration(
+                    provider: quizProvider,
+                    model: quizModel,
+                    apiKey: "",
+                    temperature: quizTemperature
+                ),
                 generateUnitIds: nil
             )
             
@@ -307,12 +391,56 @@ struct GenerationView: View {
                 return
             }
             
+            // Validate custom endpoints if used
+            if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+                errorMessage = "Custom endpoint for lesson writer requires base URL and model"
+                showingError = true
+                return
+            }
+            if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+                errorMessage = "Custom endpoint for quiz writer requires base URL and model"
+                showingError = true
+                return
+            }
+            if plannerProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+                errorMessage = "Custom endpoint for planner requires base URL and model"
+                showingError = true
+                return
+            }
+            
+            let plannerEffectiveModel = plannerProvider == .custom ? customModel : plannerModel
+            let plannerEffectiveBaseURL = plannerProvider == .custom ? customBaseURL : nil
+            
+            let lessonEffectiveModel = lessonProvider == .custom ? customModel : lessonModel
+            let lessonEffectiveBaseURL = lessonProvider == .custom ? customBaseURL : nil
+            
+            let quizEffectiveModel = quizProvider == .custom ? customModel : quizModel
+            let quizEffectiveBaseURL = quizProvider == .custom ? customBaseURL : nil
+            
             let request = GenerationRequest(
                 topic: topic,
                 locale: locale,
-                plannerConfig: LLMConfiguration(provider: plannerProvider, model: plannerModel, apiKey: plannerKey),
-                lessonWriterConfig: LLMConfiguration(provider: lessonProvider, model: lessonModel, apiKey: lessonKey),
-                quizWriterConfig: LLMConfiguration(provider: quizProvider, model: quizModel, apiKey: quizKey),
+                plannerConfig: LLMConfiguration(
+                    provider: plannerProvider,
+                    model: plannerEffectiveModel,
+                    apiKey: plannerKey,
+                    temperature: plannerTemperature,
+                    customBaseURL: plannerEffectiveBaseURL
+                ),
+                lessonWriterConfig: LLMConfiguration(
+                    provider: lessonProvider,
+                    model: lessonEffectiveModel,
+                    apiKey: lessonKey,
+                    temperature: lessonTemperature,
+                    customBaseURL: lessonEffectiveBaseURL
+                ),
+                quizWriterConfig: LLMConfiguration(
+                    provider: quizProvider,
+                    model: quizEffectiveModel,
+                    apiKey: quizKey,
+                    temperature: quizTemperature,
+                    customBaseURL: quizEffectiveBaseURL
+                ),
                 generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds)
             )
             
