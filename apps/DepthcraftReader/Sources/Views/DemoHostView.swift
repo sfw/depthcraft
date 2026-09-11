@@ -110,6 +110,11 @@ struct DemoWebView: UIViewRepresentable {
     
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        
+        // Enable file:// cross-origin access for package-local fetches
+        // (allows demo to fetch('./demo.json') from same file:// origin)
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         
         // Enable WebGL for Three.js demos
@@ -146,14 +151,13 @@ struct DemoWebView: UIViewRepresentable {
         // Store webView for deferred load
         context.coordinator.pendingWebView = webView
         
-        // Sandbox: compile content rules async, add to LIVE webView, then load
-        // Note: Only block script/image/stylesheet/font from http(s); fetch/raw excluded
-        // to allow same-origin file:// loads (navigation delegates handle http(s) fetch)
+        // Sandbox: block ALL http(s) resource loads including fetch/XHR
+        // url-filter only matches http(s), so file:// loads are unaffected
         let blockRules = """
         [{
             "trigger": {
                 "url-filter": "^https?://.*",
-                "resource-type": ["script", "image", "style-sheet", "font"]
+                "resource-type": ["script", "image", "style-sheet", "font", "fetch", "raw"]
             },
             "action": {
                 "type": "block"
