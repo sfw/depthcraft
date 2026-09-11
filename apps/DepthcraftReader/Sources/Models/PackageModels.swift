@@ -33,6 +33,15 @@ struct CurriculumLesson: Codable, Hashable, Identifiable {
     var estimatedMinutes: Int?
 }
 
+struct DemoManifest: Codable, Hashable {
+    let schemaVersion: String
+    let demoId: String
+    let title: String
+    let kit: String
+    let entry: String
+    let fallback: String
+}
+
 struct QuizDocument: Codable, Hashable {
     let schemaVersion: String
     let lessonId: String

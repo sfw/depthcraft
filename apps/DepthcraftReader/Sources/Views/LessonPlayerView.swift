@@ -7,7 +7,7 @@ struct LessonPlayerView: View {
     let lessonId: String
     var navigationPath: Binding<[NavigationDestination]>?
 
-    @State private var html: String = ""
+    @State private var renderResult: LessonRenderResult?
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
@@ -24,10 +24,16 @@ struct LessonPlayerView: View {
         VStack(spacing: 0) {
             if let loadError {
                 ContentUnavailableView("Lesson unavailable", systemImage: "doc.questionmark", description: Text(loadError))
-            } else {
-                LessonWebView(html: html, onScrolledToEnd: {
-                    store.markLessonRead(lessonId: lessonId, unitId: unitId)
-                })
+            } else if let renderResult, let course = store.course {
+                LessonContentView(
+                    course: course,
+                    unitId: unitId,
+                    lessonId: lessonId,
+                    renderResult: renderResult,
+                    onScrolledToEnd: {
+                        store.markLessonRead(lessonId: lessonId, unitId: unitId)
+                    }
+                )
 
                 Divider()
 
@@ -81,7 +87,7 @@ struct LessonPlayerView: View {
         guard let course = store.course else { return }
         do {
             let md = try PackageLoader.lessonMarkdown(course: course, unitId: unitId, lessonId: lessonId)
-            html = MarkdownHTML.render(md, title: lesson?.title ?? "", estimatedMinutes: lesson?.estimatedMinutes)
+            renderResult = MarkdownHTML.render(md, title: lesson?.title ?? "", estimatedMinutes: lesson?.estimatedMinutes)
             quiz = try PackageLoader.quiz(course: course, unitId: unitId, lessonId: lessonId)
             loadError = nil
         } catch {

@@ -78,6 +78,25 @@ enum PackageLoader {
         }
     }
 
+    static func demoManifest(course: LoadedCourse, unitId: String, lessonId: String, demoId: String) throws -> DemoManifest {
+        let url = course.rootURL
+            .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/demos/\(demoId)/demo.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw PackageLoaderError.missingFile("demo.json")
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(DemoManifest.self, from: data)
+        } catch {
+            throw PackageLoaderError.decode("demo.json", error)
+        }
+    }
+
+    static func demoDirectory(course: LoadedCourse, unitId: String, lessonId: String, demoId: String) -> URL {
+        course.rootURL
+            .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/demos/\(demoId)")
+    }
+
     private static func decode<T: Decodable>(_ name: String, from root: URL) throws -> T {
         let url = root.appendingPathComponent(name)
         guard FileManager.default.fileExists(atPath: url.path) else {

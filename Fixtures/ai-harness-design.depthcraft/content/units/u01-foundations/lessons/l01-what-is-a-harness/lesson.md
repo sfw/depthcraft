@@ -4,6 +4,8 @@
 
 An **AI harness** is the thin, reliable control plane around models: tools, roles, retries, validation, and handoff to humans. In educational systems it decides *when* a model runs, *what* it may write, and *how* that writing becomes a durable learning artifact.
 
+:::demo id="rotating-cube":::
+
 ## Not the model
 
 The model proposes. The harness constrains, checks schema, and refuses half-written packages. If you conflate the two, offline study inherits online flakiness.
