@@ -950,6 +950,27 @@ final class JSONExtractionTests: XCTestCase {
         XCTAssertNil(JSONExtractor.extractJSON(from: "   "))
         XCTAssertNil(JSONExtractor.extractJSON(from: "\n\n"))
     }
+    
+    func testExtractNestedJSON() {
+        let input = """
+        Here's a response with nested objects:
+        {
+          "outer": {
+            "inner": {
+              "value": "test"
+            }
+          },
+          "array": [1, 2, 3]
+        }
+        And some trailing text.
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
 }
 
 // MARK: - Planner Configuration Tests
@@ -994,25 +1015,5 @@ class TrackingLLMClient: LLMClient {
     func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         lastMaxTokens = maxTokens
         return "{\"invalid\": \"json\"}"
-    
-    func testExtractNestedJSON() {
-        let input = """
-        Here's a response with nested objects:
-        {
-          "outer": {
-            "inner": {
-              "value": "test"
-            }
-          },
-          "array": [1, 2, 3]
-        }
-        And some trailing text.
-        """
-        
-        let extracted = JSONExtractor.extractJSON(from: input)
-        XCTAssertNotNil(extracted)
-        
-        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
-        XCTAssertTrue(validation.isValid)
     }
 }
