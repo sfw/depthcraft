@@ -9,7 +9,7 @@ class PlannerService: PlannerRole {
         self.temperature = temperature
     }
     
-    func plan(topic: String, locale: String) async throws -> Curriculum {
+    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel) async throws -> Curriculum {
         let systemPrompt = """
         You are a curriculum planner for the Depthcraft learning platform. Your job is to create a structured curriculum map as JSON.
         
@@ -42,14 +42,44 @@ class PlannerService: PlannerRole {
         - Lesson IDs: "l01-name", "l02-name" (lowercase, hyphenated)
         - Order starts at 1
         - Status is always "draft" for new plans
-        - Estimate 10-15 minutes per lesson
-        - Create 2-3 units with 2-3 lessons each
         - All lesson IDs in unit.lessonIds must exist in lessons dict
         """
+        
+        let knowledgeGuidance: String
+        switch knowledgeLevel {
+        case .new:
+            knowledgeGuidance = "The learner is NEW to this topic. Include foundational concepts, basic terminology, and clear explanations of fundamentals. Start from first principles."
+        case .some:
+            knowledgeGuidance = "The learner has SOME knowledge of this topic. Include key foundations but move through basics at a moderate pace. Brief review of fundamentals is helpful."
+        case .working:
+            knowledgeGuidance = "The learner has WORKING knowledge. Skip basic terminology. Focus on intermediate concepts, practical application, and building on assumed foundations."
+        case .strong:
+            knowledgeGuidance = "The learner has STRONG knowledge. Compress or skip foundations. Focus on advanced concepts, nuances, and sophisticated applications."
+        case .expert:
+            knowledgeGuidance = "The learner is an EXPERT. Assume deep familiarity. Focus on cutting-edge topics, subtle distinctions, expert-level patterns, and advanced techniques."
+        }
+        
+        let depthGuidance: String
+        switch depthLevel {
+        case .brief:
+            depthGuidance = "Keep the curriculum BRIEF. Cover only the most essential topics. Estimate 8-12 minutes per lesson."
+        case .standard:
+            depthGuidance = "Create a STANDARD curriculum. Balance breadth and depth appropriately. Estimate 10-15 minutes per lesson."
+        case .deep:
+            depthGuidance = "Create a DEEP curriculum. Go deeper into important concepts with more comprehensive coverage. Estimate 12-18 minutes per lesson."
+        case .thorough:
+            depthGuidance = "Create a THOROUGH curriculum. Cover the topic comprehensively with detailed exploration of key areas. Estimate 15-20 minutes per lesson."
+        case .exhaustive:
+            depthGuidance = "Create an EXHAUSTIVE curriculum. Provide extensive, comprehensive coverage with deep dives into all major aspects. Estimate 18-25 minutes per lesson."
+        }
         
         let userPrompt = """
         Create a curriculum for: \(topic)
         Locale: \(locale)
+        
+        Learner's current knowledge level: \(knowledgeGuidance)
+        
+        Desired depth: \(depthGuidance)
         
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """

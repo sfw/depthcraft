@@ -42,6 +42,48 @@ struct RoleRun: Codable, Hashable {
     let ranAt: String
 }
 
+// MARK: - Advanced generation controls
+
+enum KnowledgeLevel: Int, CaseIterable, Identifiable {
+    case new = 1
+    case some = 2
+    case working = 3
+    case strong = 4
+    case expert = 5
+    
+    var id: Int { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .new: return "New"
+        case .some: return "Some"
+        case .working: return "Working"
+        case .strong: return "Strong"
+        case .expert: return "Expert"
+        }
+    }
+}
+
+enum DepthLevel: Int, CaseIterable, Identifiable {
+    case brief = 1
+    case standard = 2
+    case deep = 3
+    case thorough = 4
+    case exhaustive = 5
+    
+    var id: Int { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .brief: return "Brief"
+        case .standard: return "Standard"
+        case .deep: return "Deep"
+        case .thorough: return "Thorough"
+        case .exhaustive: return "Exhaustive"
+        }
+    }
+}
+
 // MARK: - Generation request
 
 struct GenerationRequest {
@@ -51,6 +93,8 @@ struct GenerationRequest {
     let lessonWriterConfig: LLMConfiguration
     let quizWriterConfig: LLMConfiguration
     let generateUnitIds: [String]?
+    let knowledgeLevel: KnowledgeLevel
+    let depthLevel: DepthLevel
 }
 
 // MARK: - Generation state
@@ -107,7 +151,7 @@ struct GenerationOutput {
 // MARK: - Role interfaces
 
 protocol PlannerRole {
-    func plan(topic: String, locale: String) async throws -> Curriculum
+    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel) async throws -> Curriculum
 }
 
 protocol LessonWriterRole {

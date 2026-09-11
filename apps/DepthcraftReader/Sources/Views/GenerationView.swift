@@ -9,6 +9,9 @@ struct GenerationView: View {
     @State private var topic = "AI harness design for educational systems"
     @State private var locale = "en-CA"
     
+    @State private var knowledgeLevel: KnowledgeLevel = .some
+    @State private var depthLevel: DepthLevel = .standard
+    
     @State private var plannerProvider: LLMProvider = .anthropic
     @State private var plannerModel = "claude-sonnet-5"
     @State private var plannerTemperature = 0.7
@@ -197,7 +200,58 @@ struct GenerationView: View {
                 )
             }
             
+            Section("Advanced") {
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Current knowledge")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Picker("Current knowledge", selection: $knowledgeLevel) {
+                                ForEach(KnowledgeLevel.allCases) { level in
+                                    Text(level.displayName).tag(level)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            
+                            Text("Higher levels skip/compress foundational content")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Desired depth")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Picker("Desired depth", selection: $depthLevel) {
+                                ForEach(DepthLevel.allCases) { level in
+                                    Text(level.displayName).tag(level)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            
+                            Text("Higher levels produce longer, more comprehensive courses")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                } label: {
+                    Text("Knowledge & Depth Controls")
+                }
+            }
+            
             Section {
+                if hasAnyProviderConfigured && canStartPlanning {
+                    Text(costShapeCue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 4)
+                }
+                
                 Button("Start Planning") {
                     startPlanning()
                 }
@@ -394,6 +448,41 @@ struct GenerationView: View {
         return true
     }
     
+    private var costShapeCue: String {
+        // Cost cue is mainly driven by depth, with knowledge providing slight nudges
+        let baseDescriptor: String
+        
+        switch depthLevel {
+        case .brief:
+            baseDescriptor = "shorter"
+        case .standard:
+            baseDescriptor = "typical"
+        case .deep:
+            baseDescriptor = "longer"
+        case .thorough:
+            baseDescriptor = "longer"
+        case .exhaustive:
+            baseDescriptor = "longer"
+        }
+        
+        // Knowledge can nudge the descriptor slightly
+        let adjustedDescriptor: String
+        if depthLevel == .standard {
+            // At standard depth, knowledge has more influence
+            if knowledgeLevel == .expert || knowledgeLevel == .strong {
+                adjustedDescriptor = "shorter"
+            } else if knowledgeLevel == .new {
+                adjustedDescriptor = "longer"
+            } else {
+                adjustedDescriptor = baseDescriptor
+            }
+        } else {
+            adjustedDescriptor = baseDescriptor
+        }
+        
+        return "Expected generation: \(adjustedDescriptor)"
+    }
+    
     private var canContinueGeneration: Bool {
         // Check if lesson and quiz providers have keys
         guard let lessonKey = try? keyStore.getKey(for: lessonProvider), lessonKey != nil else {
@@ -462,7 +551,9 @@ struct GenerationView: View {
                     apiKey: "",
                     temperature: quizTemperature
                 ),
-                generateUnitIds: nil
+                generateUnitIds: nil,
+                knowledgeLevel: knowledgeLevel,
+                depthLevel: depthLevel
             )
             
             lastFailedRequest = request
@@ -556,7 +647,9 @@ struct GenerationView: View {
                     temperature: quizTemperature,
                     customBaseURL: quizEffectiveBaseURL
                 ),
-                generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds)
+                generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds),
+                knowledgeLevel: knowledgeLevel,
+                depthLevel: depthLevel
             )
             
             lastFailedRequest = request
