@@ -12,7 +12,7 @@ struct CourseHomeView: View {
                         Text(course.manifest.title)
                             .font(.largeTitle.weight(.bold))
                             .fixedSize(horizontal: false, vertical: true)
-                        if course.manifest.title != course.manifest.topic {
+                        if course.manifest.title.localizedCaseInsensitiveCompare(course.manifest.topic) != .orderedSame {
                             Text(course.manifest.topic)
                                 .font(.title3)
                                 .foregroundStyle(.secondary)
