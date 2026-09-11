@@ -211,6 +211,10 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         webView.scrollView.isScrollEnabled = false
         webView.translatesAutoresizingMaskIntoConstraints = false
         
+        // Set provisional height so layout isn't 0 until measure returns
+        let provisionalHeight: CGFloat = 200
+        webView.heightAnchor.constraint(equalToConstant: provisionalHeight).isActive = true
+        
         // Load HTML and measure height
         let delegate = HTMLWebViewDelegate()
         webView.navigationDelegate = delegate
@@ -226,7 +230,20 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // Measure content height and update constraint
             webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
-                if let height = result as? CGFloat, height > 0 {
+                var height: CGFloat = 0
+                
+                // Robust casting for JS return value (may be Double, NSNumber, Int, etc.)
+                if let doubleValue = result as? Double {
+                    height = CGFloat(doubleValue)
+                } else if let numberValue = result as? NSNumber {
+                    height = CGFloat(truncating: numberValue)
+                } else if let intValue = result as? Int {
+                    height = CGFloat(intValue)
+                } else if let cgfloatValue = result as? CGFloat {
+                    height = cgfloatValue
+                }
+                
+                if height > 0 {
                     DispatchQueue.main.async {
                         // Update height constraint
                         if let heightConstraint = webView.constraints.first(where: { $0.firstAttribute == .height }) {
@@ -234,6 +251,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         } else {
                             webView.heightAnchor.constraint(equalToConstant: height).isActive = true
                         }
+                        webView.layoutIfNeeded()
                     }
                 }
             }

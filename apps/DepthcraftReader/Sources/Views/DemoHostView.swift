@@ -118,12 +118,11 @@ struct DemoWebView: UIViewRepresentable {
         config.defaultWebpagePreferences = preferences
         
         // Sandbox: block http/https resource loads via content rules
-        // Compile rules synchronously before creating WebView
         let blockRules = """
         [{
             "trigger": {
                 "url-filter": "^https?://.*",
-                "resource-type": ["script", "image", "style-sheet", "raw", "font"]
+                "resource-type": ["script", "image", "style-sheet", "raw", "font", "fetch"]
             },
             "action": {
                 "type": "block"
@@ -131,30 +130,27 @@ struct DemoWebView: UIViewRepresentable {
         }]
         """
         
-        // Try to add pre-compiled rules (best-effort; may already exist)
+        // Compile rules asynchronously, then create/load WebView
         let store = WKContentRuleListStore.default()
-        let semaphore = DispatchSemaphore(value: 0)
-        var compiledRuleList: WKContentRuleList?
-        
         store.compileContentRuleList(
             forIdentifier: "DemoSandboxRules",
             encodedContentRuleList: blockRules
-        ) { ruleList, error in
-            if let ruleList = ruleList {
-                compiledRuleList = ruleList
-            } else if let error = error {
-                #if DEBUG
-                print("⚠️ Failed to compile content rules: \(error)")
-                #endif
+        ) { [weak context] ruleList, error in
+            DispatchQueue.main.async {
+                if let ruleList = ruleList {
+                    config.userContentController.add(ruleList)
+                } else if let error = error {
+                    #if DEBUG
+                    print("⚠️ Failed to compile content rules: \(error)")
+                    #endif
+                }
+                
+                // Load demo after rules are added
+                guard let context = context else { return }
+                if let webView = context.coordinator.pendingWebView {
+                    context.coordinator.loadDemo(into: webView)
+                }
             }
-            semaphore.signal()
-        }
-        
-        // Wait for compilation (timeout after 1 second)
-        _ = semaphore.wait(timeout: .now() + 1.0)
-        
-        if let ruleList = compiledRuleList {
-            config.userContentController.add(ruleList)
         }
         
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -164,49 +160,62 @@ struct DemoWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = true
         webView.navigationDelegate = context.coordinator
         
+        // Store webView for deferred load
+        context.coordinator.pendingWebView = webView
+        
         return webView
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
         if context.coordinator.lastKey != key {
             context.coordinator.lastKey = key
-            loadDemo(into: webView, context: context)
+            context.coordinator.pendingWebView = webView
+            context.coordinator.loadDemo(into: webView)
         }
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator(onError: onError)
-    }
-    
-    private func loadDemo(into webView: WKWebView, context: Context) {
-        do {
-            let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
-            let demoDir = PackageLoader.demoDirectory(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
-            let entryURL = demoDir.appendingPathComponent(manifest.entry)
-            
-            guard FileManager.default.fileExists(atPath: entryURL.path) else {
-                onError("Demo entry file not found")
-                return
-            }
-            
-            // Set allowed directory for sandbox
-            context.coordinator.allowedDirectory = demoDir
-            
-            // Use loadFileURL for ES module support (avoids opaque origin issue with loadHTMLString)
-            webView.loadFileURL(entryURL, allowingReadAccessTo: demoDir)
-            
-        } catch {
-            onError(error.localizedDescription)
-        }
+        Coordinator(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId, onError: onError)
     }
     
     final class Coordinator: NSObject, WKNavigationDelegate {
+        let course: LoadedCourse
+        let unitId: String
+        let lessonId: String
+        let demoId: String
         let onError: (String) -> Void
         var lastKey: UUID?
         var allowedDirectory: URL?
+        weak var pendingWebView: WKWebView?
         
-        init(onError: @escaping (String) -> Void) {
+        init(course: LoadedCourse, unitId: String, lessonId: String, demoId: String, onError: @escaping (String) -> Void) {
+            self.course = course
+            self.unitId = unitId
+            self.lessonId = lessonId
+            self.demoId = demoId
             self.onError = onError
+        }
+        
+        func loadDemo(into webView: WKWebView) {
+            do {
+                let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+                let demoDir = PackageLoader.demoDirectory(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+                let entryURL = demoDir.appendingPathComponent(manifest.entry)
+                
+                guard FileManager.default.fileExists(atPath: entryURL.path) else {
+                    onError("Demo entry file not found")
+                    return
+                }
+                
+                // Set allowed directory for sandbox
+                allowedDirectory = demoDir
+                
+                // Use loadFileURL for ES module support (avoids opaque origin issue with loadHTMLString)
+                webView.loadFileURL(entryURL, allowingReadAccessTo: demoDir)
+                
+            } catch {
+                onError(error.localizedDescription)
+            }
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
