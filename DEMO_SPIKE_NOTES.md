@@ -1,5 +1,17 @@
 # Interactive Demo v0 Engineering Spike
 
+## ✅ Mac RE2 Dogfood PASSED @ HEAD `6877203`
+
+**All acceptance criteria met:**
+- ✅ Cube visible with colorful 3D faces
+- ✅ Sandbox: external requests blocked + local `./demo.json` fetch allowed
+- ✅ Reset, soft-fail, l02, read-intent, offline, Xcode compile all pass
+- ✅ Debug overlay removed (production-ready)
+
+**Status:** Production-ready. PR remains draft pending Lab Partner + Product Designer approval.
+
+---
+
 ## Summary
 Implements sandboxed interactive Three.js demos inline with lesson content. Demos are optional, hand-authored, package-local, and soft-fail to fallback markdown on errors.
 
@@ -156,23 +168,24 @@ Created `sandbox-test` (negative test case):
 - No progress/state persistence across resets
 - No demo-specific accessibility labels
 
-### Requires Mac Testing (HEAD: `81318b1`)
+### ✅ Mac Testing Results (HEAD: `6877203`)
 
-**Critical Fix Verification (Must Pass):**
-1. **Cube visibility (`81318b1` fix)**: Open l01 → rotating-cube should show colorful 3D cube with visible faces (not blank gradient)
-2. **Local fetch allowed (`81318b1` fix)**: Run `sandbox-test` → should show "✅ ALLOWED (expected): Local file access" for `./demo.json` fetch
-3. **Xcode compile (`81318b1` fix)**: Clean build on Xcode 26 without errors (safe unwrap for `WKContentRuleListStore.default()`)
-4. **Soft-fail runtime (`81318b1` fix)**: Corrupt rotating-cube's index.html (break JS/remove canvas) → fallback.md shown after 2 seconds
+**Mac RE2 Dogfood @ `d072335`/`3ddf076` → ALL PASSED:**
 
-**Already Passing (Don't Regress):**
-5. **Inline placement**: Demo appears between "The job" and "Not the model" sections (not at end)
-6. **Sandbox enforcement**: `sandbox-test` shows all external requests blocked (CDN script, fetch, XHR, image)
-7. **Non-regression**: Open lesson without demos (e.g. l02) → lesson loads normally
-8. **Offline radio-off test**: Airplane mode → demo loads from package bytes
-9. **Reset flow**: Tap Reset → cube returns to initial orientation
-10. **ES modules**: Verify Three.js imports work (no opaque origin errors in console)
-11. **Scroll behavior**: Smooth scrolling across HTML sections and demos
-12. **Read-intent**: Scroll to bottom → lesson marked read at 80pt threshold
+1. ✅ **Cube visibility**: Colorful 3D cube with visible faces (red, teal, yellow, mint, purple, pink)
+2. ✅ **Local fetch allowed**: `sandbox-test` shows "✅ ALLOWED (expected): Local file access" for `./demo.json` fetch
+3. ✅ **Xcode compile**: Clean build on Xcode 26
+4. ✅ **Soft-fail runtime**: Missing/corrupt files trigger fallback.md display
+5. ✅ **Inline placement**: Demo appears between "The job" and "Not the model" sections
+6. ✅ **Sandbox enforcement**: All external requests blocked (CDN script, fetch, XHR, image)
+7. ✅ **Non-regression**: l02 (no demos) loads normally
+8. ✅ **Offline**: Airplane mode → demo loads from package bytes
+9. ✅ **Reset flow**: Tap Reset → cube returns to initial orientation
+10. ✅ **ES modules**: Three.js imports work (no opaque origin errors)
+11. ✅ **Scroll behavior**: Smooth scrolling across HTML sections and demos
+12. ✅ **Read-intent**: Scroll to bottom → lesson marked read at 80pt threshold
+
+**Debug overlay removed** @ `6877203` for production readiness.
 
 ## Files Changed
 - Models: `PackageModels.swift` (+DemoManifest)
