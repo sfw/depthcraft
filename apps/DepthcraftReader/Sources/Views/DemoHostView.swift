@@ -117,7 +117,18 @@ struct DemoWebView: UIViewRepresentable {
         preferences.allowsContentJavaScript = true
         config.defaultWebpagePreferences = preferences
         
-        // Sandbox: block http/https resource loads via content rules
+        // Create WebView with base config (rules added to live instance later)
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
+        webView.scrollView.isScrollEnabled = true
+        webView.navigationDelegate = context.coordinator
+        
+        // Store webView for deferred load
+        context.coordinator.pendingWebView = webView
+        
+        // Sandbox: compile content rules async, add to LIVE webView, then load
         let blockRules = """
         [{
             "trigger": {
@@ -130,38 +141,32 @@ struct DemoWebView: UIViewRepresentable {
         }]
         """
         
-        // Compile rules asynchronously, then create/load WebView
         let store = WKContentRuleListStore.default()
         store.compileContentRuleList(
             forIdentifier: "DemoSandboxRules",
             encodedContentRuleList: blockRules
-        ) { [weak context] ruleList, error in
+        ) { [weak webView] ruleList, error in
             DispatchQueue.main.async {
+                guard let webView = webView else { return }
+                
                 if let ruleList = ruleList {
-                    config.userContentController.add(ruleList)
+                    // Add to LIVE webView's userContentController (not pre-create config)
+                    webView.configuration.userContentController.add(ruleList)
+                    #if DEBUG
+                    print("✅ Content rules added to live webView")
+                    #endif
                 } else if let error = error {
                     #if DEBUG
                     print("⚠️ Failed to compile content rules: \(error)")
                     #endif
                 }
                 
-                // Load demo after rules are added
-                guard let context = context else { return }
-                if let webView = context.coordinator.pendingWebView {
-                    context.coordinator.loadDemo(into: webView)
+                // Load demo after rules are active (or failed)
+                if let coordinator = context.coordinator {
+                    coordinator.loadDemo(into: webView)
                 }
             }
         }
-        
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.isOpaque = false
-        webView.backgroundColor = .systemBackground
-        webView.scrollView.backgroundColor = .systemBackground
-        webView.scrollView.isScrollEnabled = true
-        webView.navigationDelegate = context.coordinator
-        
-        // Store webView for deferred load
-        context.coordinator.pendingWebView = webView
         
         return webView
     }
