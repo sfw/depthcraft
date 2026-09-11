@@ -83,7 +83,7 @@ struct CourseHomeView: View {
                     NavigationLink {
                         GenerationView()
                     } label: {
-                        Label("Generate Course", systemImage: "sparkles")
+                        Label("Generate Course", systemImage: "wand.and.stars")
                     }
                     
                     if !store.availablePackages.isEmpty {
