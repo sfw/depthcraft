@@ -19,6 +19,7 @@
         "planner": { "$ref": "#/$defs/roleRun" },
         "lessonWriter": { "$ref": "#/$defs/roleRun" },
         "quizWriter": { "$ref": "#/$defs/roleRun" },
+        "demoWriter": { "$ref": "#/$defs/demoRun" },
         "packager": { "$ref": "#/$defs/roleRun" }
       }
     }
@@ -32,6 +33,17 @@
         "provider": { "type": "string", "enum": ["anthropic", "openai", "openrouter"] },
         "model": { "type": "string", "minLength": 1 },
         "ranAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "demoRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "demosEmitted"],
+      "properties": {
+        "provider": { "type": "string", "enum": ["anthropic", "openai", "openrouter"] },
+        "model": { "type": "string", "minLength": 1 },
+        "ranAt": { "type": "string", "format": "date-time" },
+        "demosEmitted": { "type": "integer", "minimum": 0 }
       }
     }
   }

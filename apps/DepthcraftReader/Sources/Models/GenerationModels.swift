@@ -42,6 +42,13 @@ struct RoleRun: Codable, Hashable {
     let ranAt: String
 }
 
+struct DemoRun: Codable, Hashable {
+    let provider: String
+    let model: String
+    let ranAt: String
+    let demosEmitted: Int
+}
+
 // MARK: - Advanced generation controls
 
 enum KnowledgeLevel: Int, CaseIterable, Identifiable {
@@ -92,6 +99,7 @@ struct GenerationRequest {
     let plannerConfig: LLMConfiguration
     let lessonWriterConfig: LLMConfiguration
     let quizWriterConfig: LLMConfiguration
+    let demoWriterConfig: LLMConfiguration
     let generateUnitIds: [String]?
     let knowledgeLevel: KnowledgeLevel
     let depthLevel: DepthLevel
@@ -105,6 +113,7 @@ enum GenerationPhase: String, CaseIterable {
     case awaitingApproval
     case writingLessons
     case writingQuizzes
+    case writingDemos
     case packaging
     case completed
     case failed
@@ -116,6 +125,7 @@ enum GenerationPhase: String, CaseIterable {
         case .awaitingApproval: return "Awaiting approval"
         case .writingLessons: return "Writing lessons..."
         case .writingQuizzes: return "Writing quizzes..."
+        case .writingDemos: return "Writing demos..."
         case .packaging: return "Packaging course..."
         case .completed: return "Completed"
         case .failed: return "Failed"
@@ -162,6 +172,10 @@ protocol QuizWriterRole {
     func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson) async throws -> QuizDocument
 }
 
+protocol DemoWriterRole {
+    func writeDemos(lessonMarkdown: String, lesson: CurriculumLesson, unit: CurriculumUnit) async throws -> DemoWriterOutput?
+}
+
 protocol PackagerRole {
     func packageCourse(
         topic: String,
@@ -169,6 +183,7 @@ protocol PackagerRole {
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
+        demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata
     ) async throws -> URL
 }
@@ -191,6 +206,7 @@ struct GeneratorMetadata: Codable, Hashable {
     let planner: RoleRun?
     let lessonWriter: RoleRun?
     let quizWriter: RoleRun?
+    let demoWriter: DemoRun?
     let packager: RoleRun?
 }
 

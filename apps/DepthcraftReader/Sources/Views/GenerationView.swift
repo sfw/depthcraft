@@ -24,6 +24,10 @@ struct GenerationView: View {
     @State private var quizModel = "claude-sonnet-5"
     @State private var quizTemperature = 0.7
     
+    @State private var demoProvider: LLMProvider = .anthropic
+    @State private var demoModel = "claude-sonnet-5"
+    @State private var demoTemperature = 0.7
+    
     @State private var customBaseURL = ""
     @State private var customModel = ""
     
@@ -148,6 +152,13 @@ struct GenerationView: View {
                 quizModel = defaultModel(for: quizProvider)
             }
         }
+        if !available.contains(demoProvider) {
+            let oldProvider = demoProvider
+            demoProvider = preferredDefault
+            if oldProvider != demoProvider {
+                demoModel = defaultModel(for: demoProvider)
+            }
+        }
     }
     
     private func defaultModel(for provider: LLMProvider) -> String {
@@ -198,6 +209,19 @@ struct GenerationView: View {
                     model: $quizModel,
                     temperature: $quizTemperature
                 )
+            }
+            
+            Section {
+                roleConfiguration(
+                    provider: $demoProvider,
+                    model: $demoModel,
+                    temperature: $demoTemperature
+                )
+            } header: {
+                Text("Demo Writer")
+            } footer: {
+                Text("Creates optional interactive demos. Most lessons will have zero demos. Density controlled by depth level.")
+                    .font(.caption)
             }
             
             Section("Advanced") {
@@ -490,11 +514,14 @@ struct GenerationView: View {
     }
     
     private var canContinueGeneration: Bool {
-        // Check if lesson and quiz providers have keys
+        // Check if lesson, quiz, and demo providers have keys
         guard let lessonKey = try? keyStore.getKey(for: lessonProvider), lessonKey != nil else {
             return false
         }
         guard let quizKey = try? keyStore.getKey(for: quizProvider), quizKey != nil else {
+            return false
+        }
+        guard let demoKey = try? keyStore.getKey(for: demoProvider), demoKey != nil else {
             return false
         }
         
@@ -503,6 +530,9 @@ struct GenerationView: View {
             return false
         }
         if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+            return false
+        }
+        if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
             return false
         }
         
@@ -557,6 +587,12 @@ struct GenerationView: View {
                     apiKey: "",
                     temperature: quizTemperature
                 ),
+                demoWriterConfig: LLMConfiguration(
+                    provider: demoProvider,
+                    model: demoModel,
+                    apiKey: "",
+                    temperature: demoTemperature
+                ),
                 generateUnitIds: nil,
                 knowledgeLevel: knowledgeLevel,
                 depthLevel: depthLevel
@@ -596,6 +632,13 @@ struct GenerationView: View {
                 return
             }
             
+            let demoKey = try keyStore.getKey(for: demoProvider)
+            guard let demoKey else {
+                errorMessage = "No API key configured for \(demoProvider.displayName)"
+                showingError = true
+                return
+            }
+            
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
                 errorMessage = "No API key configured for \(plannerProvider.displayName)"
@@ -614,6 +657,11 @@ struct GenerationView: View {
                 showingError = true
                 return
             }
+            if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+                errorMessage = "Custom endpoint for demo writer requires base URL and model"
+                showingError = true
+                return
+            }
             if plannerProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
                 errorMessage = "Custom endpoint for planner requires base URL and model"
                 showingError = true
@@ -628,6 +676,9 @@ struct GenerationView: View {
             
             let quizEffectiveModel = quizProvider == .custom ? customModel : quizModel
             let quizEffectiveBaseURL = quizProvider == .custom ? customBaseURL : nil
+            
+            let demoEffectiveModel = demoProvider == .custom ? customModel : demoModel
+            let demoEffectiveBaseURL = demoProvider == .custom ? customBaseURL : nil
             
             let request = GenerationRequest(
                 topic: topic,
@@ -652,6 +703,13 @@ struct GenerationView: View {
                     apiKey: quizKey,
                     temperature: quizTemperature,
                     customBaseURL: quizEffectiveBaseURL
+                ),
+                demoWriterConfig: LLMConfiguration(
+                    provider: demoProvider,
+                    model: demoEffectiveModel,
+                    apiKey: demoKey,
+                    temperature: demoTemperature,
+                    customBaseURL: demoEffectiveBaseURL
                 ),
                 generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds),
                 knowledgeLevel: knowledgeLevel,

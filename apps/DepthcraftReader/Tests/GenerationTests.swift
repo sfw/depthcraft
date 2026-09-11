@@ -120,7 +120,8 @@ final class PackageValidationTests: XCTestCase {
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil
         )
         
         let meta = LessonMeta(
@@ -155,7 +156,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: curriculum,
                 lessons: lessons,
-                quizzes: quizzes
+                quizzes: quizzes,
+                demos: [:]
             )
         )
     }
@@ -193,7 +195,8 @@ final class PackageValidationTests: XCTestCase {
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil
         )
         
         XCTAssertThrowsError(
@@ -201,7 +204,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: curriculum,
                 lessons: [:],
-                quizzes: [:]
+                quizzes: [:],
+                demos: [:]
             )
         )
     }
@@ -300,7 +304,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: slicedCurriculum,
                 lessons: lessons,
-                quizzes: quizzes
+                quizzes: quizzes,
+                demos: [:]
             )
         )
         
@@ -316,6 +321,284 @@ final class PackageValidationTests: XCTestCase {
         XCTAssertEqual(builtLessons.count, 1, "Built package should only contain generated lesson")
         XCTAssertNotNil(builtLessons["l01-selected"], "Selected lesson should be in built package")
         XCTAssertNil(builtLessons["l02-unselected"], "Unselected lesson should NOT be in built package")
+    }
+    
+    func testDemoValidationRejectsDisallowedKit() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let invalidDemo = DemoSpec(
+            demoId: "test-demo",
+            title: "Test Demo",
+            kit: "react-v18",
+            entry: "index.html",
+            fallback: "fallback.md",
+            entryHTML: "<html><body>Test</body></html>",
+            fallbackMarkdown: "# Fallback",
+            insertAfterHeading: "## Test Section",
+            assets: nil
+        )
+        
+        let demos = ["l01-test": DemoWriterOutput(demos: [invalidDemo])]
+        
+        XCTAssertThrowsError(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: demos
+            )
+        ) { error in
+            let description = error.localizedDescription
+            XCTAssertTrue(description.contains("disallowed kit"))
+        }
+    }
+    
+    func testDemoValidationRejectsExternalURLs() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let demoWithHTTPS = DemoSpec(
+            demoId: "test-demo",
+            title: "Test Demo",
+            kit: "three-v0",
+            entry: "index.html",
+            fallback: "fallback.md",
+            entryHTML: "<script src=\"https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js\"></script>",
+            fallbackMarkdown: "# Fallback",
+            insertAfterHeading: "## Test Section",
+            assets: nil
+        )
+        
+        let demos = ["l01-test": DemoWriterOutput(demos: [demoWithHTTPS])]
+        
+        XCTAssertThrowsError(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: demos
+            )
+        ) { error in
+            let description = error.localizedDescription
+            XCTAssertTrue(description.contains("external URL"))
+        }
+    }
+    
+    func testDemoValidationRejectsMidFlightFetch() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let demoWithFetch = DemoSpec(
+            demoId: "test-demo",
+            title: "Test Demo",
+            kit: "three-v0",
+            entry: "index.html",
+            fallback: "fallback.md",
+            entryHTML: "<html><body><script>const data = await fetch('/local/data.json'); console.log(data);</script></body></html>",
+            fallbackMarkdown: "# Fallback",
+            insertAfterHeading: "## Test Section",
+            assets: nil
+        )
+        
+        let demos = ["l01-test": DemoWriterOutput(demos: [demoWithFetch])]
+        
+        XCTAssertThrowsError(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: demos
+            )
+        ) { error in
+            let description = error.localizedDescription
+            XCTAssertTrue(description.contains("mid-flight fetch"))
+        }
+    }
+    
+    func testDemoValidationRejectsMissingFallback() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let demoWithoutFallback = DemoSpec(
+            demoId: "test-demo",
+            title: "Test Demo",
+            kit: "three-v0",
+            entry: "index.html",
+            fallback: "fallback.md",
+            entryHTML: "<html><body>Test</body></html>",
+            fallbackMarkdown: "",
+            insertAfterHeading: "## Test Section",
+            assets: nil
+        )
+        
+        let demos = ["l01-test": DemoWriterOutput(demos: [demoWithoutFallback])]
+        
+        XCTAssertThrowsError(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: demos
+            )
+        ) { error in
+            let description = error.localizedDescription
+            XCTAssertTrue(description.contains("empty fallback"))
+        }
+    }
+    
+    func testDemoValidationAcceptsValidDemo() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let validDemo = DemoSpec(
+            demoId: "rotating-cube",
+            title: "3D Coordinate System",
+            kit: "three-v0",
+            entry: "index.html",
+            fallback: "fallback.md",
+            entryHTML: """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Demo</title></head>
+            <body>
+            <script type="module">
+            import * as THREE from 'kit:three-v0/three.module.min.js';
+            // Demo code here
+            </script>
+            </body>
+            </html>
+            """,
+            fallbackMarkdown: """
+            # Interactive Demo Unavailable
+            
+            This lesson includes a 3D demo. Key concepts:
+            - 3D coordinate systems
+            - Rotation transforms
+            """,
+            insertAfterHeading: "## Test Section",
+            assets: ["scene.js": "// Scene configuration"]
+        )
+        
+        let demos = ["l01-test": DemoWriterOutput(demos: [validDemo])]
+        
+        XCTAssertNoThrow(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: demos
+            )
+        )
+    }
+    
+    func testDemoValidationNoOpPath() {
+        let packager = PackagerService()
+        
+        let curriculum = makeCurriculum()
+        let manifest = makeManifest()
+        let (lessons, quizzes) = makeLessonsAndQuizzes()
+        
+        let emptyDemos: [String: DemoWriterOutput] = [:]
+        
+        XCTAssertNoThrow(
+            try packager.validatePackage(
+                manifest: manifest,
+                curriculum: curriculum,
+                lessons: lessons,
+                quizzes: quizzes,
+                demos: emptyDemos
+            )
+        )
+    }
+    
+    private func makeCurriculum() -> Curriculum {
+        Curriculum(
+            schemaVersion: "0.1.0",
+            status: "approved",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(
+                    id: "u01-test",
+                    title: "Test Unit",
+                    order: 1,
+                    lessonIds: ["l01-test"]
+                )
+            ],
+            lessons: [
+                "l01-test": CurriculumLesson(
+                    id: "l01-test",
+                    unitId: "u01-test",
+                    title: "Test Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+    }
+    
+    private func makeManifest() -> PackageManifest {
+        PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-package",
+            title: "Test",
+            topic: "Test Topic",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            locale: "en-CA",
+            generator: nil
+        )
+    }
+    
+    private func makeLessonsAndQuizzes() -> ([String: (String, LessonMeta)], [String: QuizDocument]) {
+        let meta = LessonMeta(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-test",
+            anchors: []
+        )
+        
+        let quiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-test",
+            items: [
+                .mc(MCItem(
+                    id: "q1",
+                    type: "mc",
+                    prompt: "Test?",
+                    choices: [
+                        MCChoice(id: "a", text: "A"),
+                        MCChoice(id: "b", text: "B")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        
+        let lessons = ["l01-test": ("# Test\n\n## Test Section\n\nContent", meta)]
+        let quizzes = ["l01-test": quiz]
+        
+        return (lessons, quizzes)
     }
 }
 
