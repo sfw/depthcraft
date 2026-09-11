@@ -27,10 +27,16 @@ Lesson markdown directive:
 ### Rendering Pipeline
 1. `MarkdownHTML.render()` now returns `LessonRenderResult` with HTML + `[DemoReference]`
 2. Parser extracts `:::demo id="...":::` directives using regex
-3. Demo placeholders inserted in HTML for potential future inline placement
-4. `LessonContentView` shows lesson WebView + demos stacked below content
+3. Demo placeholders inserted in HTML as `<div class="demo-placeholder" id="DEMO_PLACEHOLDER_xxx">`
+4. `LessonContentView` splits HTML at placeholder markers and alternates HTML sections with `DemoHostView` instances
+5. **True inline placement:** Demos render at exact `:::demo:::` directive positions in lesson spine
 
-**Demo Placement:** Demos currently render after lesson content (below-content). True inline placement at exact `:::demo:::` positions is feasible but requires splitting HTML into multiple WKWebView sections and managing dynamic heights. Current below-content approach approved pending Product Designer signoff on UX acceptability.
+**Demo Placement Implementation:**
+- Splits lesson HTML at `<div class="demo-placeholder">` markers
+- Creates alternating sections: `[HTML] → [Demo] → [HTML] → [Demo] → [HTML]`
+- Each HTML section uses `InlineHTMLSection` with dynamic height measurement
+- Demos embedded inline using `DemoHostView` with native SwiftUI layout
+- Single ScrollView coordinates all sections for smooth scrolling
 
 ### Demo Host (Sandboxed WKWebView)
 - `DemoHostView`: SwiftUI wrapper with Reset/Next controls
@@ -74,19 +80,22 @@ Created `sandbox-test` (negative test case):
 
 ## Gaps & Known Issues
 
-### Addressed in Latest Revision
-- ✅ **Sandbox enforcement**: URL-scoped allowlist + http/https blocking in navigation & response policies
-- ✅ **ES module support**: Using `loadFileURL` instead of `loadHTMLString` (fixes opaque origin)
-- ✅ **Fallback rendering**: `fallback.md` rendered as HTML, not raw text
-- ✅ **Negative test**: `sandbox-test` demo verifies external request blocking
+### ✅ Milestone A Complete
+- Sandbox enforcement with URL-scoped allowlist
+- ES module support via `loadFileURL`
+- Fallback rendering as HTML
+- Negative test case (`sandbox-test`)
 
-### Requires Product Designer Signoff
-- **Demo positioning**: Currently below-content (easier to implement). True inline at `:::demo:::` directive positions is feasible but more complex. Awaiting PD decision on UX acceptability.
+### ✅ Milestone B Complete — True Inline Placement
+- Demos now render at exact `:::demo:::` directive positions
+- HTML splitting at placeholder markers
+- Dynamic height measurement for HTML sections
+- Alternating HTML/Demo layout in single ScrollView
 
 ### Critical for Production (Post-Spike)
 1. **Kit injection not functional** — v0 demos self-bundle Three.js; proper kit loading from app bundle needs implementation
 2. **No error telemetry** — soft-fail is silent; no logging of WebGL failures to analytics
-3. **WebView height heuristics** — fixed `minHeight`; may need dynamic sizing
+3. **Height measurement edge cases** — JS height probing may need refinement for complex layouts
 
 ### v0 Scope Cuts (Expected)
 - No `demoWriter` agent role (hand-authored only)
@@ -96,12 +105,14 @@ Created `sandbox-test` (negative test case):
 
 ### Requires Mac Testing
 1. **Offline radio-off test**: Airplane mode → demo loads from package bytes
-2. **Sandbox enforcement**: Run `sandbox-test` demo → all external requests blocked, local file access works
-3. **Soft-fail trigger**: Delete `index.html` or corrupt `demo.json` → fallback.md shown as readable HTML
-4. **Non-regression**: Open lesson without demos (e.g. l02) → lesson loads normally
-5. **WebGL support**: Verify `rotating-cube` renders on iPad simulator
-6. **Reset flow**: Tap Reset → cube returns to initial orientation
-7. **ES modules**: Verify Three.js imports work (no opaque origin errors in console)
+2. **Inline placement**: Demo appears between "The job" and "Not the model" sections (not at end)
+3. **Sandbox enforcement**: Run `sandbox-test` demo → all external requests blocked, local file access works
+4. **Soft-fail trigger**: Delete `index.html` or corrupt `demo.json` → fallback.md shown as readable HTML
+5. **Non-regression**: Open lesson without demos (e.g. l02) → lesson loads normally
+6. **WebGL support**: Verify `rotating-cube` renders on iPad simulator
+7. **Reset flow**: Tap Reset → cube returns to initial orientation
+8. **ES modules**: Verify Three.js imports work (no opaque origin errors in console)
+9. **Scroll behavior**: Smooth scrolling across HTML sections and demos
 
 ## Files Changed
 - Models: `PackageModels.swift` (+DemoManifest)

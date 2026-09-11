@@ -11,10 +11,16 @@
 ## How it works
 1. Lesson markdown is parsed → extracts demo IDs from `:::demo id="...":::` directives
 2. Demo loaded from `demos/<id>/` with demo.json manifest
-3. WKWebView renders demo HTML via `loadFileURL` (ES module support)
-4. **Sandbox:** File URLs scoped to demo directory; all http/https blocked
-5. Reset button reloads demo to initial state
-6. Falls back to fallback.md (rendered as HTML) on errors
+3. **Inline placement:** HTML split at demo placeholders; sections alternate with demos
+4. WKWebView renders demo HTML via `loadFileURL` (ES module support)
+5. **Sandbox:** File URLs scoped to demo directory; all http/https blocked
+6. Reset button reloads demo to initial state
+7. Falls back to fallback.md (rendered as HTML) on errors
+
+## Inline placement (Product Designer approved ✅)
+- Demos render at exact `:::demo:::` directive positions in lesson spine
+- HTML sections dynamically measured and laid out with demos in single ScrollView
+- Example: Text → Demo → More text (not text → all demos at end)
 
 ## Sandbox enforcement
 - Uses `loadFileURL(_:allowingReadAccessTo:)` for proper ES module support
@@ -57,16 +63,17 @@ open DepthcraftReader.xcodeproj
 
 **Test cases:**
 1. **Airplane mode**: Demo loads offline
-2. **Sandbox**: Run `sandbox-test` demo → external requests blocked
-3. **Soft-fail**: Corrupt demo files → fallback.md shown as HTML
-4. **Non-regression**: Open l02 (no demos) → lesson works
-5. **Reset**: Tap Reset → cube resets orientation
+2. **Inline placement**: Demo appears mid-lesson (between sections), not at end
+3. **Sandbox**: Run `sandbox-test` demo → external requests blocked
+4. **Soft-fail**: Corrupt demo files → fallback.md shown as HTML
+5. **Non-regression**: Open l02 (no demos) → lesson works
+6. **Reset**: Tap Reset → cube resets orientation
+7. **Scroll**: Smooth scroll across text and demos
 
-## Known limitations (v0 spike)
-- Kit injection not working (demos self-bundle Three.js)
-- Demos shown **below content** (not inline at exact `:::demo:::` position) — **awaiting Product Designer signoff**
-- No step navigation
-- No error telemetry
+## Status
+✅ **Milestone A**: Sandbox + loadFileURL + fallback render — DONE  
+✅ **Milestone B**: True inline placement — DONE  
+📋 **Next**: Lab Partner Mac dogfood (both milestones)
 
 ## Files
 - Views: `DemoHostView.swift`, `LessonContentView.swift`
