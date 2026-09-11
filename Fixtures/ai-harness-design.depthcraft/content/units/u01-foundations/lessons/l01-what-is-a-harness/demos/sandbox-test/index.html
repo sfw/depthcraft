@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandbox Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e3a8a;
+      color: white;
+    }
+    .test-result {
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+    }
+    .blocked { background: rgba(239, 68, 68, 0.3); }
+    .allowed { background: rgba(34, 197, 94, 0.3); }
+  </style>
+</head>
+<body>
+  <h1>Sandbox Test Demo</h1>
+  <p>This demo attempts to load external resources. All should be blocked.</p>
+  
+  <div id="results"></div>
+  
+  <!-- Attempt to load external script (should be blocked) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" onerror="logBlocked('External script')"></script>
+  
+  <script>
+    const results = document.getElementById('results');
+    
+    function logBlocked(test) {
+      results.innerHTML += `<div class="test-result blocked">❌ BLOCKED (expected): ${test}</div>`;
+    }
+    
+    function logAllowed(test) {
+      results.innerHTML += `<div class="test-result allowed">✅ ALLOWED (unexpected): ${test}</div>`;
+    }
+    
+    // Test 1: External script tag (should be blocked by above)
+    setTimeout(() => {
+      if (typeof THREE === 'undefined') {
+        logBlocked('External THREE.js via script tag');
+      } else {
+        logAllowed('External THREE.js via script tag');
+      }
+    }, 1000);
+    
+    // Test 2: Fetch API to external CDN (should be blocked)
+    fetch('https://cdn.jsdelivr.net/npm/three@0.170.0/package.json')
+      .then(() => logAllowed('Fetch to external CDN'))
+      .catch(() => logBlocked('Fetch to external CDN'));
+    
+    // Test 3: XMLHttpRequest to external resource (should be blocked)
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', 'https://api.github.com/users/github');
+    xhr.onload = () => logAllowed('XMLHttpRequest to external API');
+    xhr.onerror = () => logBlocked('XMLHttpRequest to external API');
+    xhr.send();
+    
+    // Test 4: Image from external URL (should be blocked)
+    const img = new Image();
+    img.onload = () => logAllowed('External image load');
+    img.onerror = () => logBlocked('External image load');
+    img.src = 'https://via.placeholder.com/100';
+    
+    // Test 5: Local file access (should be allowed)
+    fetch('./demo.json')
+      .then(() => {
+        results.innerHTML += `<div class="test-result allowed">✅ ALLOWED (expected): Local file access</div>`;
+      })
+      .catch(() => {
+        results.innerHTML += `<div class="test-result blocked">❌ BLOCKED (unexpected): Local file access</div>`;
+      });
+    
+    results.innerHTML += '<div style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.2); border-radius: 8px;"><strong>Expected Result:</strong> All external resources blocked, local file access allowed.</div>';
+  </script>
+</body>
+</html>

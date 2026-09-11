@@ -1,11 +1,22 @@
 import Foundation
 
+struct DemoReference: Hashable {
+    let demoId: String
+    let placeholder: String // Unique marker in HTML where demo should be embedded
+}
+
+struct LessonRenderResult {
+    let html: String
+    let demos: [DemoReference]
+}
+
 enum MarkdownHTML {
     /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr).
-    static func render(_ markdown: String, title: String, estimatedMinutes: Int?) -> String {
-        let body = convert(markdown)
+    /// Also extracts :::demo id="...":::  directives.
+    static func render(_ markdown: String, title: String, estimatedMinutes: Int?) -> LessonRenderResult {
+        let (body, demos) = convert(markdown)
         let minutesLabel = estimatedMinutes.map { " · \($0) min" } ?? ""
-        return """
+        let html = """
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -107,6 +118,16 @@ enum MarkdownHTML {
             border-left: 3px solid var(--accent);
             color: var(--muted);
           }
+          .demo-placeholder {
+            margin: 2rem 0;
+            min-height: 400px;
+            background: var(--code-bg);
+            border-radius: 0.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+          }
         </style>
         </head>
         <body>
@@ -117,10 +138,13 @@ enum MarkdownHTML {
         </body>
         </html>
         """
+        return LessonRenderResult(html: html, demos: demos)
     }
 
-    private static func convert(_ markdown: String) -> String {
+    private static func convert(_ markdown: String) -> (String, [DemoReference]) {
         var lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var demos: [DemoReference] = []
+        
         // Drop a leading H1 if present — page chrome already frames the lesson.
         if let first = lines.first, first.hasPrefix("# ") {
             lines.removeFirst()
@@ -140,6 +164,18 @@ enum MarkdownHTML {
                 if inList {
                     html.append("</ul>")
                     inList = false
+                }
+                i += 1
+                continue
+            }
+
+            // Handle :::demo id="...":::
+            if trimmed.hasPrefix(":::demo") && trimmed.hasSuffix(":::") {
+                if inList { html.append("</ul>"); inList = false }
+                if let demoId = extractDemoId(from: trimmed) {
+                    let placeholder = "DEMO_PLACEHOLDER_\(demoId)"
+                    demos.append(DemoReference(demoId: demoId, placeholder: placeholder))
+                    html.append("<div class=\"demo-placeholder\" id=\"\(placeholder)\">Interactive demo</div>")
                 }
                 i += 1
                 continue
@@ -190,7 +226,19 @@ enum MarkdownHTML {
             i += 1
         }
         if inList { html.append("</ul>") }
-        return html.joined(separator: "\n")
+        return (html.joined(separator: "\n"), demos)
+    }
+
+    private static func extractDemoId(from directive: String) -> String? {
+        // Parse :::demo id="some-id":::
+        let pattern = #"id="([^"]+)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: directive, range: NSRange(directive.startIndex..., in: directive)),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: directive) else {
+            return nil
+        }
+        return String(directive[range])
     }
 
     private static func inline(_ text: String) -> String {

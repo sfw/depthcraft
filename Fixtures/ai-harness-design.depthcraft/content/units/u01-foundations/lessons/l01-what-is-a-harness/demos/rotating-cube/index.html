@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rotating Cube Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: linear-gradient(135deg, #1e3a8a 0%, #0f766e 100%);
+    }
+    #demo-container {
+      width: 100%;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="demo-container"></div>
+  
+  <!-- KIT_INJECT -->
+  
+  <script type="module">
+    // Import Three.js
+    let THREE;
+    try {
+      const module = await import('./three.module.min.js');
+      THREE = module;
+    } catch (error) {
+      if (window.webkit?.messageHandlers?.demoError) {
+        window.webkit.messageHandlers.demoError.postMessage(`Three.js import failed: ${error.message}`);
+      }
+      throw error;
+    }
+    
+    // Demo: Rotating cube to illustrate 3D coordinate system
+    const container = document.getElementById('demo-container');
+    
+    let scene, camera, renderer, cube, geometry;
+    
+    // Defer init until container has non-zero size (layout complete)
+    function initThreeJS() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      if (width === 0 || height === 0) {
+        // Layout not ready, retry next frame
+        requestAnimationFrame(initThreeJS);
+        return;
+      }
+      
+      try {
+        // Scene setup with known dimensions
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+        
+        // Create a cube with colorful faces
+        geometry = new THREE.BoxGeometry(2, 2, 2);
+        const materials = [
+          new THREE.MeshBasicMaterial({ color: 0xff6b6b }), // right - red
+          new THREE.MeshBasicMaterial({ color: 0x4ecdc4 }), // left - teal
+          new THREE.MeshBasicMaterial({ color: 0xffe66d }), // top - yellow
+          new THREE.MeshBasicMaterial({ color: 0x95e1d3 }), // bottom - mint
+          new THREE.MeshBasicMaterial({ color: 0xaa96da }), // front - purple
+          new THREE.MeshBasicMaterial({ color: 0xf38181 })  // back - pink
+        ];
+        cube = new THREE.Mesh(geometry, materials);
+        scene.add(cube);
+        
+        // Add edges for clarity
+        const edges = new THREE.EdgesGeometry(geometry);
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+        cube.add(wireframe);
+        
+        camera.position.z = 5;
+        
+        // Start animation
+        animate();
+        
+        // Handle resize
+        window.addEventListener('resize', onWindowResize);
+        
+      } catch (error) {
+        if (window.webkit?.messageHandlers?.demoError) {
+          window.webkit.messageHandlers.demoError.postMessage(`Init failed: ${error.message}`);
+        }
+        throw error;
+      }
+    }
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      if (cube) {
+        cube.rotation.x += 0.005;
+        cube.rotation.y += 0.01;
+      }
+      
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+    
+    // Handle resize
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+    
+    // Expose reset function for Reset button
+    window.resetDemo = function() {
+      if (cube && camera) {
+        cube.rotation.x = 0;
+        cube.rotation.y = 0;
+        camera.position.z = 5;
+      }
+    };
+    
+    // Start initialization (deferred until layout)
+    initThreeJS();
+  </script>
+</body>
+</html>
