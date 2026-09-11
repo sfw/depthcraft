@@ -44,6 +44,21 @@ class AnthropicClient: LLMClient {
         self.model = model
     }
     
+    // Check if model is 5-class (Sonnet 5, Opus 5, etc.) which disallow temperature
+    private var supportsTemperature: Bool {
+        // 5-class models (claude-sonnet-5, claude-opus-5, claude-fable-5-*, claude-haiku-5-*)
+        // do not accept temperature parameter
+        let model = self.model.lowercased()
+        
+        // Match 5-class patterns: ends with -5 or has -5- or -5.
+        if model.contains("-5-") || model.hasSuffix("-5") || model.contains("-5.") {
+            return false
+        }
+        
+        // Legacy 3.x and 4.x models support temperature
+        return true
+    }
+    
     func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
         let url = URL(string: "https://api.anthropic.com/v1/messages")!
         var request = URLRequest(url: url)
@@ -53,15 +68,19 @@ class AnthropicClient: LLMClient {
         request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "max_tokens": 4096,
-            "temperature": temperature,
             "system": systemPrompt,
             "messages": [
                 ["role": "user", "content": userPrompt]
             ]
         ]
+        
+        // Only include temperature for models that support it (3.x, 4.x)
+        if supportsTemperature {
+            body["temperature"] = temperature
+        }
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
@@ -109,13 +128,25 @@ class AnthropicClient: LLMClient {
         }
         
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let content = json["content"] as? [[String: Any]],
-              let firstContent = content.first,
-              let text = firstContent["text"] as? String else {
+              let contentArray = json["content"] as? [[String: Any]] else {
             throw LLMClientError.invalidJSON
         }
         
-        return text
+        // Extract text blocks (ignore thinking blocks from adaptive thinking models)
+        var textParts: [String] = []
+        for block in contentArray {
+            if let type = block["type"] as? String, type == "text",
+               let text = block["text"] as? String {
+                textParts.append(text)
+            }
+        }
+        
+        guard !textParts.isEmpty else {
+            throw LLMClientError.invalidJSON
+        }
+        
+        // Concatenate all text blocks
+        return textParts.joined(separator: "\n\n")
     }
 }
 
