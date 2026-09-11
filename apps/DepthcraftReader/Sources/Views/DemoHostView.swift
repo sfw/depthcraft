@@ -41,30 +41,20 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
         
-        // Resolve to app bundle: Resources/demo-kits/{kitId}/{resourcePath}
-        guard let bundleURL = Bundle.main.resourceURL else {
-            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -4, userInfo: nil))
+        // Resolve kit file in bundle with multiple fallback paths
+        guard let kitFileURL = resolveKitFile(kitId: kitId, resourcePath: resourcePath) else {
+            #if DEBUG
+            print("🚫 Kit file not found after trying all bundle paths")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -5, userInfo: [NSLocalizedDescriptionKey: "Kit file not found"]))
             return
         }
-        
-        let kitFileURL = bundleURL
-            .appendingPathComponent("demo-kits", isDirectory: true)
-            .appendingPathComponent(kitId, isDirectory: true)
-            .appendingPathComponent(resourcePath)
         
         #if DEBUG
         print("📦 Kit request: \(url.absoluteString) → \(kitFileURL.path)")
         #endif
         
         // Load file data
-        guard FileManager.default.fileExists(atPath: kitFileURL.path) else {
-            #if DEBUG
-            print("🚫 Kit file not found: \(kitFileURL.path)")
-            #endif
-            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -5, userInfo: [NSLocalizedDescriptionKey: "Kit file not found"]))
-            return
-        }
-        
         guard let data = try? Data(contentsOf: kitFileURL) else {
             urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -6, userInfo: nil))
             return
@@ -85,17 +75,109 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
             mimeType = "application/octet-stream"
         }
         
-        // Create response
-        let response = URLResponse(
+        // Create HTTPURLResponse with CORS headers for ES module imports
+        // Plain URLResponse is insufficient for cross-scheme module loading
+        guard let httpResponse = HTTPURLResponse(
             url: url,
-            mimeType: mimeType,
-            expectedContentLength: data.count,
-            textEncodingName: "utf-8"
-        )
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: [
+                "Content-Type": mimeType,
+                "Content-Length": "\(data.count)",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "public, max-age=31536000"
+            ]
+        ) else {
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -7, userInfo: nil))
+            return
+        }
         
-        urlSchemeTask.didReceive(response)
+        urlSchemeTask.didReceive(httpResponse)
         urlSchemeTask.didReceive(data)
         urlSchemeTask.didFinish()
+    }
+    
+    /// Resolve kit file in bundle with multiple fallback paths
+    /// XcodeGen's `type: folder` may nest under Resources/ or copy contents to root
+    private func resolveKitFile(kitId: String, resourcePath: String) -> URL? {
+        let fm = FileManager.default
+        
+        // Try 1: resourceURL/demo-kits/{kitId}/{path} (flat copy)
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidate = resourceURL
+                .appendingPathComponent("demo-kits", isDirectory: true)
+                .appendingPathComponent(kitId, isDirectory: true)
+                .appendingPathComponent(resourcePath)
+            if fm.fileExists(atPath: candidate.path) {
+                #if DEBUG
+                print("✅ Kit found at resourceURL/demo-kits: \(candidate.path)")
+                #endif
+                return candidate
+            }
+        }
+        
+        // Try 2: resourceURL/Resources/demo-kits/{kitId}/{path} (nested under Resources)
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidate = resourceURL
+                .appendingPathComponent("Resources", isDirectory: true)
+                .appendingPathComponent("demo-kits", isDirectory: true)
+                .appendingPathComponent(kitId, isDirectory: true)
+                .appendingPathComponent(resourcePath)
+            if fm.fileExists(atPath: candidate.path) {
+                #if DEBUG
+                print("✅ Kit found at resourceURL/Resources/demo-kits: \(candidate.path)")
+                #endif
+                return candidate
+            }
+        }
+        
+        // Try 3: bundleURL/demo-kits/{kitId}/{path}
+        if let bundleURL = Bundle.main.bundleURL {
+            let candidate = bundleURL
+                .appendingPathComponent("demo-kits", isDirectory: true)
+                .appendingPathComponent(kitId, isDirectory: true)
+                .appendingPathComponent(resourcePath)
+            if fm.fileExists(atPath: candidate.path) {
+                #if DEBUG
+                print("✅ Kit found at bundleURL/demo-kits: \(candidate.path)")
+                #endif
+                return candidate
+            }
+        }
+        
+        // Try 4: path(forResource:ofType:inDirectory:)
+        let pathComponents = resourcePath.split(separator: "/")
+        if let fileName = pathComponents.last {
+            let fileNameStr = String(fileName)
+            let directory = "demo-kits/\(kitId)"
+            
+            // Split filename and extension
+            let parts = fileNameStr.split(separator: ".")
+            if parts.count >= 2 {
+                let name = parts.dropLast().joined(separator: ".")
+                let ext = String(parts.last!)
+                
+                if let candidate = Bundle.main.path(forResource: name, ofType: ext, inDirectory: directory) {
+                    #if DEBUG
+                    print("✅ Kit found via path(forResource:): \(candidate)")
+                    #endif
+                    return URL(fileURLWithPath: candidate)
+                }
+            }
+        }
+        
+        #if DEBUG
+        print("❌ Kit file not found in any bundle location")
+        if let resourceURL = Bundle.main.resourceURL {
+            print("   Tried: \(resourceURL.path)/demo-kits/\(kitId)/\(resourcePath)")
+            print("   Tried: \(resourceURL.path)/Resources/demo-kits/\(kitId)/\(resourcePath)")
+        }
+        if let bundleURL = Bundle.main.bundleURL {
+            print("   Tried: \(bundleURL.path)/demo-kits/\(kitId)/\(resourcePath)")
+        }
+        #endif
+        
+        return nil
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
