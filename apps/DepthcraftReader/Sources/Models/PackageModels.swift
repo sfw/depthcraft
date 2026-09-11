@@ -11,26 +11,26 @@ struct PackageManifest: Codable, Hashable {
 
 struct Curriculum: Codable, Hashable {
     let schemaVersion: String
-    let status: String
-    let approvedAt: String?
-    let units: [CurriculumUnit]
-    let lessons: [String: CurriculumLesson]
+    var status: String
+    var approvedAt: String?
+    var units: [CurriculumUnit]
+    var lessons: [String: CurriculumLesson]
 }
 
 struct CurriculumUnit: Codable, Hashable, Identifiable {
     let id: String
-    let title: String
-    let order: Int
-    let lessonIds: [String]
+    var title: String
+    var order: Int
+    var lessonIds: [String]
 }
 
 struct CurriculumLesson: Codable, Hashable, Identifiable {
     let id: String
     let unitId: String
-    let title: String
-    let order: Int
-    let status: String
-    let estimatedMinutes: Int?
+    var title: String
+    var order: Int
+    var status: String
+    var estimatedMinutes: Int?
 }
 
 struct QuizDocument: Codable, Hashable {

@@ -79,12 +79,26 @@ struct CourseHomeView: View {
 
                 Section {
                     NavigationLink {
+                        GenerationView()
+                    } label: {
+                        Label("Generate Course", systemImage: "sparkles")
+                    }
+                    
+                    if !store.availablePackages.isEmpty {
+                        NavigationLink {
+                            PackageSwitcherView()
+                        } label: {
+                            Label("Switch Package", systemImage: "folder")
+                        }
+                    }
+                    
+                    NavigationLink {
                         SettingsStubView()
                     } label: {
-                        Label("Settings (BYOK stub)", systemImage: "key")
+                        Label("Settings", systemImage: "key")
                     }
                 } footer: {
-                    Text("Airplane-mode study only — no network required. Progress stays on this device, keyed by packageId.")
+                    Text("Airplane-mode study only — no network required. Progress stays on this device.")
                 }
             }
         }
