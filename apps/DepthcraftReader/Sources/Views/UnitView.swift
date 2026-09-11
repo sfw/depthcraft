@@ -12,8 +12,10 @@ struct UnitView: View {
         List {
             if let unit {
                 Section {
-                    if let blurb = store.course.flatMap({ PackageLoader.unitMarkdown(course: $0, unitId: unitId) }) {
-                        Text(blurb.trimmingCharacters(in: .whitespacesAndNewlines))
+                    if let rawBlurb = store.course.flatMap({ PackageLoader.unitMarkdown(course: $0, unitId: unitId) }),
+                       let cleanedBlurb = cleanMarkdownText(rawBlurb),
+                       !cleanedBlurb.isEmpty {
+                        Text(cleanedBlurb)
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }
@@ -68,5 +70,22 @@ struct UnitView: View {
         if p?.quizPassed == true { return "Quiz passed" }
         if p?.markedRead == true { return "In progress" }
         return "Not started"
+    }
+    
+    private func cleanMarkdownText(_ text: String) -> String? {
+        var lines = text.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n")
+        
+        // Strip leading # from first line if present
+        if let first = lines.first, first.hasPrefix("#") {
+            let cleaned = first.drop(while: { $0 == "#" || $0 == " " })
+            if !cleaned.isEmpty {
+                lines[0] = String(cleaned)
+            } else {
+                lines.removeFirst()
+            }
+        }
+        
+        let result = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.isEmpty ? nil : result
     }
 }

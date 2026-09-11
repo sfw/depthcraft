@@ -28,7 +28,6 @@ struct LessonPlayerView: View {
                 LessonWebView(html: html, onScrolledToEnd: {
                     store.markLessonRead(lessonId: lessonId, unitId: unitId)
                 })
-                .ignoresSafeArea(edges: .bottom)
 
                 Divider()
 

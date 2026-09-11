@@ -39,8 +39,14 @@ enum PackageLoader {
     }
 
     static func load(from root: URL) throws -> LoadedCourse {
+        #if DEBUG
+        print("📖 PackageLoader.load from: \(root.path)")
+        #endif
         let manifest: PackageManifest = try decode("manifest.json", from: root)
         let curriculum: Curriculum = try decode("curriculum.json", from: root)
+        #if DEBUG
+        print("   Decoded curriculum: \(curriculum.units.count) units, \(curriculum.lessons.count) lessons")
+        #endif
         return LoadedCourse(rootURL: root, manifest: manifest, curriculum: curriculum)
     }
 
