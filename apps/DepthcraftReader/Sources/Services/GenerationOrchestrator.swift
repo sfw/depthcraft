@@ -184,6 +184,10 @@ class GenerationOrchestrator: ObservableObject {
             let remainingDemos = lessonsToGenerate.filter { demos[$0.id] == nil }
             let alreadyCompletedDemos = lessonsToGenerate.count - remainingDemos.count
             
+            // Course-level density cap: Brief allows max 1 demo for whole course
+            let courseLevelDemoCap = request.depthLevel == .brief ? 1 : Int.max
+            var courseDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
+            
             for (index, lesson) in remainingDemos.enumerated() {
                 guard let (markdown, _) = lessons[lesson.id] else {
                     throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
@@ -196,12 +200,25 @@ class GenerationOrchestrator: ObservableObject {
                 progress.currentItem = "Demos for: \(lesson.title)"
                 progress.completedItems = alreadyCompletedDemos + index
                 
-                if let demoOutput = try await demoWriter.writeDemos(
+                // Check course-level cap before calling writeDemos
+                if courseDemosEmitted >= courseLevelDemoCap {
+                    // Cap reached: force skip and record no-op for retry resume
+                    demos[lesson.id] = DemoWriterOutput(demos: [])
+                } else if let demoOutput = try await demoWriter.writeDemos(
                     lessonMarkdown: markdown,
                     lesson: lesson,
                     unit: unit
                 ) {
-                    demos[lesson.id] = demoOutput
+                    // Clamp output to respect course cap
+                    let remainingCapacity = courseLevelDemoCap - courseDemosEmitted
+                    let clampedDemos = Array(demoOutput.demos.prefix(remainingCapacity))
+                    let clampedOutput = DemoWriterOutput(demos: clampedDemos)
+                    
+                    demos[lesson.id] = clampedOutput
+                    courseDemosEmitted += clampedDemos.count
+                } else {
+                    // writeDemos returned nil: record no-op for retry resume
+                    demos[lesson.id] = DemoWriterOutput(demos: [])
                 }
                 
                 partialDemos = demos // Save progress for retry

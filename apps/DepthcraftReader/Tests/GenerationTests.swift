@@ -476,8 +476,8 @@ final class PackageValidationTests: XCTestCase {
             <html>
             <head><title>Demo</title></head>
             <body>
-            <script type="module" src="../../../../../../demo-kits/three-v0/three.module.min.js"></script>
             <script type="module">
+            import * as THREE from 'kit:three-v0/three.module.min.js';
             // Demo code here
             </script>
             </body>
