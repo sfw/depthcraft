@@ -1,7 +1,7 @@
 import Foundation
 
 protocol LLMClient {
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int) async throws -> String
 }
 
 enum LLMClientError: LocalizedError {
@@ -59,7 +59,7 @@ class AnthropicClient: LLMClient {
         return true
     }
     
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         let url = URL(string: "https://api.anthropic.com/v1/messages")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -70,7 +70,7 @@ class AnthropicClient: LLMClient {
         
         var body: [String: Any] = [
             "model": model,
-            "max_tokens": 4096,
+            "max_tokens": maxTokens,
             "system": systemPrompt,
             "messages": [
                 ["role": "user", "content": userPrompt]
@@ -159,7 +159,7 @@ class OpenAIClient: LLMClient {
         self.model = model
     }
     
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         let url = URL(string: "https://api.openai.com/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -174,7 +174,7 @@ class OpenAIClient: LLMClient {
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userPrompt]
             ],
-            "max_tokens": 4096
+            "max_tokens": maxTokens
         ]
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -243,7 +243,7 @@ class OpenRouterClient: LLMClient {
         self.model = model
     }
     
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -251,9 +251,10 @@ class OpenRouterClient: LLMClient {
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "temperature": temperature,
+            "max_tokens": maxTokens,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userPrompt]
@@ -325,7 +326,7 @@ class CustomOpenAIClient: LLMClient {
         self.baseURL = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
     }
     
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         let urlString = "\(baseURL)/chat/completions"
         guard let url = URL(string: urlString) else {
             throw LLMClientError.apiError("Invalid custom base URL: \(baseURL)")
@@ -344,7 +345,7 @@ class CustomOpenAIClient: LLMClient {
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userPrompt]
             ],
-            "max_tokens": 4096
+            "max_tokens": maxTokens
         ]
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

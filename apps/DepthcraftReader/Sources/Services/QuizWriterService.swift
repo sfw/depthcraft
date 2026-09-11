@@ -73,7 +73,12 @@ class QuizWriterService: QuizWriterRole {
         Remember: Output ONLY the JSON object with no additional text or formatting.
         """
         
-        let response = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature)
+        let response = try await client.complete(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            temperature: temperature,
+            maxTokens: 4096
+        )
         
         // Try to extract and decode JSON with robust handling
         return try decodeQuizResponse(response, expectedLessonId: lesson.id)
