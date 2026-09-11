@@ -156,7 +156,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: curriculum,
                 lessons: lessons,
-                quizzes: quizzes
+                quizzes: quizzes,
+                demos: [:]
             )
         )
     }
@@ -203,7 +204,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: curriculum,
                 lessons: [:],
-                quizzes: [:]
+                quizzes: [:],
+                demos: [:]
             )
         )
     }
@@ -302,7 +304,8 @@ final class PackageValidationTests: XCTestCase {
                 manifest: manifest,
                 curriculum: slicedCurriculum,
                 lessons: lessons,
-                quizzes: quizzes
+                quizzes: quizzes,
+                demos: [:]
             )
         )
         
