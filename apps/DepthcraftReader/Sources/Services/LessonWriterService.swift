@@ -33,7 +33,12 @@ class LessonWriterService: LessonWriterRole {
         Output ONLY the markdown content.
         """
         
-        let markdown = try await client.complete(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature)
+        let markdown = try await client.complete(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            temperature: temperature,
+            maxTokens: 4096
+        )
         let meta = extractMeta(from: markdown, lessonId: lesson.id)
         
         return (markdown, meta)

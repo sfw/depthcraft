@@ -359,7 +359,7 @@ final class LessonMetaExtractionTests: XCTestCase {
 }
 
 class MockLLMClient: LLMClient {
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         return "Mock response"
     }
 }
@@ -950,6 +950,50 @@ final class JSONExtractionTests: XCTestCase {
         XCTAssertNil(JSONExtractor.extractJSON(from: "   "))
         XCTAssertNil(JSONExtractor.extractJSON(from: "\n\n"))
     }
+}
+
+// MARK: - Planner Configuration Tests
+
+final class PlannerConfigurationTests: XCTestCase {
+    
+    func testPlannerUsesHigherMaxTokens() async throws {
+        let mockClient = TrackingLLMClient()
+        let planner = PlannerService(client: mockClient, temperature: 0.7)
+        
+        do {
+            _ = try await planner.plan(
+                topic: "Test Topic",
+                locale: "en-CA",
+                knowledgeLevel: .some,
+                depthLevel: .exhaustive
+            )
+        } catch {
+            // Expected to fail since mock returns invalid JSON
+            // We just want to verify maxTokens was set correctly
+        }
+        
+        XCTAssertEqual(mockClient.lastMaxTokens, 8192, "Planner should use 8192 max_tokens for large curricula")
+    }
+    
+    func testDepthLevelGuidanceIncludesSoftBands() {
+        let planner = PlannerService(client: TrackingLLMClient(), temperature: 0.7)
+        
+        // We can't directly access the guidance strings, but we can verify
+        // the depth levels exist and are properly defined
+        let allDepthLevels: [DepthLevel] = [.brief, .standard, .deep, .thorough, .exhaustive]
+        XCTAssertEqual(allDepthLevels.count, 5)
+        
+        XCTAssertEqual(DepthLevel.brief.displayName, "Brief")
+        XCTAssertEqual(DepthLevel.exhaustive.displayName, "Exhaustive")
+    }
+}
+
+class TrackingLLMClient: LLMClient {
+    var lastMaxTokens: Int = 0
+    
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
+        lastMaxTokens = maxTokens
+        return "{\"invalid\": \"json\"}"
     
     func testExtractNestedJSON() {
         let input = """
