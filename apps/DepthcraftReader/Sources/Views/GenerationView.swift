@@ -16,8 +16,8 @@ struct GenerationView: View {
     @State private var lessonModel = "claude-3-5-sonnet-20241022"
     @State private var lessonTemperature = 0.7
     
-    @State private var quizProvider: LLMProvider = .openai
-    @State private var quizModel = "gpt-4o"
+    @State private var quizProvider: LLMProvider = .anthropic
+    @State private var quizModel = "claude-3-5-sonnet-20241022"
     @State private var quizTemperature = 0.7
     
     @State private var customBaseURL = ""
@@ -77,6 +77,58 @@ struct GenerationView: View {
             // Load custom endpoint config from keyStore
             customBaseURL = keyStore.customBaseURL
             customModel = keyStore.customModel
+            
+            // Auto-switch to first available provider if needed
+            ensureValidProviderSelections()
+        }
+        .onChange(of: keyStore.hasAnthropicKey) { _, _ in ensureValidProviderSelections() }
+        .onChange(of: keyStore.hasOpenAIKey) { _, _ in ensureValidProviderSelections() }
+        .onChange(of: keyStore.hasOpenRouterKey) { _, _ in ensureValidProviderSelections() }
+        .onChange(of: keyStore.hasCustomKey) { _, _ in ensureValidProviderSelections() }
+        .onChange(of: keyStore.customBaseURL) { _, _ in ensureValidProviderSelections() }
+        .onChange(of: keyStore.customModel) { _, _ in ensureValidProviderSelections() }
+    }
+    
+    private var availableProviders: [LLMProvider] {
+        var providers: [LLMProvider] = []
+        
+        if keyStore.hasAnthropicKey {
+            providers.append(.anthropic)
+        }
+        if keyStore.hasOpenAIKey {
+            providers.append(.openai)
+        }
+        if keyStore.hasOpenRouterKey {
+            providers.append(.openrouter)
+        }
+        // Custom requires key + base URL + model
+        if keyStore.hasCustomKey && !keyStore.customBaseURL.isEmpty && !keyStore.customModel.isEmpty {
+            providers.append(.custom)
+        }
+        
+        return providers
+    }
+    
+    private var hasAnyProviderConfigured: Bool {
+        !availableProviders.isEmpty
+    }
+    
+    private func ensureValidProviderSelections() {
+        guard hasAnyProviderConfigured else { return }
+        
+        let available = availableProviders
+        
+        // Auto-switch invalid selections to first available (prefer Anthropic)
+        let preferredDefault = available.contains(.anthropic) ? .anthropic : available.first!
+        
+        if !available.contains(plannerProvider) {
+            plannerProvider = preferredDefault
+        }
+        if !available.contains(lessonProvider) {
+            lessonProvider = preferredDefault
+        }
+        if !available.contains(quizProvider) {
+            quizProvider = preferredDefault
         }
     }
     
@@ -123,7 +175,10 @@ struct GenerationView: View {
                 }
                 .disabled(!canStartPlanning)
             } footer: {
-                if !canStartPlanning {
+                if !hasAnyProviderConfigured {
+                    Text("Configure at least one API key in Settings to start generating courses.")
+                        .foregroundStyle(.red)
+                } else if !canStartPlanning {
                     Text("Configure API key for \(plannerProvider.displayName) in Settings")
                         .foregroundStyle(.red)
                 }
@@ -260,7 +315,7 @@ struct GenerationView: View {
     private func roleConfiguration(provider: Binding<LLMProvider>, model: Binding<String>, temperature: Binding<Double>) -> some View {
         Group {
             Picker("Provider", selection: provider) {
-                ForEach(LLMProvider.allCases, id: \.self) { p in
+                ForEach(availableProviders, id: \.self) { p in
                     Text(p.displayName).tag(p)
                 }
             }
@@ -293,6 +348,11 @@ struct GenerationView: View {
     }
     
     private var canStartPlanning: Bool {
+        // Check if any providers configured
+        guard hasAnyProviderConfigured else {
+            return false
+        }
+        
         // Check for API key
         guard let key = try? keyStore.getKey(for: plannerProvider), key != nil else {
             return false
@@ -301,6 +361,26 @@ struct GenerationView: View {
         // If custom provider, also need base URL and model
         if plannerProvider == .custom {
             return !customBaseURL.isEmpty && !customModel.isEmpty
+        }
+        
+        return true
+    }
+    
+    private var canContinueGeneration: Bool {
+        // Check if lesson and quiz providers have keys
+        guard let lessonKey = try? keyStore.getKey(for: lessonProvider), lessonKey != nil else {
+            return false
+        }
+        guard let quizKey = try? keyStore.getKey(for: quizProvider), quizKey != nil else {
+            return false
+        }
+        
+        // If custom providers, also need base URL and model
+        if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+            return false
+        }
+        if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
+            return false
         }
         
         return true
@@ -370,6 +450,13 @@ struct GenerationView: View {
     
     private func continueGeneration(selectedUnitIds: Set<String>) {
         do {
+            // Validate all required keys present
+            guard canContinueGeneration else {
+                errorMessage = "Missing API keys for lesson writer or quiz writer. Please configure in Settings."
+                showingError = true
+                return
+            }
+            
             let lessonKey = try keyStore.getKey(for: lessonProvider)
             guard let lessonKey else {
                 errorMessage = "No API key configured for \(lessonProvider.displayName)"

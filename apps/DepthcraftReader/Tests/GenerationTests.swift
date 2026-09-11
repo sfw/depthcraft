@@ -472,6 +472,134 @@ final class CustomClientTests: XCTestCase {
     }
 }
 
+final class ProviderAvailabilityTests: XCTestCase {
+    
+    @MainActor
+    func testAvailableProvidersWithNoKeys() {
+        let keyStore = APIKeyStore()
+        
+        // Simulate no keys configured
+        keyStore.hasAnthropicKey = false
+        keyStore.hasOpenAIKey = false
+        keyStore.hasOpenRouterKey = false
+        keyStore.hasCustomKey = false
+        
+        let available = getAvailableProviders(keyStore: keyStore)
+        
+        XCTAssertEqual(available.count, 0, "No providers should be available when no keys configured")
+    }
+    
+    @MainActor
+    func testAvailableProvidersWithAnthropicOnly() {
+        let keyStore = APIKeyStore()
+        
+        keyStore.hasAnthropicKey = true
+        keyStore.hasOpenAIKey = false
+        keyStore.hasOpenRouterKey = false
+        keyStore.hasCustomKey = false
+        
+        let available = getAvailableProviders(keyStore: keyStore)
+        
+        XCTAssertEqual(available.count, 1)
+        XCTAssertTrue(available.contains(.anthropic))
+    }
+    
+    @MainActor
+    func testAvailableProvidersWithMultipleKeys() {
+        let keyStore = APIKeyStore()
+        
+        keyStore.hasAnthropicKey = true
+        keyStore.hasOpenAIKey = true
+        keyStore.hasOpenRouterKey = false
+        keyStore.hasCustomKey = false
+        
+        let available = getAvailableProviders(keyStore: keyStore)
+        
+        XCTAssertEqual(available.count, 2)
+        XCTAssertTrue(available.contains(.anthropic))
+        XCTAssertTrue(available.contains(.openai))
+        XCTAssertFalse(available.contains(.openrouter))
+    }
+    
+    @MainActor
+    func testCustomProviderRequiresBaseURLAndModel() {
+        let keyStore = APIKeyStore()
+        
+        // Has key but no base URL or model
+        keyStore.hasCustomKey = true
+        keyStore.customBaseURL = ""
+        keyStore.customModel = ""
+        
+        var available = getAvailableProviders(keyStore: keyStore)
+        XCTAssertFalse(available.contains(.custom), "Custom should not be available without base URL and model")
+        
+        // Has key and base URL but no model
+        keyStore.customBaseURL = "https://api.example.com/v1"
+        keyStore.customModel = ""
+        
+        available = getAvailableProviders(keyStore: keyStore)
+        XCTAssertFalse(available.contains(.custom), "Custom should not be available without model")
+        
+        // Has key, base URL, and model
+        keyStore.customBaseURL = "https://api.example.com/v1"
+        keyStore.customModel = "test-model"
+        
+        available = getAvailableProviders(keyStore: keyStore)
+        XCTAssertTrue(available.contains(.custom), "Custom should be available with key + base URL + model")
+    }
+    
+    @MainActor
+    func testPreferredDefaultIsAnthropic() {
+        let keyStore = APIKeyStore()
+        
+        keyStore.hasAnthropicKey = true
+        keyStore.hasOpenAIKey = true
+        
+        let available = getAvailableProviders(keyStore: keyStore)
+        
+        // Anthropic should be preferred if available
+        let preferred = available.contains(.anthropic) ? LLMProvider.anthropic : available.first!
+        XCTAssertEqual(preferred, .anthropic)
+    }
+    
+    @MainActor
+    func testPreferredDefaultFallback() {
+        let keyStore = APIKeyStore()
+        
+        // Only OpenAI configured
+        keyStore.hasAnthropicKey = false
+        keyStore.hasOpenAIKey = true
+        
+        let available = getAvailableProviders(keyStore: keyStore)
+        
+        // Should fall back to first available (OpenAI)
+        let preferred = available.contains(.anthropic) ? LLMProvider.anthropic : available.first!
+        XCTAssertEqual(preferred, .openai)
+    }
+    
+    // Helper function matching GenerationView logic
+    @MainActor
+    private func getAvailableProviders(keyStore: APIKeyStore) -> [LLMProvider] {
+        var providers: [LLMProvider] = []
+        
+        if keyStore.hasAnthropicKey {
+            providers.append(.anthropic)
+        }
+        if keyStore.hasOpenAIKey {
+            providers.append(.openai)
+        }
+        if keyStore.hasOpenRouterKey {
+            providers.append(.openrouter)
+        }
+        // Custom requires key + base URL + model
+        if keyStore.hasCustomKey && !keyStore.customBaseURL.isEmpty && !keyStore.customModel.isEmpty {
+            providers.append(.custom)
+        }
+        
+        return providers
+    }
+}
+
 extension LessonWriterService {
     func extractMeta(from markdown: String, lessonId: String) -> LessonMeta {
         var anchors: [LessonMeta.Anchor] = []
