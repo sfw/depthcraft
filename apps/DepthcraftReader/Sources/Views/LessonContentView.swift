@@ -12,21 +12,18 @@ struct LessonContentView: View {
             // No demos - use simple web view
             LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
         } else {
-            // Has demos - show lesson content then demos inline
-            ScrollView {
-                VStack(spacing: 0) {
-                    LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
-                        .frame(height: 600) // Rough estimate for lesson content
-                    
-                    ForEach(renderResult.demos, id: \.demoId) { demo in
-                        DemoHostView(
-                            course: course,
-                            unitId: unitId,
-                            lessonId: lessonId,
-                            demoId: demo.demoId
-                        )
-                        .padding(16)
-                    }
+            // Has demos - show as vertical stack with lesson content and demos
+            VStack(spacing: 0) {
+                LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
+                
+                ForEach(renderResult.demos, id: \.demoId) { demo in
+                    DemoHostView(
+                        course: course,
+                        unitId: unitId,
+                        lessonId: lessonId,
+                        demoId: demo.demoId
+                    )
+                    .padding(16)
                 }
             }
         }

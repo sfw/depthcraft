@@ -110,6 +110,11 @@ struct DemoWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         
+        // Enable WebGL for Three.js demos
+        let preferences = WKWebpagePreferences()
+        preferences.allowsContentJavaScript = true
+        config.defaultWebpagePreferences = preferences
+        
         // Sandbox: block network requests
         let contentController = WKUserContentController()
         config.userContentController = contentController
@@ -118,6 +123,7 @@ struct DemoWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
         webView.scrollView.backgroundColor = .systemBackground
+        webView.scrollView.isScrollEnabled = true
         webView.navigationDelegate = context.coordinator
         
         return webView
