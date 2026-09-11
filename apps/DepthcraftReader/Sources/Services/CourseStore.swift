@@ -40,7 +40,7 @@ final class CourseStore: ObservableObject {
         do {
             let loaded = try PackageLoader.load(from: url)
             
-            // Debug logging
+            #if DEBUG
             print("📦 Loading package from: \(url.path)")
             print("   Manifest: \(loaded.manifest.packageId)")
             print("   Units: \(loaded.curriculum.units.count)")
@@ -48,6 +48,7 @@ final class CourseStore: ObservableObject {
             for unit in loaded.curriculum.units.sorted(by: { $0.order < $1.order }) {
                 print("   - Unit \(unit.order): \(unit.title) (\(unit.lessonIds.count) lessons)")
             }
+            #endif
             
             // Force-clear old course before setting new one to ensure SwiftUI detects the change
             course = nil
@@ -64,7 +65,9 @@ final class CourseStore: ObservableObject {
             errorMessage = nil
             refreshAvailablePackages()
         } catch {
+            #if DEBUG
             print("❌ Failed to load package: \(error)")
+            #endif
             errorMessage = error.localizedDescription
         }
     }
