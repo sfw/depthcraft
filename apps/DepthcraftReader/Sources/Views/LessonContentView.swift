@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - Demo Placement Note
+// Demos are currently rendered AFTER lesson content (below-content stacking).
+// True inline placement at :::demo::: directive positions would require:
+// 1. Splitting lesson HTML at placeholder markers
+// 2. Alternating between WKWebView sections and DemoHostView instances
+// 3. Managing multiple WebView heights dynamically
+// This is feasible but adds complexity. Current approach approved pending Product Designer review.
+// If PD requires true inline: see DEMO_SPIKE_NOTES.md "Demo positioning" section.
+
 struct LessonContentView: View {
     let course: LoadedCourse
     let unitId: String
@@ -13,6 +22,7 @@ struct LessonContentView: View {
             LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
         } else {
             // Has demos - show as vertical stack with lesson content and demos
+            // TODO: True inline placement requires PD signoff (see file header note)
             VStack(spacing: 0) {
                 LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
                 

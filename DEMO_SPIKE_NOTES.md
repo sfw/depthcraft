@@ -16,7 +16,7 @@ lessons/<lessonId>/demos/<demoId>/
   demo.json          # schemaVersion, demoId, title, kit, entry, fallback
   index.html         # Entry point
   three.module.min.js # Bundled Three.js (or other assets)
-  fallback.md        # Soft-fail content
+  fallback.md        # Soft-fail content (rendered as HTML)
 ```
 
 Lesson markdown directive:
@@ -27,14 +27,21 @@ Lesson markdown directive:
 ### Rendering Pipeline
 1. `MarkdownHTML.render()` now returns `LessonRenderResult` with HTML + `[DemoReference]`
 2. Parser extracts `:::demo id="...":::` directives using regex
-3. Demo placeholders inserted in HTML for positioning (currently unused in v0)
-4. `LessonContentView` shows lesson WebView + demos stacked vertically
+3. Demo placeholders inserted in HTML for potential future inline placement
+4. `LessonContentView` shows lesson WebView + demos stacked below content
+
+**Demo Placement:** Demos currently render after lesson content (below-content). True inline placement at exact `:::demo:::` positions is feasible but requires splitting HTML into multiple WKWebView sections and managing dynamic heights. Current below-content approach approved pending Product Designer signoff on UX acceptability.
 
 ### Demo Host (Sandboxed WKWebView)
 - `DemoHostView`: SwiftUI wrapper with Reset/Next controls
-- `DemoWebView`: WKWebView with JS enabled, network blocked
-- Loads demo from package-local `baseURL` (offline by design)
-- Soft-fail to `fallback.md` on load errors or missing WebGL
+- `DemoWebView`: WKWebView with JS enabled, strict sandbox enforcement
+- **Sandbox implementation:**
+  - Uses `loadFileURL(_:allowingReadAccessTo:)` for proper ES module support
+  - Blocks all `http`/`https` requests via `decidePolicyFor` navigation + response policies
+  - URL-scoped allowlist: only file URLs within demo directory permitted
+  - Logs blocked requests in debug builds
+- **Negative test case:** `sandbox-test` demo attempts external fetches; all should fail
+- Soft-fail to rendered `fallback.md` (as HTML, not raw text) on load errors
 
 ### Reset/Next Controls
 - **Reset**: UUID-based `key` forces full WebView reload → initial state
@@ -59,13 +66,27 @@ Created `rotating-cube` in `l01-what-is-a-harness`:
 - Self-contained with bundled `three.module.min.js`
 - Fallback explains WebGL requirement
 
+Created `sandbox-test` (negative test case):
+- Deliberately attempts external script loads, fetch(), XHR, image loads
+- All external requests should be blocked
+- Local file access should succeed
+- Verifies sandbox enforcement
+
 ## Gaps & Known Issues
 
-### Critical for Production
-1. **Kit injection not functional** — v0 demos self-bundle Three.js; proper kit loading from app bundle needs work
-2. **Demo positioning approximate** — demos shown after lesson content, not inline at exact directive location
-3. **WebView height heuristics** — fixed layout may clip content
-4. **No error telemetry** — soft-fail is silent; no logging of WebGL failures
+### Addressed in Latest Revision
+- ✅ **Sandbox enforcement**: URL-scoped allowlist + http/https blocking in navigation & response policies
+- ✅ **ES module support**: Using `loadFileURL` instead of `loadHTMLString` (fixes opaque origin)
+- ✅ **Fallback rendering**: `fallback.md` rendered as HTML, not raw text
+- ✅ **Negative test**: `sandbox-test` demo verifies external request blocking
+
+### Requires Product Designer Signoff
+- **Demo positioning**: Currently below-content (easier to implement). True inline at `:::demo:::` directive positions is feasible but more complex. Awaiting PD decision on UX acceptability.
+
+### Critical for Production (Post-Spike)
+1. **Kit injection not functional** — v0 demos self-bundle Three.js; proper kit loading from app bundle needs implementation
+2. **No error telemetry** — soft-fail is silent; no logging of WebGL failures to analytics
+3. **WebView height heuristics** — fixed `minHeight`; may need dynamic sizing
 
 ### v0 Scope Cuts (Expected)
 - No `demoWriter` agent role (hand-authored only)
@@ -75,10 +96,12 @@ Created `rotating-cube` in `l01-what-is-a-harness`:
 
 ### Requires Mac Testing
 1. **Offline radio-off test**: Airplane mode → demo loads from package bytes
-2. **Soft-fail trigger**: Delete `index.html` or corrupt `demo.json` → fallback.md shown
-3. **Non-regression**: Open lesson without demos (e.g. l02) → lesson loads normally
-4. **WebGL support**: Verify Three.js renders on iPad simulator
-5. **Reset flow**: Tap Reset → cube returns to initial orientation
+2. **Sandbox enforcement**: Run `sandbox-test` demo → all external requests blocked, local file access works
+3. **Soft-fail trigger**: Delete `index.html` or corrupt `demo.json` → fallback.md shown as readable HTML
+4. **Non-regression**: Open lesson without demos (e.g. l02) → lesson loads normally
+5. **WebGL support**: Verify `rotating-cube` renders on iPad simulator
+6. **Reset flow**: Tap Reset → cube returns to initial orientation
+7. **ES modules**: Verify Three.js imports work (no opaque origin errors in console)
 
 ## Files Changed
 - Models: `PackageModels.swift` (+DemoManifest)

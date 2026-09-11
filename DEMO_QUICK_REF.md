@@ -9,11 +9,19 @@
 ✅ No breaking changes to existing packages
 
 ## How it works
-1. Lesson markdown is parsed → extracts demo IDs
+1. Lesson markdown is parsed → extracts demo IDs from `:::demo id="...":::` directives
 2. Demo loaded from `demos/<id>/` with demo.json manifest
-3. WKWebView renders demo HTML with JS enabled (sandboxed, no network)
-4. Reset button reloads demo to initial state
-5. Falls back to fallback.md on errors
+3. WKWebView renders demo HTML via `loadFileURL` (ES module support)
+4. **Sandbox:** File URLs scoped to demo directory; all http/https blocked
+5. Reset button reloads demo to initial state
+6. Falls back to fallback.md (rendered as HTML) on errors
+
+## Sandbox enforcement
+- Uses `loadFileURL(_:allowingReadAccessTo:)` for proper ES module support
+- Blocks all http/https requests in navigation AND response policies
+- URL-scoped allowlist: only file:// URLs within demo directory allowed
+- Debug builds log blocked requests
+- **Test:** `sandbox-test` demo attempts external fetches; all should fail
 
 ## Package structure
 ```
@@ -45,12 +53,18 @@ cd apps/DepthcraftReader
 xcodegen generate
 open DepthcraftReader.xcodeproj
 # Run on iPad simulator, navigate to l01
-# Test: airplane mode, soft-fail (corrupt demo), non-regression (l02)
 ```
+
+**Test cases:**
+1. **Airplane mode**: Demo loads offline
+2. **Sandbox**: Run `sandbox-test` demo → external requests blocked
+3. **Soft-fail**: Corrupt demo files → fallback.md shown as HTML
+4. **Non-regression**: Open l02 (no demos) → lesson works
+5. **Reset**: Tap Reset → cube resets orientation
 
 ## Known limitations (v0 spike)
 - Kit injection not working (demos self-bundle Three.js)
-- Demos shown after lesson content (not inline at exact position)
+- Demos shown **below content** (not inline at exact `:::demo:::` position) — **awaiting Product Designer signoff**
 - No step navigation
 - No error telemetry
 

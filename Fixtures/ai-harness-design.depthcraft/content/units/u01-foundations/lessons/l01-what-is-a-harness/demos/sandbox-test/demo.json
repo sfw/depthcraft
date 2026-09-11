@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "0.1.0",
+  "demoId": "sandbox-test",
+  "title": "Sandbox Test (Should Fail)",
+  "kit": "three-v0",
+  "entry": "index.html",
+  "fallback": "fallback.md"
+}

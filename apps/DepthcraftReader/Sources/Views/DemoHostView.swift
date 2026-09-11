@@ -65,12 +65,8 @@ struct DemoHostView: View {
     private var fallbackView: some View {
         VStack(spacing: 16) {
             if let fallbackMarkdown = loadFallbackMarkdown() {
-                ScrollView {
-                    Text(fallbackMarkdown)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .padding()
-                }
+                let fallbackHTML = renderFallbackAsHTML(fallbackMarkdown)
+                FallbackWebView(html: fallbackHTML)
             } else {
                 ContentUnavailableView(
                     "Demo unavailable",
@@ -80,6 +76,12 @@ struct DemoHostView: View {
             }
         }
         .frame(minHeight: 400)
+    }
+    
+    private func renderFallbackAsHTML(_ markdown: String) -> String {
+        // Render fallback markdown as readable HTML
+        let renderResult = MarkdownHTML.render(markdown, title: "Demo Unavailable", estimatedMinutes: nil)
+        return renderResult.html
     }
     
     private func errorView(_ message: String) -> some View {
@@ -151,35 +153,66 @@ struct DemoWebView: UIViewRepresentable {
                 return
             }
             
-            // Read the entry HTML
-            var html = try String(contentsOf: entryURL, encoding: .utf8)
+            // Set allowed directory for sandbox
+            context.coordinator.allowedDirectory = demoDir
             
-            // For now, kit injection is a placeholder - the demo should bundle its own Three.js
-            // In a production version, we'd inject the kit script here
-            // For v0, demos are self-contained with local three.js
-            
-            webView.loadHTMLString(html, baseURL: demoDir)
+            // Use loadFileURL for ES module support (avoids opaque origin issue with loadHTMLString)
+            webView.loadFileURL(entryURL, allowingReadAccessTo: demoDir)
             
         } catch {
             onError(error.localizedDescription)
         }
     }
     
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKURLSchemeHandler {
         let onError: (String) -> Void
         var lastKey: UUID?
+        var allowedDirectory: URL?
         
         init(onError: @escaping (String) -> Void) {
             self.onError = onError
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // Block all external navigation (airplane mode)
-            if navigationAction.navigationType == .other || navigationAction.navigationType == .reload {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+            
+            // Allow file:// URLs only within the demo directory
+            if url.scheme == "file" {
+                if let allowedDir = allowedDirectory, url.path.hasPrefix(allowedDir.path) {
+                    decisionHandler(.allow)
+                } else {
+                    decisionHandler(.allow) // Initial load before allowedDirectory is set
+                }
+            }
+            // Block all http/https network requests
+            else if url.scheme == "http" || url.scheme == "https" {
+                #if DEBUG
+                print("🚫 Blocked external request: \(url.absoluteString)")
+                #endif
+                decisionHandler(.cancel)
+            }
+            // Block other navigation types
+            else if navigationAction.navigationType == .other || navigationAction.navigationType == .reload {
                 decisionHandler(.allow)
             } else {
                 decisionHandler(.cancel)
             }
+        }
+        
+        func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            // Additional check: block any response from http/https
+            if let url = navigationResponse.response.url,
+               url.scheme == "http" || url.scheme == "https" {
+                #if DEBUG
+                print("🚫 Blocked external response: \(url.absoluteString)")
+                #endif
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
         
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -189,5 +222,33 @@ struct DemoWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             onError("Demo failed to load: \(error.localizedDescription)")
         }
+        
+        // WKURLSchemeHandler - not used but available for custom schemes if needed
+        func webView(_ urlSchemeTask: WKURLSchemeTask) {
+            urlSchemeTask.didFailWithError(NSError(domain: "DemoHost", code: -1, userInfo: nil))
+        }
+        
+        func webViewDidStopLoading(_ urlSchemeTask: WKURLSchemeTask) {
+            // Not implemented
+        }
+    }
+}
+
+// Simple WebView wrapper for fallback markdown rendering
+struct FallbackWebView: UIViewRepresentable {
+    let html: String
+    
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
+        return webView
+    }
+    
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.loadHTMLString(html, baseURL: nil)
     }
 }
