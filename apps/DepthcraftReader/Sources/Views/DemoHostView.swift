@@ -32,6 +32,17 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
         let kitId = String(components[0])
         let resourcePath = String(components[1])
         
+        // Reject path escape attempts (.. or absolute paths)
+        guard !resourcePath.contains(".."),
+              !resourcePath.hasPrefix("/"),
+              !resourcePath.contains("://") else {
+            #if DEBUG
+            print("🚫 Path escape attempt blocked: \(resourcePath)")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -8, userInfo: [NSLocalizedDescriptionKey: "Invalid resource path"]))
+            return
+        }
+        
         // Verify kit is in allowlist
         guard allowedKits.contains(kitId) else {
             #if DEBUG
