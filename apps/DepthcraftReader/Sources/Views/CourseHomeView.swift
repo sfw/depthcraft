@@ -99,7 +99,7 @@ struct CourseHomeView: View {
                         Label("Settings", systemImage: "key")
                     }
                 } footer: {
-                    Text("Airplane-mode study only — no network required. Progress stays on this device, keyed by packageId.")
+                    Text("Airplane-mode study only — no network required. Progress stays on this device.")
                 }
             }
         }

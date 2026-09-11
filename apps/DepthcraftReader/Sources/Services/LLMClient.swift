@@ -14,6 +14,10 @@ enum LLMClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .networkError(let error):
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+                return "The request timed out. Long generation requests may take several minutes. Please try again or reduce the scope (fewer units)."
+            }
             return "Network error: \(error.localizedDescription)"
         case .invalidResponse:
             return "Invalid response from API"
@@ -44,6 +48,7 @@ class AnthropicClient: LLMClient {
         let url = URL(string: "https://api.anthropic.com/v1/messages")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180 // 3 minutes for long completions (lesson/quiz generation)
         request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
@@ -60,7 +65,14 @@ class AnthropicClient: LLMClient {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw LLMClientError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LLMClientError.invalidResponse
@@ -120,6 +132,7 @@ class OpenAIClient: LLMClient {
         let url = URL(string: "https://api.openai.com/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180 // 3 minutes for long completions
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         
@@ -135,7 +148,14 @@ class OpenAIClient: LLMClient {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw LLMClientError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LLMClientError.invalidResponse
@@ -196,6 +216,7 @@ class OpenRouterClient: LLMClient {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180 // 3 minutes for long completions
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         
@@ -210,7 +231,14 @@ class OpenRouterClient: LLMClient {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw LLMClientError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LLMClientError.invalidResponse
@@ -274,6 +302,7 @@ class CustomOpenAIClient: LLMClient {
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 180 // 3 minutes for long completions
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         
@@ -289,7 +318,14 @@ class CustomOpenAIClient: LLMClient {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw LLMClientError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LLMClientError.invalidResponse

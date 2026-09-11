@@ -9,15 +9,15 @@ struct GenerationView: View {
     @State private var locale = "en-CA"
     
     @State private var plannerProvider: LLMProvider = .anthropic
-    @State private var plannerModel = "claude-3-5-sonnet-20241022"
+    @State private var plannerModel = "claude-sonnet-5"
     @State private var plannerTemperature = 0.7
     
     @State private var lessonProvider: LLMProvider = .anthropic
-    @State private var lessonModel = "claude-3-5-sonnet-20241022"
+    @State private var lessonModel = "claude-sonnet-5"
     @State private var lessonTemperature = 0.7
     
     @State private var quizProvider: LLMProvider = .anthropic
-    @State private var quizModel = "claude-3-5-sonnet-20241022"
+    @State private var quizModel = "claude-sonnet-5"
     @State private var quizTemperature = 0.7
     
     @State private var customBaseURL = ""
@@ -55,14 +55,14 @@ struct GenerationView: View {
                 showingError = false
             }
         } message: {
-            if let error = orchestrator.progress.error {
-                Text(error)
-            } else if let error = errorMessage {
+            if let error = errorMessage {
                 Text(error)
             }
         }
         .onChange(of: orchestrator.progress.error) { _, newError in
-            if newError != nil {
+            // Only show alert for errors when NOT in failed phase
+            // (failed phase has dedicated UI with Retry/Back buttons)
+            if newError != nil && orchestrator.progress.phase != .failed {
                 showingError = true
             }
         }
@@ -122,13 +122,39 @@ struct GenerationView: View {
         let preferredDefault = available.contains(.anthropic) ? .anthropic : available.first!
         
         if !available.contains(plannerProvider) {
+            let oldProvider = plannerProvider
             plannerProvider = preferredDefault
+            // Reset model to new provider's default when switching
+            if oldProvider != plannerProvider {
+                plannerModel = defaultModel(for: plannerProvider)
+            }
         }
         if !available.contains(lessonProvider) {
+            let oldProvider = lessonProvider
             lessonProvider = preferredDefault
+            if oldProvider != lessonProvider {
+                lessonModel = defaultModel(for: lessonProvider)
+            }
         }
         if !available.contains(quizProvider) {
+            let oldProvider = quizProvider
             quizProvider = preferredDefault
+            if oldProvider != quizProvider {
+                quizModel = defaultModel(for: quizProvider)
+            }
+        }
+    }
+    
+    private func defaultModel(for provider: LLMProvider) -> String {
+        switch provider {
+        case .anthropic:
+            return "claude-sonnet-5"
+        case .openai:
+            return "gpt-4o"
+        case .openrouter:
+            return "anthropic/claude-sonnet-5"
+        case .custom:
+            return keyStore.customModel
         }
     }
     
@@ -317,6 +343,12 @@ struct GenerationView: View {
             Picker("Provider", selection: provider) {
                 ForEach(availableProviders, id: \.self) { p in
                     Text(p.displayName).tag(p)
+                }
+            }
+            .onChange(of: provider.wrappedValue) { oldValue, newValue in
+                // Reset model to provider's default when switching providers
+                if oldValue != newValue {
+                    model.wrappedValue = defaultModel(for: newValue)
                 }
             }
             

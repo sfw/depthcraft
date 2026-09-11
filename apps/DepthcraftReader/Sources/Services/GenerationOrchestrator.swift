@@ -6,6 +6,10 @@ class GenerationOrchestrator: ObservableObject {
     @Published var draftCurriculum: Curriculum?
     @Published var output: GenerationOutput?
     
+    // Retain partial progress for retry resume
+    private var partialLessons: [String: (markdown: String, meta: LessonMeta)] = [:]
+    private var partialQuizzes: [String: QuizDocument] = [:]
+    
     private let keyStore: APIKeyStore
     
     init(keyStore: APIKeyStore) {
@@ -100,20 +104,25 @@ class GenerationOrchestrator: ObservableObject {
             error: nil
         )
         
-        var lessons: [String: (markdown: String, meta: LessonMeta)] = [:]
-        var quizzes: [String: QuizDocument] = [:]
+        // Resume from partial progress if available
+        var lessons = partialLessons
+        var quizzes = partialQuizzes
         
         do {
             let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
             let lessonWriter = LessonWriterService(client: lessonClient, temperature: request.lessonWriterConfig.temperature)
             
-            for (index, lesson) in lessonsToGenerate.enumerated() {
+            // Skip lessons that are already generated (retry resume)
+            let remainingLessons = lessonsToGenerate.filter { lessons[$0.id] == nil }
+            let alreadyCompleted = lessonsToGenerate.count - remainingLessons.count
+            
+            for (index, lesson) in remainingLessons.enumerated() {
                 guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
                     throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
                 }
                 
                 progress.currentItem = "Writing: \(lesson.title)"
-                progress.completedItems = index
+                progress.completedItems = alreadyCompleted + index
                 
                 let (markdown, meta) = try await lessonWriter.writeLesson(
                     lesson: lesson,
@@ -122,6 +131,7 @@ class GenerationOrchestrator: ObservableObject {
                 )
                 
                 lessons[lesson.id] = (markdown, meta)
+                partialLessons = lessons // Save progress for retry
             }
             
             progress.phase = .writingQuizzes
@@ -131,13 +141,17 @@ class GenerationOrchestrator: ObservableObject {
             let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
             let quizWriter = QuizWriterService(client: quizClient, temperature: request.quizWriterConfig.temperature)
             
-            for (index, lesson) in lessonsToGenerate.enumerated() {
+            // Skip quizzes that are already generated (retry resume)
+            let remainingQuizzes = lessonsToGenerate.filter { quizzes[$0.id] == nil }
+            let alreadyCompletedQuizzes = lessonsToGenerate.count - remainingQuizzes.count
+            
+            for (index, lesson) in remainingQuizzes.enumerated() {
                 guard let (markdown, _) = lessons[lesson.id] else {
                     throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
                 }
                 
                 progress.currentItem = "Quiz for: \(lesson.title)"
-                progress.completedItems = index
+                progress.completedItems = alreadyCompletedQuizzes + index
                 
                 let quiz = try await quizWriter.writeQuiz(
                     lessonMarkdown: markdown,
@@ -145,6 +159,7 @@ class GenerationOrchestrator: ObservableObject {
                 )
                 
                 quizzes[lesson.id] = quiz
+                partialQuizzes = quizzes // Save progress for retry
             }
             
             progress.phase = .packaging
@@ -233,6 +248,8 @@ class GenerationOrchestrator: ObservableObject {
                 totalItems: totalLessons,
                 error: error.localizedDescription
             )
+            
+            // Keep partial progress for retry (don't clear)
         }
     }
     
@@ -240,5 +257,7 @@ class GenerationOrchestrator: ObservableObject {
         progress = .idle
         draftCurriculum = nil
         output = nil
+        partialLessons = [:]
+        partialQuizzes = [:]
     }
 }
