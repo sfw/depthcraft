@@ -117,9 +117,33 @@ struct DemoWebView: UIViewRepresentable {
         preferences.allowsContentJavaScript = true
         config.defaultWebpagePreferences = preferences
         
-        // Sandbox: block network requests
-        let contentController = WKUserContentController()
-        config.userContentController = contentController
+        // Sandbox: block http/https resource loads via content rules
+        let blockRules = """
+        [{
+            "trigger": {
+                "url-filter": ".*",
+                "resource-type": ["script", "image", "style-sheet", "raw", "font", "fetch", "xhr"]
+            },
+            "action": {
+                "type": "block"
+            },
+            "condition": {
+                "url-filter": "^https?://.*"
+            }
+        }]
+        """
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "DemoSandboxRules",
+            encodedContentRuleList: blockRules
+        ) { ruleList, error in
+            if let ruleList = ruleList {
+                config.userContentController.add(ruleList)
+            } else if let error = error {
+                #if DEBUG
+                print("⚠️ Failed to compile content rules: \(error)")
+                #endif
+            }
+        }
         
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -164,7 +188,7 @@ struct DemoWebView: UIViewRepresentable {
         }
     }
     
-    final class Coordinator: NSObject, WKNavigationDelegate, WKURLSchemeHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate {
         let onError: (String) -> Void
         var lastKey: UUID?
         var allowedDirectory: URL?
@@ -181,10 +205,19 @@ struct DemoWebView: UIViewRepresentable {
             
             // Allow file:// URLs only within the demo directory
             if url.scheme == "file" {
-                if let allowedDir = allowedDirectory, url.path.hasPrefix(allowedDir.path) {
-                    decisionHandler(.allow)
+                if let allowedDir = allowedDirectory {
+                    // Once allowedDirectory is set, only allow files within that directory
+                    if url.path.hasPrefix(allowedDir.path) {
+                        decisionHandler(.allow)
+                    } else {
+                        #if DEBUG
+                        print("🚫 Blocked file outside demo directory: \(url.path)")
+                        #endif
+                        decisionHandler(.cancel)
+                    }
                 } else {
-                    decisionHandler(.allow) // Initial load before allowedDirectory is set
+                    // Initial load race: allowedDirectory not yet set
+                    decisionHandler(.allow)
                 }
             }
             // Block all http/https network requests
@@ -221,15 +254,6 @@ struct DemoWebView: UIViewRepresentable {
         
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             onError("Demo failed to load: \(error.localizedDescription)")
-        }
-        
-        // WKURLSchemeHandler - not used but available for custom schemes if needed
-        func webView(_ urlSchemeTask: WKURLSchemeTask) {
-            urlSchemeTask.didFailWithError(NSError(domain: "DemoHost", code: -1, userInfo: nil))
-        }
-        
-        func webViewDidStopLoading(_ urlSchemeTask: WKURLSchemeTask) {
-            // Not implemented
         }
     }
 }

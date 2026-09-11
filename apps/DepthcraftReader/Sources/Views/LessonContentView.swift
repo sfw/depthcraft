@@ -20,44 +20,28 @@ struct LessonContentView: View {
     private var inlineLayout: some View {
         let sections = splitHTMLAtDemoPlaceholders(html: renderResult.html, demos: renderResult.demos)
         
-        return ScrollView {
-            VStack(spacing: 0) {
-                ForEach(Array(sections.enumerated()), id: \.offset) { index, section in
-                    switch section {
-                    case .html(let html):
-                        if !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            InlineHTMLSection(
-                                html: html,
-                                onScrolledToEnd: index == sections.count - 1 ? onScrolledToEnd : {}
-                            )
-                        }
-                    case .demo(let demoId):
-                        DemoHostView(
-                            course: course,
-                            unitId: unitId,
-                            lessonId: lessonId,
-                            demoId: demoId
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 24)
-                    }
-                }
-            }
-        }
+        return InlineContentScrollView(sections: sections, course: course, unitId: unitId, lessonId: lessonId, onScrolledToEnd: onScrolledToEnd)
     }
     
     private func splitHTMLAtDemoPlaceholders(html: String, demos: [DemoReference]) -> [ContentSection] {
         var sections: [ContentSection] = []
         var remainingHTML = html
         
+        // Extract stylesheet from the full document to re-wrap sections
+        let (styleSheet, bodyContent) = extractStyleAndBody(from: html)
+        remainingHTML = bodyContent
+        
         for demo in demos {
-            let placeholderDiv = "<div class=\"demo-placeholder\" id=\"\(demo.placeholder)\">Interactive demo</div>"
-            
-            if let range = remainingHTML.range(of: placeholderDiv) {
-                // Add HTML section before the demo
+            // Match by placeholder id attribute, not the exact text
+            let placeholderPattern = "<div[^>]+id=\"\(demo.placeholder)\"[^>]*>.*?</div>"
+            if let regex = try? NSRegularExpression(pattern: placeholderPattern, options: []),
+               let match = regex.firstMatch(in: remainingHTML, range: NSRange(remainingHTML.startIndex..., in: remainingHTML)),
+               let range = Range(match.range, in: remainingHTML) {
+                
+                // Add HTML section before the demo (re-wrapped with style)
                 let beforeHTML = String(remainingHTML[..<range.lowerBound])
                 if !beforeHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    sections.append(.html(beforeHTML))
+                    sections.append(.html(wrapWithStyle(beforeHTML, styleSheet: styleSheet)))
                 }
                 
                 // Add demo section
@@ -68,12 +52,51 @@ struct LessonContentView: View {
             }
         }
         
-        // Add final HTML section after last demo
+        // Add final HTML section after last demo (re-wrapped with style)
         if !remainingHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append(.html(remainingHTML))
+            sections.append(.html(wrapWithStyle(remainingHTML, styleSheet: styleSheet)))
         }
         
         return sections
+    }
+    
+    private func extractStyleAndBody(from html: String) -> (styleSheet: String, body: String) {
+        // Extract <style>...</style> from <head>
+        let stylePattern = "<style>.*?</style>"
+        var styleSheet = ""
+        if let regex = try? NSRegularExpression(pattern: stylePattern, options: [.dotMatchesLineSeparators]),
+           let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+           let range = Range(match.range, in: html) {
+            styleSheet = String(html[range])
+        }
+        
+        // Extract content between <body> and </body>
+        let bodyPattern = "<body>(.*?)</body>"
+        var body = html
+        if let regex = try? NSRegularExpression(pattern: bodyPattern, options: [.dotMatchesLineSeparators]),
+           let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+           match.numberOfRanges > 1,
+           let range = Range(match.range(at: 1), in: html) {
+            body = String(html[range])
+        }
+        
+        return (styleSheet, body)
+    }
+    
+    private func wrapWithStyle(_ bodyContent: String, styleSheet: String) -> String {
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        \(styleSheet)
+        </head>
+        <body>
+        \(bodyContent)
+        </body>
+        </html>
+        """
     }
 }
 
@@ -82,23 +105,101 @@ enum ContentSection {
     case demo(String)
 }
 
-struct InlineHTMLSection: View {
-    let html: String
+struct InlineContentScrollView: UIViewControllerRepresentable {
+    let sections: [ContentSection]
+    let course: LoadedCourse
+    let unitId: String
+    let lessonId: String
     let onScrolledToEnd: () -> Void
-    @State private var contentHeight: CGFloat = 200
     
-    var body: some View {
-        InlineWebViewWrapper(html: html, contentHeight: $contentHeight, onScrolledToEnd: onScrolledToEnd)
-            .frame(height: contentHeight)
+    func makeUIViewController(context: Context) -> InlineContentViewController {
+        InlineContentViewController(sections: sections, course: course, unitId: unitId, lessonId: lessonId, onScrolledToEnd: onScrolledToEnd)
+    }
+    
+    func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
+        // Update if needed
     }
 }
 
-struct InlineWebViewWrapper: UIViewRepresentable {
-    let html: String
-    @Binding var contentHeight: CGFloat
+class InlineContentViewController: UIViewController, UIScrollViewDelegate {
+    let sections: [ContentSection]
+    let course: LoadedCourse
+    let unitId: String
+    let lessonId: String
     let onScrolledToEnd: () -> Void
+    private var hasNotifiedEnd = false
+    private var scrollView: UIScrollView!
+    private var stackView: UIStackView!
     
-    func makeUIView(context: Context) -> WKWebView {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, onScrolledToEnd: @escaping () -> Void) {
+        self.sections = sections
+        self.course = course
+        self.unitId = unitId
+        self.lessonId = lessonId
+        self.onScrolledToEnd = onScrolledToEnd
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) not implemented")
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        scrollView = UIScrollView()
+        scrollView.delegate = self
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(scrollView)
+        
+        stackView = UIStackView()
+        stackView.axis = .vertical
+        stackView.spacing = 0
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(stackView)
+        
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            stackView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            stackView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            stackView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            stackView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+        ])
+        
+        // Add sections to stack view
+        for section in sections {
+            switch section {
+            case .html(let html):
+                if !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let webView = createHTMLWebView(html: html)
+                    stackView.addArrangedSubview(webView)
+                }
+            case .demo(let demoId):
+                let demoHost = createDemoHostController(demoId: demoId)
+                addChild(demoHost)
+                let container = UIView()
+                container.translatesAutoresizingMaskIntoConstraints = false
+                demoHost.view.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(demoHost.view)
+                NSLayoutConstraint.activate([
+                    demoHost.view.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
+                    demoHost.view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+                    demoHost.view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+                    demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
+                    demoHost.view.heightAnchor.constraint(equalToConstant: 400)
+                ])
+                stackView.addArrangedSubview(container)
+                demoHost.didMove(toParent: self)
+            }
+        }
+    }
+    
+    private func createHTMLWebView(html: String) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.allowsContentJavaScript = false
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -106,41 +207,34 @@ struct InlineWebViewWrapper: UIViewRepresentable {
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = false
-        webView.navigationDelegate = context.coordinator
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Load HTML and measure height
+        let delegate = HTMLWebViewDelegate()
+        webView.navigationDelegate = delegate
+        // Keep delegate alive by storing in associated object
+        objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
+        
+        webView.loadHTMLString(html, baseURL: nil)
+        
         return webView
     }
     
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        if context.coordinator.lastHTML != html {
-            context.coordinator.lastHTML = html
-            webView.loadHTMLString(html, baseURL: nil)
-        }
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(contentHeight: $contentHeight, onScrolledToEnd: onScrolledToEnd)
-    }
-    
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var lastHTML: String?
-        @Binding var contentHeight: CGFloat
-        let onScrolledToEnd: () -> Void
-        
-        init(contentHeight: Binding<CGFloat>, onScrolledToEnd: @escaping () -> Void) {
-            self._contentHeight = contentHeight
-            self.onScrolledToEnd = onScrolledToEnd
-        }
-        
+    private class HTMLWebViewDelegate: NSObject, WKNavigationDelegate {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Measure actual content height
-            webView.evaluateJavaScript("document.body.scrollHeight") { [weak self] result, _ in
+            // Measure content height and update constraint
+            webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
                 if let height = result as? CGFloat, height > 0 {
                     DispatchQueue.main.async {
-                        self?.contentHeight = height
+                        // Update height constraint
+                        if let heightConstraint = webView.constraints.first(where: { $0.firstAttribute == .height }) {
+                            heightConstraint.constant = height
+                        } else {
+                            webView.heightAnchor.constraint(equalToConstant: height).isActive = true
+                        }
                     }
                 }
             }
-            onScrolledToEnd()
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -149,6 +243,29 @@ struct InlineWebViewWrapper: UIViewRepresentable {
             } else {
                 decisionHandler(.cancel)
             }
+        }
+    }
+    
+    private func createDemoHostController(demoId: String) -> UIHostingController<DemoHostView> {
+        let demoView = DemoHostView(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+        return UIHostingController(rootView: demoView)
+    }
+    
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        checkIfAtEnd(scrollView)
+    }
+    
+    private func checkIfAtEnd(_ scrollView: UIScrollView) {
+        guard !hasNotifiedEnd else { return }
+        let contentHeight = scrollView.contentSize.height
+        let scrollViewHeight = scrollView.bounds.height
+        let offset = scrollView.contentOffset.y
+        let bottomThreshold: CGFloat = 80
+        
+        // If content fits without scrolling, or user has scrolled near end
+        if contentHeight > 0 && (contentHeight <= scrollViewHeight || offset + scrollViewHeight >= contentHeight - bottomThreshold) {
+            hasNotifiedEnd = true
+            onScrolledToEnd()
         }
     }
 }
