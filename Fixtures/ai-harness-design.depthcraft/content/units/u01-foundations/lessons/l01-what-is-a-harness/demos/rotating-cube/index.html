@@ -34,63 +34,92 @@
     // Demo: Rotating cube to illustrate 3D coordinate system
     const container = document.getElementById('demo-container');
     
-    // Scene setup
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    let scene, camera, renderer, cube, geometry;
     
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
-    
-    // Create a cube with colorful faces
-    const geometry = new THREE.BoxGeometry(2, 2, 2);
-    const materials = [
-      new THREE.MeshBasicMaterial({ color: 0xff6b6b }), // right - red
-      new THREE.MeshBasicMaterial({ color: 0x4ecdc4 }), // left - teal
-      new THREE.MeshBasicMaterial({ color: 0xffe66d }), // top - yellow
-      new THREE.MeshBasicMaterial({ color: 0x95e1d3 }), // bottom - mint
-      new THREE.MeshBasicMaterial({ color: 0xaa96da }), // front - purple
-      new THREE.MeshBasicMaterial({ color: 0xf38181 })  // back - pink
-    ];
-    const cube = new THREE.Mesh(geometry, materials);
-    scene.add(cube);
-    
-    // Add edges for clarity
-    const edges = new THREE.EdgesGeometry(geometry);
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-    const wireframe = new THREE.LineSegments(edges, lineMaterial);
-    cube.add(wireframe);
-    
-    camera.position.z = 5;
+    // Defer init until container has non-zero size (layout complete)
+    function initThreeJS() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      if (width === 0 || height === 0) {
+        // Layout not ready, retry next frame
+        requestAnimationFrame(initThreeJS);
+        return;
+      }
+      
+      // Scene setup with known dimensions
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+      
+      // Create a cube with colorful faces
+      geometry = new THREE.BoxGeometry(2, 2, 2);
+      const materials = [
+        new THREE.MeshBasicMaterial({ color: 0xff6b6b }), // right - red
+        new THREE.MeshBasicMaterial({ color: 0x4ecdc4 }), // left - teal
+        new THREE.MeshBasicMaterial({ color: 0xffe66d }), // top - yellow
+        new THREE.MeshBasicMaterial({ color: 0x95e1d3 }), // bottom - mint
+        new THREE.MeshBasicMaterial({ color: 0xaa96da }), // front - purple
+        new THREE.MeshBasicMaterial({ color: 0xf38181 })  // back - pink
+      ];
+      cube = new THREE.Mesh(geometry, materials);
+      scene.add(cube);
+      
+      // Add edges for clarity
+      const edges = new THREE.EdgesGeometry(geometry);
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+      const wireframe = new THREE.LineSegments(edges, lineMaterial);
+      cube.add(wireframe);
+      
+      camera.position.z = 5;
+      
+      // Start animation
+      animate();
+      
+      // Handle resize
+      window.addEventListener('resize', onWindowResize);
+    }
     
     // Animation loop
     function animate() {
       requestAnimationFrame(animate);
       
-      cube.rotation.x += 0.005;
-      cube.rotation.y += 0.01;
+      if (cube) {
+        cube.rotation.x += 0.005;
+        cube.rotation.y += 0.01;
+      }
       
-      renderer.render(scene, camera);
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
     }
     
     // Handle resize
     function onWindowResize() {
-      camera.aspect = container.clientWidth / container.clientHeight;
+      if (!camera || !renderer) return;
+      
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setSize(width, height);
     }
-    window.addEventListener('resize', onWindowResize);
-    
-    // Start animation
-    animate();
     
     // Expose reset function for Reset button
     window.resetDemo = function() {
-      cube.rotation.x = 0;
-      cube.rotation.y = 0;
-      camera.position.z = 5;
+      if (cube && camera) {
+        cube.rotation.x = 0;
+        cube.rotation.y = 0;
+        camera.position.z = 5;
+      }
     };
+    
+    // Start initialization (deferred until layout)
+    initThreeJS();
   </script>
 </body>
 </html>

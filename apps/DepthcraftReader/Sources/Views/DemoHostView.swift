@@ -117,6 +117,24 @@ struct DemoWebView: UIViewRepresentable {
         preferences.allowsContentJavaScript = true
         config.defaultWebpagePreferences = preferences
         
+        // Add error handler for runtime failures from JavaScript
+        config.userContentController.add(context.coordinator, name: "demoError")
+        
+        // Inject global error handler to catch uncaught exceptions
+        let errorHandlerScript = WKUserScript(
+            source: """
+            window.addEventListener('error', function(e) {
+                window.webkit.messageHandlers.demoError.postMessage(e.message || 'Unknown error');
+            });
+            window.addEventListener('unhandledrejection', function(e) {
+                window.webkit.messageHandlers.demoError.postMessage(e.reason?.toString() || 'Promise rejection');
+            });
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        config.userContentController.addUserScript(errorHandlerScript)
+        
         // Create WebView with base config (rules added to live instance later)
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -129,11 +147,13 @@ struct DemoWebView: UIViewRepresentable {
         context.coordinator.pendingWebView = webView
         
         // Sandbox: compile content rules async, add to LIVE webView, then load
+        // Note: Only block script/image/stylesheet/font from http(s); fetch/raw excluded
+        // to allow same-origin file:// loads (navigation delegates handle http(s) fetch)
         let blockRules = """
         [{
             "trigger": {
                 "url-filter": "^https?://.*",
-                "resource-type": ["script", "image", "style-sheet", "raw", "font", "fetch"]
+                "resource-type": ["script", "image", "style-sheet", "font"]
             },
             "action": {
                 "type": "block"
@@ -142,7 +162,13 @@ struct DemoWebView: UIViewRepresentable {
         """
         
         let coordinator = context.coordinator
-        let store = WKContentRuleListStore.default()
+        guard let store = WKContentRuleListStore.default() else {
+            // WKContentRuleListStore unavailable, load without content rules
+            // (navigation delegates still block http/https)
+            coordinator.loadDemo(into: webView)
+            return webView
+        }
+        
         store.compileContentRuleList(
             forIdentifier: "DemoSandboxRules",
             encodedContentRuleList: blockRules
@@ -182,7 +208,7 @@ struct DemoWebView: UIViewRepresentable {
         Coordinator(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId, onError: onError)
     }
     
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let course: LoadedCourse
         let unitId: String
         let lessonId: String
@@ -191,6 +217,7 @@ struct DemoWebView: UIViewRepresentable {
         var lastKey: UUID?
         var allowedDirectory: URL?
         weak var pendingWebView: WKWebView?
+        var contentCheckTimer: Timer?
         
         init(course: LoadedCourse, unitId: String, lessonId: String, demoId: String, onError: @escaping (String) -> Void) {
             self.course = course
@@ -198,6 +225,16 @@ struct DemoWebView: UIViewRepresentable {
             self.lessonId = lessonId
             self.demoId = demoId
             self.onError = onError
+        }
+        
+        // Handle error messages from JavaScript
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "demoError", let errorMsg = message.body as? String {
+                #if DEBUG
+                print("🚫 Demo runtime error: \(errorMsg)")
+                #endif
+                onError("Demo failed: \(errorMsg)")
+            }
         }
         
         func loadDemo(into webView: WKWebView) {
@@ -274,11 +311,51 @@ struct DemoWebView: UIViewRepresentable {
         }
         
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            contentCheckTimer?.invalidate()
             onError("Demo failed to load: \(error.localizedDescription)")
         }
         
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            contentCheckTimer?.invalidate()
             onError("Demo failed to load: \(error.localizedDescription)")
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Check after 2 seconds if demo rendered any visible content
+            // (detects blank WebGL / JS init failures that don't throw to didFail)
+            contentCheckTimer?.invalidate()
+            contentCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self, weak webView] _ in
+                guard let self = self, let webView = webView else { return }
+                
+                // Check if body has any visible child elements (canvas, divs with content, etc.)
+                webView.evaluateJavaScript("""
+                    (function() {
+                        const body = document.body;
+                        if (!body) return false;
+                        
+                        // Check for canvas (WebGL demos)
+                        if (body.querySelector('canvas')) return true;
+                        
+                        // Check for non-empty text content
+                        const text = body.innerText?.trim();
+                        if (text && text.length > 0) return true;
+                        
+                        // Check for visible elements
+                        const visibleElements = Array.from(body.querySelectorAll('*')).filter(el => {
+                            const style = window.getComputedStyle(el);
+                            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+                        });
+                        return visibleElements.length > 0;
+                    })();
+                    """) { result, error in
+                    if let hasContent = result as? Bool, !hasContent {
+                        #if DEBUG
+                        print("⚠️ Demo appears blank after load, triggering fallback")
+                        #endif
+                        self.onError("Demo failed to render")
+                    }
+                }
+            }
         }
     }
 }
