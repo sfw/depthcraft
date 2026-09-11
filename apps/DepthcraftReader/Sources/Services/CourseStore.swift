@@ -11,13 +11,14 @@ final class CourseStore: ObservableObject {
     
     private let progressStore = ProgressStore()
     private let fileManager = FileManager.default
+    private let lastOpenedPackageKey = "lastOpenedPackageURL"
 
     func loadBundledCourseIfNeeded() {
         guard course == nil else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let url = try PackageLoader.bundledPackageURL()
+            let url = try determineStartupPackageURL()
             let loaded = try PackageLoader.load(from: url)
             course = loaded
             let lessonIds = Array(loaded.curriculum.lessons.keys)
@@ -29,9 +30,48 @@ final class CourseStore: ObservableObject {
             )
             errorMessage = nil
             refreshAvailablePackages()
+            
+            // Persist last opened package URL if it's from Documents (not bundled fixture)
+            let bundledURL = try? PackageLoader.bundledPackageURL()
+            if bundledURL == nil || url.path != bundledURL?.path {
+                UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+    
+    private func determineStartupPackageURL() throws -> URL {
+        // 1. Try last-opened package if it still exists
+        if let lastOpenedPath = UserDefaults.standard.string(forKey: lastOpenedPackageKey) {
+            let lastOpenedURL = URL(fileURLWithPath: lastOpenedPath)
+            if fileManager.fileExists(atPath: lastOpenedURL.path) {
+                return lastOpenedURL
+            }
+        }
+        
+        // 2. Try newest .depthcraft in Documents
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let contents = try? fileManager.contentsOfDirectory(
+            at: documentsURL,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            let packages = contents.filter { url in
+                url.pathExtension == "depthcraft" || url.lastPathComponent.hasSuffix(".depthcraft")
+            }
+            
+            if let newestPackage = packages.sorted(by: { url1, url2 in
+                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+                return date1 > date2
+            }).first {
+                return newestPackage
+            }
+        }
+        
+        // 3. Fall back to bundled fixture
+        return try PackageLoader.bundledPackageURL()
     }
     
     func loadPackage(from url: URL) {
@@ -64,6 +104,9 @@ final class CourseStore: ObservableObject {
             )
             errorMessage = nil
             refreshAvailablePackages()
+            
+            // Persist last opened package URL
+            UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
         } catch {
             #if DEBUG
             print("❌ Failed to load package: \(error)")
