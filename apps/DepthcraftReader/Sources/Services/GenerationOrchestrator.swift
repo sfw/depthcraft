@@ -9,6 +9,7 @@ class GenerationOrchestrator: ObservableObject {
     // Retain partial progress for retry resume
     private var partialLessons: [String: (markdown: String, meta: LessonMeta)] = [:]
     private var partialQuizzes: [String: QuizDocument] = [:]
+    private var partialDemos: [String: DemoWriterOutput] = [:]
     
     private let keyStore: APIKeyStore
     
@@ -58,7 +59,7 @@ class GenerationOrchestrator: ObservableObject {
     
     func continueGeneration(request: GenerationRequest) async {
         // Re-entrancy guard: if already generating, ignore
-        if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .packaging {
+        if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .writingDemos || progress.phase == .packaging {
             return
         }
         
@@ -112,6 +113,7 @@ class GenerationOrchestrator: ObservableObject {
         // Resume from partial progress if available
         var lessons = partialLessons
         var quizzes = partialQuizzes
+        var demos = partialDemos
         
         do {
             let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
@@ -167,6 +169,44 @@ class GenerationOrchestrator: ObservableObject {
                 partialQuizzes = quizzes // Save progress for retry
             }
             
+            progress.phase = .writingDemos
+            progress.currentItem = "Writing demos"
+            progress.completedItems = 0
+            
+            let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)
+            let demoWriter = DemoWriterService(
+                client: demoClient,
+                temperature: request.demoWriterConfig.temperature,
+                depthLevel: request.depthLevel
+            )
+            
+            // Skip demos that are already generated (retry resume)
+            let remainingDemos = lessonsToGenerate.filter { demos[$0.id] == nil }
+            let alreadyCompletedDemos = lessonsToGenerate.count - remainingDemos.count
+            
+            for (index, lesson) in remainingDemos.enumerated() {
+                guard let (markdown, _) = lessons[lesson.id] else {
+                    throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
+                }
+                
+                guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
+                    throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
+                }
+                
+                progress.currentItem = "Demos for: \(lesson.title)"
+                progress.completedItems = alreadyCompletedDemos + index
+                
+                if let demoOutput = try await demoWriter.writeDemos(
+                    lessonMarkdown: markdown,
+                    lesson: lesson,
+                    unit: unit
+                ) {
+                    demos[lesson.id] = demoOutput
+                }
+                
+                partialDemos = demos // Save progress for retry
+            }
+            
             progress.phase = .packaging
             progress.currentItem = "Packaging course"
             progress.completedItems = totalLessons
@@ -202,6 +242,13 @@ class GenerationOrchestrator: ObservableObject {
                 model: request.quizWriterConfig.model,
                 ranAt: ISO8601DateFormatter().string(from: Date())
             )
+            let totalDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
+            let demoRun = DemoRun(
+                provider: request.demoWriterConfig.provider.rawValue,
+                model: request.demoWriterConfig.model,
+                ranAt: ISO8601DateFormatter().string(from: Date()),
+                demosEmitted: totalDemosEmitted
+            )
             let packagerRun = RoleRun(
                 provider: "anthropic",
                 model: "packager-v1",
@@ -212,6 +259,7 @@ class GenerationOrchestrator: ObservableObject {
                 planner: plannerRun,
                 lessonWriter: lessonRun,
                 quizWriter: quizRun,
+                demoWriter: demoRun,
                 packager: packagerRun
             )
             
@@ -221,6 +269,7 @@ class GenerationOrchestrator: ObservableObject {
                 curriculum: slicedCurriculum,
                 lessons: lessons,
                 quizzes: quizzes,
+                demos: demos,
                 roleRuns: metadata
             )
             
@@ -264,5 +313,6 @@ class GenerationOrchestrator: ObservableObject {
         output = nil
         partialLessons = [:]
         partialQuizzes = [:]
+        partialDemos = [:]
     }
 }

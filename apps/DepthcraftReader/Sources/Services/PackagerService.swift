@@ -9,6 +9,7 @@ class PackagerService: PackagerRole {
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
+        demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata
     ) async throws -> URL {
         let packageId = generatePackageId(from: topic)
@@ -56,7 +57,8 @@ class PackagerService: PackagerRole {
             manifest: manifest,
             curriculum: updatedCurriculum,
             lessons: lessons,
-            quizzes: quizzes
+            quizzes: quizzes,
+            demos: demos
         )
         
         let packageURL = try await assemblePackage(
@@ -65,6 +67,7 @@ class PackagerService: PackagerRole {
             curriculum: updatedCurriculum,
             lessons: lessons,
             quizzes: quizzes,
+            demos: demos,
             roleRuns: roleRuns
         )
         
@@ -85,7 +88,8 @@ class PackagerService: PackagerRole {
         manifest: PackageManifest,
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
-        quizzes: [String: QuizDocument]
+        quizzes: [String: QuizDocument],
+        demos: [String: DemoWriterOutput]
     ) throws {
         guard curriculum.schemaVersion == "0.1.0" else {
             throw GenerationError.validationFailed("Invalid curriculum schema version")
@@ -120,6 +124,76 @@ class PackagerService: PackagerRole {
                 throw GenerationError.validationFailed("Lesson \(lessonId) status is \(lesson.status), expected built or approved")
             }
         }
+        
+        for (lessonId, demoOutput) in demos {
+            guard let (lessonMarkdown, _) = lessons[lessonId] else {
+                throw GenerationError.validationFailed("Demo for lesson \(lessonId) but lesson not found")
+            }
+            
+            for demo in demoOutput.demos {
+                try validateDemoSpec(demo, lessonId: lessonId, lessonMarkdown: lessonMarkdown)
+            }
+        }
+    }
+    
+    private func validateDemoSpec(_ demo: DemoSpec, lessonId: String, lessonMarkdown: String) throws {
+        let allowedKits = ["three-v0"]
+        guard allowedKits.contains(demo.kit) else {
+            throw GenerationError.validationFailed("Demo '\(demo.demoId)' in lesson '\(lessonId)' uses disallowed kit '\(demo.kit)'. Allowed: \(allowedKits.joined(separator: ", "))")
+        }
+        
+        try validateNoExternalURLs(demo.entryHTML, demoId: demo.demoId, file: "index.html", lessonId: lessonId)
+        try validateNoExternalURLs(demo.fallbackMarkdown, demoId: demo.demoId, file: "fallback.md", lessonId: lessonId)
+        
+        for (filename, content) in demo.assets ?? [:] {
+            try validateNoExternalURLs(content, demoId: demo.demoId, file: filename, lessonId: lessonId)
+        }
+        
+        try validateNoMidFlightFetch(demo.entryHTML, demoId: demo.demoId, file: "index.html", lessonId: lessonId)
+        
+        for (filename, content) in demo.assets ?? [:] {
+            if filename.hasSuffix(".js") {
+                try validateNoMidFlightFetch(content, demoId: demo.demoId, file: filename, lessonId: lessonId)
+            }
+        }
+        
+        guard demo.fallback == "fallback.md" else {
+            throw GenerationError.validationFailed("Demo '\(demo.demoId)' in lesson '\(lessonId)' missing or invalid fallback field")
+        }
+        
+        guard !demo.fallbackMarkdown.isEmpty else {
+            throw GenerationError.validationFailed("Demo '\(demo.demoId)' in lesson '\(lessonId)' has empty fallback.md content")
+        }
+    }
+    
+    private func validateNoExternalURLs(_ content: String, demoId: String, file: String, lessonId: String) throws {
+        let urlPatterns = [
+            ("http://", "HTTP URL"),
+            ("https://", "HTTPS URL"),
+            ("//cdn", "CDN URL"),
+            ("//unpkg", "unpkg CDN"),
+            ("//jsdelivr", "jsDelivr CDN")
+        ]
+        
+        for (pattern, description) in urlPatterns {
+            if content.contains(pattern) {
+                throw GenerationError.validationFailed("Demo '\(demoId)' in lesson '\(lessonId)' file '\(file)' contains external URL: \(description)")
+            }
+        }
+    }
+    
+    private func validateNoMidFlightFetch(_ content: String, demoId: String, file: String, lessonId: String) throws {
+        let fetchPatterns = [
+            "fetch(",
+            "XMLHttpRequest",
+            ".ajax("
+        ]
+        
+        for pattern in fetchPatterns {
+            if content.contains(pattern) {
+                throw GenerationError.validationFailed("Demo '\(demoId)' in lesson '\(lessonId)' file '\(file)' contains mid-flight fetch pattern '\(pattern)'")
+            }
+        }
     }
     
     func assemblePackage(
@@ -128,6 +202,7 @@ class PackagerService: PackagerRole {
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
+        demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata
     ) async throws -> URL {
         let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -179,7 +254,58 @@ class PackagerService: PackagerRole {
                 let lessonURL = lessonsURL.appendingPathComponent(lessonId)
                 try fileManager.createDirectory(at: lessonURL, withIntermediateDirectories: true)
                 
-                try markdown.write(to: lessonURL.appendingPathComponent("lesson.md"), atomically: true, encoding: .utf8)
+                var finalMarkdown = markdown
+                
+                if let demoOutput = demos[lessonId] {
+                    finalMarkdown = try insertDemoDirectives(
+                        markdown: markdown,
+                        demos: demoOutput.demos,
+                        lessonId: lessonId
+                    )
+                    
+                    let demosURL = lessonURL.appendingPathComponent("demos")
+                    try fileManager.createDirectory(at: demosURL, withIntermediateDirectories: true)
+                    
+                    for demo in demoOutput.demos {
+                        let demoURL = demosURL.appendingPathComponent(demo.demoId)
+                        try fileManager.createDirectory(at: demoURL, withIntermediateDirectories: true)
+                        
+                        let demoManifest = DemoManifest(
+                            schemaVersion: "0.1.0",
+                            demoId: demo.demoId,
+                            title: demo.title,
+                            kit: demo.kit,
+                            entry: demo.entry,
+                            fallback: demo.fallback
+                        )
+                        let demoManifestData = try encoder.encode(demoManifest)
+                        try demoManifestData.write(to: demoURL.appendingPathComponent("demo.json"))
+                        
+                        try demo.entryHTML.write(
+                            to: demoURL.appendingPathComponent(demo.entry),
+                            atomically: true,
+                            encoding: .utf8
+                        )
+                        
+                        try demo.fallbackMarkdown.write(
+                            to: demoURL.appendingPathComponent(demo.fallback),
+                            atomically: true,
+                            encoding: .utf8
+                        )
+                        
+                        if let assets = demo.assets {
+                            for (filename, content) in assets {
+                                try content.write(
+                                    to: demoURL.appendingPathComponent(filename),
+                                    atomically: true,
+                                    encoding: .utf8
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                try finalMarkdown.write(to: lessonURL.appendingPathComponent("lesson.md"), atomically: true, encoding: .utf8)
                 
                 let metaData = try encoder.encode(meta)
                 try metaData.write(to: lessonURL.appendingPathComponent("meta.json"))
@@ -190,5 +316,23 @@ class PackagerService: PackagerRole {
         }
         
         return packageURL
+    }
+    
+    private func insertDemoDirectives(markdown: String, demos: [DemoSpec], lessonId: String) throws -> String {
+        var result = markdown
+        
+        for demo in demos {
+            let targetHeading = demo.insertAfterHeading
+            let directive = "\n\n:::demo id=\"\(demo.demoId)\":::\n"
+            
+            guard let headingRange = result.range(of: targetHeading) else {
+                throw GenerationError.validationFailed("Demo '\(demo.demoId)' in lesson '\(lessonId)' insertAfterHeading '\(targetHeading)' not found in lesson markdown")
+            }
+            
+            let insertPosition = result.index(after: headingRange.upperBound)
+            result.insert(contentsOf: directive, at: insertPosition)
+        }
+        
+        return result
     }
 }
