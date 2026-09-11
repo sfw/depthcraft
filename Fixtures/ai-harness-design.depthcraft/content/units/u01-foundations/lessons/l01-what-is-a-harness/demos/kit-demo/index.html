@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kit Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    #demo-container {
+      width: 100%;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="demo-container"></div>
+  
+  <script type="module">
+    // Import Three.js from app-bundled kit using kit: URL scheme
+    let THREE;
+    try {
+      const module = await import('kit:three-v0/three.module.min.js');
+      THREE = module;
+      console.log('✅ Three.js loaded from kit:', THREE);
+    } catch (error) {
+      if (window.webkit?.messageHandlers?.demoError) {
+        window.webkit.messageHandlers.demoError.postMessage(`Kit import failed: ${error.message}`);
+      }
+      throw error;
+    }
+    
+    // Demo: Rotating cube using kit-injected Three.js
+    const container = document.getElementById('demo-container');
+    
+    let scene, camera, renderer, cube, geometry;
+    
+    function initThreeJS() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      if (width === 0 || height === 0) {
+        requestAnimationFrame(initThreeJS);
+        return;
+      }
+      
+      try {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+        
+        // Create a spinning cube with gradient colors
+        geometry = new THREE.BoxGeometry(2, 2, 2);
+        const materials = [
+          new THREE.MeshBasicMaterial({ color: 0xff6b9d }), // right - pink
+          new THREE.MeshBasicMaterial({ color: 0x4ecdc4 }), // left - teal
+          new THREE.MeshBasicMaterial({ color: 0xffeaa7 }), // top - yellow
+          new THREE.MeshBasicMaterial({ color: 0x74b9ff }), // bottom - blue
+          new THREE.MeshBasicMaterial({ color: 0xa29bfe }), // front - purple
+          new THREE.MeshBasicMaterial({ color: 0xfd79a8 })  // back - rose
+        ];
+        cube = new THREE.Mesh(geometry, materials);
+        scene.add(cube);
+        
+        // Add edges
+        const edges = new THREE.EdgesGeometry(geometry);
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+        cube.add(wireframe);
+        
+        camera.position.z = 5;
+        
+        animate();
+        
+        window.addEventListener('resize', onWindowResize);
+        
+      } catch (error) {
+        if (window.webkit?.messageHandlers?.demoError) {
+          window.webkit.messageHandlers.demoError.postMessage(`Init failed: ${error.message}`);
+        }
+        throw error;
+      }
+    }
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      if (cube) {
+        cube.rotation.x += 0.007;
+        cube.rotation.y += 0.012;
+      }
+      
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+    
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+    
+    window.resetDemo = function() {
+      if (cube && camera) {
+        cube.rotation.x = 0;
+        cube.rotation.y = 0;
+        camera.position.z = 5;
+      }
+    };
+    
+    initThreeJS();
+  </script>
+</body>
+</html>
