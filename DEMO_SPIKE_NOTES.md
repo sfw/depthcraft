@@ -45,8 +45,13 @@ Lesson markdown directive:
   - Uses `loadFileURL(_:allowingReadAccessTo:)` for proper ES module support
   - Blocks all `http`/`https` requests via `decidePolicyFor` navigation + response policies
   - URL-scoped allowlist: only file URLs within demo directory permitted
+  - **WKContentRuleList** (fixed `ee9f5ef`): Blocks http/https resource loads
+    - Previously attached to pre-create config (bug: never reached live webView)
+    - Now attaches to `webView.configuration.userContentController` (live instance)
+    - Async compile → add to live webView → then load
   - Logs blocked requests in debug builds
 - **Negative test case:** `sandbox-test` demo attempts external fetches; all should fail
+- **⚠️ Mac `sandbox-test` is truth check** — do not claim sandbox complete until verified
 - Soft-fail to rendered `fallback.md` (as HTML, not raw text) on load errors
 
 ### Reset/Next Controls
@@ -91,6 +96,20 @@ Created `sandbox-test` (negative test case):
 - HTML splitting at placeholder markers
 - Dynamic height measurement for HTML sections
 - Alternating HTML/Demo layout in single ScrollView
+
+### ✅ Content Rules Attach Bug Fix (commit `ee9f5ef`)
+**Previous bug (`3857a9d`):** 
+- `WKWebViewConfiguration` is copied at `WKWebView` init
+- Adding rules to pre-create `config` after `WKWebView(configuration: config)` mutated a dead copy
+- Rules never actually reached live webView
+
+**Fix:**
+1. Create `WKWebView` with base config first
+2. Compile `WKContentRuleList` asynchronously
+3. In callback: add rules to `webView.configuration.userContentController` (the LIVE instance)
+4. Then call `loadDemo` to start navigation
+
+**⚠️ Pending Mac `sandbox-test` verification** — truth check on device. Do not claim sandbox complete until external requests confirmed blocked.
 
 ### Critical for Production (Post-Spike)
 1. **Kit injection not functional** — v0 demos self-bundle Three.js; proper kit loading from app bundle needs implementation
