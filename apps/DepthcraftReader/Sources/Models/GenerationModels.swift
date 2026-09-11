@@ -183,6 +183,7 @@ protocol PackagerRole {
         curriculum: Curriculum,
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
+        demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata
     ) async throws -> URL
 }

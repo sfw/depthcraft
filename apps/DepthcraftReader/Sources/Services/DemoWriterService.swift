@@ -52,7 +52,7 @@ class DemoWriterService: DemoWriterRole {
               "kit": "three-v0",
               "entry": "index.html",
               "fallback": "fallback.md",
-              "entryHTML": "<!DOCTYPE html>\\n<html>\\n<head><title>Demo</title></head>\\n<body>\\n<script type=\\"module\\">\\nimport * as THREE from 'kit:three-v0/three.module.min.js';\\n// Demo code\\n</script>\\n</body>\\n</html>",
+              "entryHTML": "<!DOCTYPE html>\\n<html>\\n<head><title>Demo</title></head>\\n<body>\\n<canvas id=\\"c\\"></canvas>\\n<script type=\\"module\\">\\nimport * as THREE from 'kit:three-v0/three.module.min.js';\\n// Demo code that renders to canvas\\n</script>\\n</body>\\n</html>",
               "fallbackMarkdown": "# Demo Unavailable\\n\\nFallback explanation...",
               "insertAfterHeading": "## Section Name",
               "assets": {
@@ -77,6 +77,9 @@ class DemoWriterService: DemoWriterRole {
         - Use stable kit import placeholder: import * as THREE from 'kit:three-v0/three.module.min.js'
         - This is a placeholder convention; live Three.js requires Reader kit injection (not yet implemented)
         - Demos may soft-fail to fallback.md until kit injection lands
+        - NO decorative chrome (#info divs, loading text, or painted UI elements)
+        - Only render content via WebGL/canvas AFTER successful kit import
+        - If kit import fails, page must remain blank so Reader fallback triggers
         - NO CDN URLs, NO external fetch calls
         - Self-contained scene in HTML or split into assets
         

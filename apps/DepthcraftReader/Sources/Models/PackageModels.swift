@@ -7,6 +7,7 @@ struct PackageManifest: Codable, Hashable {
     let topic: String
     let createdAt: String
     let locale: String
+    let generator: GeneratorMetadata?
 }
 
 struct Curriculum: Codable, Hashable {

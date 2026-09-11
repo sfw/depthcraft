@@ -211,12 +211,14 @@ struct GenerationView: View {
                 )
             }
             
-            Section("Demo Writer") {
+            Section {
                 roleConfiguration(
                     provider: $demoProvider,
                     model: $demoModel,
                     temperature: $demoTemperature
                 )
+            } header: {
+                Text("Demo Writer")
             } footer: {
                 Text("Creates optional interactive demos. Most lessons will have zero demos. Density controlled by depth level.")
                     .font(.caption)

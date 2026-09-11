@@ -21,7 +21,8 @@ class PackagerService: PackagerRole {
             title: topic,
             topic: topic,
             createdAt: timestamp,
-            locale: locale
+            locale: locale,
+            generator: roleRuns
         )
         
         // Only include lessons that were actually generated (have content + quiz)
@@ -256,7 +257,7 @@ class PackagerService: PackagerRole {
                 
                 var finalMarkdown = markdown
                 
-                if let demoOutput = demos[lessonId] {
+                if let demoOutput = demos[lessonId], !demoOutput.demos.isEmpty {
                     finalMarkdown = try insertDemoDirectives(
                         markdown: markdown,
                         demos: demoOutput.demos,

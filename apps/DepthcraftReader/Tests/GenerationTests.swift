@@ -120,7 +120,8 @@ final class PackageValidationTests: XCTestCase {
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil
         )
         
         let meta = LessonMeta(
@@ -193,7 +194,8 @@ final class PackageValidationTests: XCTestCase {
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil
         )
         
         XCTAssertThrowsError(
@@ -401,7 +403,7 @@ final class PackageValidationTests: XCTestCase {
             kit: "three-v0",
             entry: "index.html",
             fallback: "fallback.md",
-            entryHTML: "<html><body><script>fetch('https://api.example.com/data').then(r => r.json())</script></body></html>",
+            entryHTML: "<html><body><script>const data = await fetch('/local/data.json'); console.log(data);</script></body></html>",
             fallbackMarkdown: "# Fallback",
             insertAfterHeading: "## Test Section",
             assets: nil
@@ -560,7 +562,8 @@ final class PackageValidationTests: XCTestCase {
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil
         )
     }
     
