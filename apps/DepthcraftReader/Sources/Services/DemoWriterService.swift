@@ -76,10 +76,7 @@ class DemoWriterService: DemoWriterRole {
         ENTRY HTML REQUIREMENTS:
         - Use stable kit import placeholder: import * as THREE from 'kit:three-v0/three.module.min.js'
         - This is a placeholder convention; live Three.js requires Reader kit injection (not yet implemented)
-        - Demos may soft-fail to fallback.md until kit injection lands
-        - NO decorative chrome (#info divs, loading text, or painted UI elements)
-        - Only render content via WebGL/canvas AFTER successful kit import
-        - If kit import fails, page must remain blank so Reader fallback triggers
+        - Reader will automatically show fallback.md if kit import fails or WebGL doesn't render
         - NO CDN URLs, NO external fetch calls
         - Self-contained scene in HTML or split into assets
         

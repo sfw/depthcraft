@@ -170,7 +170,7 @@ class GenerationOrchestrator: ObservableObject {
             }
             
             progress.phase = .writingDemos
-            progress.currentItem = "Writing demos"
+            progress.currentItem = request.depthLevel == .brief ? "Checking lessons for demos (≤1)" : "Checking lessons for demos"
             progress.completedItems = 0
             
             let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)
@@ -197,7 +197,7 @@ class GenerationOrchestrator: ObservableObject {
                     throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
                 }
                 
-                progress.currentItem = "Demos for: \(lesson.title)"
+                progress.currentItem = request.depthLevel == .brief ? "Checking: \(lesson.title) (≤1)" : "Checking: \(lesson.title)"
                 progress.completedItems = alreadyCompletedDemos + index
                 
                 // Check course-level cap before calling writeDemos

@@ -125,14 +125,27 @@ struct DemoWebView: UIViewRepresentable {
         // Add error handler for runtime failures from JavaScript
         config.userContentController.add(context.coordinator, name: "demoError")
         
-        // Inject global error handler to catch uncaught exceptions
+        // Inject global error handler to catch uncaught exceptions + kit import failures
         let errorHandlerScript = WKUserScript(
             source: """
             window.addEventListener('error', function(e) {
-                window.webkit.messageHandlers.demoError.postMessage(e.message || 'Unknown error');
+                // Check for module import failures (especially kit: imports)
+                if (e.message && (e.message.includes('Failed to fetch') || 
+                                  e.message.includes('Failed to load') ||
+                                  e.message.includes('kit:') ||
+                                  e.message.includes('import'))) {
+                    window.webkit.messageHandlers.demoError.postMessage('Kit import failed: ' + (e.message || 'Unknown error'));
+                } else {
+                    window.webkit.messageHandlers.demoError.postMessage(e.message || 'Unknown error');
+                }
             });
             window.addEventListener('unhandledrejection', function(e) {
-                window.webkit.messageHandlers.demoError.postMessage(e.reason?.toString() || 'Promise rejection');
+                const msg = e.reason?.toString() || 'Promise rejection';
+                if (msg.includes('Failed to fetch') || msg.includes('kit:')) {
+                    window.webkit.messageHandlers.demoError.postMessage('Kit import failed: ' + msg);
+                } else {
+                    window.webkit.messageHandlers.demoError.postMessage(msg);
+                }
             });
             """,
             injectionTime: .atDocumentStart,
@@ -326,37 +339,70 @@ struct DemoWebView: UIViewRepresentable {
         
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // Check after 2 seconds if demo rendered any visible content
-            // (detects blank WebGL / JS init failures that don't throw to didFail)
+            // (detects blank WebGL / JS init failures, kit import failures that don't throw)
             contentCheckTimer?.invalidate()
             contentCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self, weak webView] _ in
                 guard let self = self, let webView = webView else { return }
                 
-                // Check if body has any visible child elements (canvas, divs with content, etc.)
+                // Check if demo actually rendered meaningful content
+                // (not fooled by empty canvas or minimal chrome like "Drag to rotate...")
                 webView.evaluateJavaScript("""
                     (function() {
                         const body = document.body;
-                        if (!body) return false;
+                        if (!body) return { hasContent: false, reason: 'no body' };
                         
-                        // Check for canvas (WebGL demos)
-                        if (body.querySelector('canvas')) return true;
+                        // Check for canvas with actual WebGL context and drawing
+                        const canvas = body.querySelector('canvas');
+                        if (canvas) {
+                            try {
+                                const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+                                if (!gl) {
+                                    return { hasContent: false, reason: 'canvas but no WebGL context' };
+                                }
+                                
+                                // Check if something was actually drawn (not just black/empty)
+                                const pixels = new Uint8Array(4);
+                                gl.readPixels(canvas.width / 2, canvas.height / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                                const hasDrawn = pixels[0] !== 0 || pixels[1] !== 0 || pixels[2] !== 0 || pixels[3] !== 0;
+                                
+                                if (!hasDrawn) {
+                                    return { hasContent: false, reason: 'canvas but nothing drawn' };
+                                }
+                                
+                                return { hasContent: true, reason: 'WebGL content rendered' };
+                            } catch (e) {
+                                return { hasContent: false, reason: 'canvas error: ' + e.message };
+                            }
+                        }
                         
-                        // Check for non-empty text content
+                        // Check for non-trivial text content (more than just chrome text)
                         const text = body.innerText?.trim();
-                        if (text && text.length > 0) return true;
+                        if (text && text.length > 50) {
+                            return { hasContent: true, reason: 'substantial text content' };
+                        }
                         
-                        // Check for visible elements
-                        const visibleElements = Array.from(body.querySelectorAll('*')).filter(el => {
+                        // Check for visible non-canvas elements with content
+                        const visibleElements = Array.from(body.querySelectorAll('*:not(canvas):not(script):not(style)')).filter(el => {
                             const style = window.getComputedStyle(el);
-                            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+                            const hasContent = el.innerText?.trim().length > 0 || el.querySelector('img,video');
+                            return hasContent && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
                         });
-                        return visibleElements.length > 0;
+                        
+                        if (visibleElements.length > 2) {
+                            return { hasContent: true, reason: 'visible elements' };
+                        }
+                        
+                        return { hasContent: false, reason: 'no meaningful content detected' };
                     })();
                     """) { result, error in
-                    if let hasContent = result as? Bool, !hasContent {
+                    if let resultDict = result as? [String: Any],
+                       let hasContent = resultDict["hasContent"] as? Bool,
+                       !hasContent {
+                        let reason = (resultDict["reason"] as? String) ?? "unknown"
                         #if DEBUG
-                        print("⚠️ Demo appears blank after load, triggering fallback")
+                        print("⚠️ Demo appears blank/failed after load (\(reason)), triggering fallback")
                         #endif
-                        self.onError("Demo failed to render")
+                        self.onError("Demo failed to render or kit unavailable")
                     }
                 }
             }
