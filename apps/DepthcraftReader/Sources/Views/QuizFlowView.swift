@@ -45,7 +45,7 @@ struct QuizFlowView: View {
             Section {
                 Text("Check your understanding")
                     .font(.title2.weight(.bold))
-                Text("Answers stay on device. Cloze uses Unicode casefold + trim.")
+                Text("Answers stay on this device. Spelling isn't picky.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -93,14 +93,31 @@ struct QuizFlowView: View {
                                 .padding(.vertical, 4)
                             }
                             if let next = nextLesson {
-                                Button {
-                                    navigateToNextLesson(nextUnitId: next.unitId, nextLessonId: next.lessonId)
-                                } label: {
-                                    Label("Next lesson", systemImage: "arrow.forward.circle.fill")
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Ready for more?")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Button {
+                                        navigateToNextLesson(nextUnitId: next.unitId, nextLessonId: next.lessonId)
+                                    } label: {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Next lesson")
+                                                    .font(.headline)
+                                                Text(next.title)
+                                                    .font(.subheadline)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "arrow.forward.circle.fill")
+                                                .font(.title2)
+                                        }
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 2)
                                         .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.teal)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.teal)
                             } else {
                                 Button("Back to course") { dismiss() }
                                     .buttonStyle(.bordered)
@@ -127,14 +144,16 @@ struct QuizFlowView: View {
         Text(item.prompt)
             .font(.body.weight(.medium))
         ForEach(item.choices) { choice in
+            let isSelected = mcSelections[item.id] == choice.id
             Button {
                 guard !graded else { return }
                 mcSelections[item.id] = choice.id
             } label: {
                 HStack {
-                    Image(systemName: mcSelections[item.id] == choice.id ? "largecircle.fill.circle" : "circle")
+                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(isSelected ? Color.teal : Color.secondary)
                     Text(choice.text)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(isSelected ? Color.teal : Color(uiColor: .label))
                         .multilineTextAlignment(.leading)
                     Spacer()
                 }
