@@ -122,21 +122,21 @@ enum MarkdownHTML {
           }
           .explain-term {
             text-decoration: underline;
-            text-decoration-color: rgba(120, 113, 108, 0.4);
-            text-decoration-thickness: 1.5px;
+            text-decoration-color: rgba(120, 113, 108, 0.35);
+            text-decoration-thickness: 1px;
             text-underline-offset: 3px;
             cursor: pointer;
             -webkit-tap-highlight-color: rgba(120, 113, 108, 0.1);
           }
           .explain-term:hover {
-            text-decoration-color: rgba(120, 113, 108, 0.7);
+            text-decoration-color: rgba(120, 113, 108, 0.6);
           }
           @media (prefers-color-scheme: dark) {
             .explain-term {
-              text-decoration-color: rgba(168, 162, 158, 0.4);
+              text-decoration-color: rgba(168, 162, 158, 0.35);
             }
             .explain-term:hover {
-              text-decoration-color: rgba(168, 162, 158, 0.7);
+              text-decoration-color: rgba(168, 162, 158, 0.6);
             }
           }
           .demo-placeholder {
