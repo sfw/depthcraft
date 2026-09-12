@@ -76,6 +76,12 @@ struct UnitView: View {
             }
         }
         
+        // Remove first line if it duplicates the unit title (already in nav)
+        if let first = lines.first, let unit,
+           first.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(unit.title) == .orderedSame {
+            lines.removeFirst()
+        }
+        
         let result = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return result.isEmpty ? nil : result
     }
