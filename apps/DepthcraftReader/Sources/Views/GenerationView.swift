@@ -186,88 +186,97 @@ struct GenerationView: View {
     
     private var setupSection: some View {
         Group {
-            Section("Course Topic") {
-                TextField("Topic", text: $topic, axis: .vertical)
-                    .lineLimit(2...4)
-                
-                Picker("Locale", selection: $locale) {
-                    Text("English (Canada)").tag("en-CA")
-                    Text("English (US)").tag("en-US")
-                    Text("French").tag("fr-FR")
-                }
-            }
-            
             Section {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Current knowledge")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Picker("Current knowledge", selection: $knowledgeLevel) {
-                            ForEach(KnowledgeLevel.allCases) { level in
-                                Text(level.displayName).tag(level)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        
-                        Text("Higher levels skip foundational content")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 20) {
+                    TextField("Topic", text: $topic, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(.body)
                     
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Desired depth")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Picker("Desired depth", selection: $depthLevel) {
-                            ForEach(DepthLevel.allCases) { level in
-                                Text(level.displayName).tag(level)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        
-                        Text("Higher levels produce longer courses")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-            
-            Section {
-                if hasAnyProviderConfigured && canStartPlanning {
-                    Text(costShapeCue)
-                        .font(.caption)
+                    Text("Uses your API key · runs on-device after")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 4)
+                    
+                    Button("Start Planning") {
+                        startPlanning()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                    .disabled(!canStartPlanning)
+                    .frame(maxWidth: .infinity)
                 }
-                
-                Button("Start Planning") {
-                    startPlanning()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .disabled(!canStartPlanning)
+                .padding(.vertical, 12)
             } footer: {
                 if !hasAnyProviderConfigured {
-                    Text("Configure at least one API key in Settings to begin.")
+                    Text("Open Settings to configure an API key")
                         .foregroundStyle(.red)
                 } else if !canStartPlanning {
-                    Text("Configure API key for \(plannerProvider.displayName) in Settings")
+                    Text("Open Settings to configure \(plannerProvider.displayName) key")
                         .foregroundStyle(.red)
                 }
             }
             
             Section {
                 DisclosureGroup {
-                    VStack(spacing: 0) {
-                        modelsSectionContent
+                    VStack(alignment: .leading, spacing: 24) {
+                        Picker("Locale", selection: $locale) {
+                            Text("English (Canada)").tag("en-CA")
+                            Text("English (US)").tag("en-US")
+                            Text("French").tag("fr-FR")
+                        }
+                        .pickerStyle(.menu)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Current knowledge")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Picker("Current knowledge", selection: $knowledgeLevel) {
+                                ForEach(KnowledgeLevel.allCases) { level in
+                                    Text(level.displayName).tag(level)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            
+                            Text("Higher levels skip foundational content")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Desired depth")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Picker("Desired depth", selection: $depthLevel) {
+                                ForEach(DepthLevel.allCases) { level in
+                                    Text(level.displayName).tag(level)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            
+                            Text("Higher levels produce longer courses")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        if hasAnyProviderConfigured && canStartPlanning {
+                            Text(costShapeCue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        
+                        DisclosureGroup {
+                            VStack(spacing: 0) {
+                                modelsSectionContent
+                            }
+                        } label: {
+                            Text("Models")
+                        }
                     }
+                    .padding(.vertical, 8)
                 } label: {
-                    Text("Models")
+                    Text("Advanced")
                 }
             }
         }
@@ -371,23 +380,78 @@ struct GenerationView: View {
     
     private var progressSection: some View {
         Section {
-            VStack(spacing: 16) {
-                Text(orchestrator.progress.phase.displayName)
-                    .font(.headline)
+            VStack(alignment: .leading, spacing: 12) {
+                progressStep(
+                    label: "Curriculum",
+                    isActive: orchestrator.progress.phase == .planning,
+                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.planning.rawValue
+                )
                 
-                ProgressView(value: orchestrator.progress.progressPercent)
+                progressStep(
+                    label: "Lessons",
+                    isActive: orchestrator.progress.phase == .writingLessons,
+                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingLessons.rawValue
+                )
                 
-                if let item = orchestrator.progress.currentItem {
-                    Text(item)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                progressStep(
+                    label: "Quizzes",
+                    isActive: orchestrator.progress.phase == .writingQuizzes,
+                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingQuizzes.rawValue
+                )
+                
+                progressStep(
+                    label: "Demos",
+                    isActive: orchestrator.progress.phase == .writingDemos,
+                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingDemos.rawValue
+                )
+                
+                progressStep(
+                    label: "Package",
+                    isActive: orchestrator.progress.phase == .packaging,
+                    isCompleted: orchestrator.progress.phase == .completed
+                )
+                
+                if let item = orchestrator.progress.currentItem, orchestrator.progress.phase != .idle {
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            
+                            Text("\(orchestrator.progress.completedItems) of \(orchestrator.progress.totalItems)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                    } label: {
+                        Text("Details")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                
-                Text("\(orchestrator.progress.completedItems) of \(orchestrator.progress.totalItems)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical)
+            .padding(.vertical, 8)
+        }
+    }
+    
+    private func progressStep(label: String, isActive: Bool, isCompleted: Bool) -> some View {
+        HStack(spacing: 12) {
+            if isCompleted {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            } else if isActive {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "circle")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+            }
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(isActive ? .teal : .secondary)
         }
     }
     
@@ -585,7 +649,7 @@ struct GenerationView: View {
         do {
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
@@ -593,12 +657,12 @@ struct GenerationView: View {
             // Validate custom endpoint config
             if plannerProvider == .custom {
                 guard !customBaseURL.isEmpty else {
-                    errorMessage = "Custom endpoint requires a base URL"
+                    errorMessage = "Custom endpoint needs a base URL. Check Settings to configure"
                     showingError = true
                     return
                 }
                 guard !customModel.isEmpty else {
-                    errorMessage = "Custom endpoint requires a model"
+                    errorMessage = "Custom endpoint needs a model name. Check Settings to configure"
                     showingError = true
                     return
                 }
@@ -656,57 +720,57 @@ struct GenerationView: View {
         do {
             // Validate all required keys present
             guard canContinueGeneration else {
-                errorMessage = "Missing API keys for lesson writer or quiz writer. Please configure in Settings."
+                errorMessage = "Some API keys are missing. Open Settings to add them"
                 showingError = true
                 return
             }
             
             let lessonKey = try keyStore.getKey(for: lessonProvider)
             guard let lessonKey else {
-                errorMessage = "No API key configured for \(lessonProvider.displayName)"
+                errorMessage = "Add your \(lessonProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let quizKey = try keyStore.getKey(for: quizProvider)
             guard let quizKey else {
-                errorMessage = "No API key configured for \(quizProvider.displayName)"
+                errorMessage = "Add your \(quizProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let demoKey = try keyStore.getKey(for: demoProvider)
             guard let demoKey else {
-                errorMessage = "No API key configured for \(demoProvider.displayName)"
+                errorMessage = "Add your \(demoProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             // Validate custom endpoints if used
             if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for lesson writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for quiz writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for demo writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if plannerProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for planner requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
