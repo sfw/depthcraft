@@ -337,9 +337,8 @@ struct DemoHostView: View {
     }
     
     private func renderFallbackAsHTML(_ markdown: String) -> String {
-        // Render fallback markdown as readable HTML
-        let renderResult = MarkdownHTML.render(markdown, title: "Demo Unavailable", estimatedMinutes: nil)
-        return renderResult.html
+        // Render demo fallback without lesson chrome or eyebrow
+        return MarkdownHTML.renderDemoFallback(markdown)
     }
     
     private func errorContentView(_ message: String) -> some View {
