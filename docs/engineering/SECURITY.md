@@ -49,7 +49,7 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
 - **Extend security**: Extend feature is UX-gated (confirmation modal) but not crypto-signed
 
 ### Non-Goals
-- App Store review / notarization (field trial = local build + TestFlight at most)
+- App Store review / notarization (field trial = local build)
 - Formal audits or penetration testing
 - GDPR / CCPA / SOC2 compliance (no accounts, no telemetry, no PII collection)
 - Multi-user / enterprise key management (single-device BYOK only)
