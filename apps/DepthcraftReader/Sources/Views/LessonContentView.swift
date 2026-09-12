@@ -414,10 +414,6 @@ struct ExplanationSheetView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(term)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    
                     Text(parseMarkdown(gloss))
                         .font(.body)
                         .foregroundStyle(.secondary)
