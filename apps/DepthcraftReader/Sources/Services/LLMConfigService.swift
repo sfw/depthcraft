@@ -19,13 +19,16 @@ class LLMConfigService {
     
     /// Get the first available LLM configuration
     /// Priority: Anthropic → OpenAI → OpenRouter → Custom
-    /// Uses same model defaults as Generate UI
+    /// Uses user's configured models from Generate settings
     func getAvailableConfig() throws -> LLMConfiguration? {
         // Try Anthropic first
         if apiKeyStore.hasAnthropicKey, let key = try apiKeyStore.getKey(for: .anthropic) {
+            guard let model = apiKeyStore.getModel(for: .anthropic), !model.isEmpty else {
+                throw GlossServiceError.noModelConfigured(provider: "Anthropic")
+            }
             return LLMConfiguration(
                 provider: .anthropic,
-                model: "claude-sonnet-5",
+                model: model,
                 apiKey: key,
                 customBaseURL: nil
             )
@@ -33,9 +36,12 @@ class LLMConfigService {
         
         // Try OpenAI
         if apiKeyStore.hasOpenAIKey, let key = try apiKeyStore.getKey(for: .openai) {
+            guard let model = apiKeyStore.getModel(for: .openai), !model.isEmpty else {
+                throw GlossServiceError.noModelConfigured(provider: "OpenAI")
+            }
             return LLMConfiguration(
                 provider: .openai,
-                model: "gpt-4o",
+                model: model,
                 apiKey: key,
                 customBaseURL: nil
             )
@@ -43,9 +49,12 @@ class LLMConfigService {
         
         // Try OpenRouter
         if apiKeyStore.hasOpenRouterKey, let key = try apiKeyStore.getKey(for: .openrouter) {
+            guard let model = apiKeyStore.getModel(for: .openrouter), !model.isEmpty else {
+                throw GlossServiceError.noModelConfigured(provider: "OpenRouter")
+            }
             return LLMConfiguration(
                 provider: .openrouter,
-                model: "anthropic/claude-sonnet-5",
+                model: model,
                 apiKey: key,
                 customBaseURL: nil
             )

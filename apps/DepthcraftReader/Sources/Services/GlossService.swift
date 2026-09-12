@@ -3,6 +3,7 @@ import Foundation
 enum GlossServiceError: LocalizedError {
     case offline
     case noAPIKey
+    case noModelConfigured(provider: String)
     case llmError(Error)
     
     var errorDescription: String? {
@@ -11,6 +12,8 @@ enum GlossServiceError: LocalizedError {
             return "You're offline. Tap-to-explain requires an internet connection to generate explanations for terms not included in the lesson."
         case .noAPIKey:
             return "No API key configured. Go to Settings → Generate to add an API key."
+        case .noModelConfigured(let provider):
+            return "No model configured for \(provider). Generate a course with \(provider) first to set a model, or configure a different provider in Settings."
         case .llmError(let error):
             return "Failed to generate explanation: \(error.localizedDescription)"
         }

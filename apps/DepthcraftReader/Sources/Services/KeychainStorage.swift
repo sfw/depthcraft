@@ -118,6 +118,11 @@ class APIKeyStore: ObservableObject {
     private let customBaseURLKey = "llm.custom.baseurl"
     private let customModelKey = "llm.custom.model"
     
+    // User's configured model per provider (for BYOK tap-to-explain/Discuss)
+    private let anthropicModelKey = "llm.anthropic.model"
+    private let openaiModelKey = "llm.openai.model"
+    private let openrouterModelKey = "llm.openrouter.model"
+    
     init() {
         refreshStatus()
     }
@@ -166,6 +171,34 @@ class APIKeyStore: ObservableObject {
     func setCustomModel(_ value: String) {
         UserDefaults.standard.set(value, forKey: customModelKey)
         customModel = value
+    }
+    
+    /// Get user's configured model for a provider (for tap-to-explain/Discuss)
+    func getModel(for provider: LLMProvider) -> String? {
+        switch provider {
+        case .anthropic:
+            return UserDefaults.standard.string(forKey: anthropicModelKey)
+        case .openai:
+            return UserDefaults.standard.string(forKey: openaiModelKey)
+        case .openrouter:
+            return UserDefaults.standard.string(forKey: openrouterModelKey)
+        case .custom:
+            return getCustomModel()
+        }
+    }
+    
+    /// Set user's configured model for a provider
+    func setModel(_ value: String, for provider: LLMProvider) {
+        switch provider {
+        case .anthropic:
+            UserDefaults.standard.set(value, forKey: anthropicModelKey)
+        case .openai:
+            UserDefaults.standard.set(value, forKey: openaiModelKey)
+        case .openrouter:
+            UserDefaults.standard.set(value, forKey: openrouterModelKey)
+        case .custom:
+            setCustomModel(value)
+        }
     }
     
     private func keyString(for provider: LLMProvider) -> String {

@@ -90,6 +90,9 @@ struct GenerationView: View {
             customBaseURL = keyStore.customBaseURL
             customModel = keyStore.customModel
             
+            // Load stored model selections
+            loadStoredModels()
+            
             // If extending, pre-populate from existing course and default to Brief
             if let course = extendFromCourse {
                 topic = course.manifest.topic
@@ -106,6 +109,19 @@ struct GenerationView: View {
         .onChange(of: keyStore.hasCustomKey) { _, _ in ensureValidProviderSelections() }
         .onChange(of: keyStore.customBaseURL) { _, _ in ensureValidProviderSelections() }
         .onChange(of: keyStore.customModel) { _, _ in ensureValidProviderSelections() }
+        // Persist model selections when changed
+        .onChange(of: plannerModel) { _, newValue in
+            keyStore.setModel(newValue, for: plannerProvider)
+        }
+        .onChange(of: lessonModel) { _, newValue in
+            keyStore.setModel(newValue, for: lessonProvider)
+        }
+        .onChange(of: quizModel) { _, newValue in
+            keyStore.setModel(newValue, for: quizProvider)
+        }
+        .onChange(of: demoModel) { _, newValue in
+            keyStore.setModel(newValue, for: demoProvider)
+        }
     }
     
     private var availableProviders: [LLMProvider] {
@@ -181,6 +197,41 @@ struct GenerationView: View {
             return "anthropic/claude-sonnet-5"
         case .custom:
             return keyStore.customModel
+        }
+    }
+    
+    private func loadStoredModels() {
+        // Load stored models for each provider, falling back to defaults and persisting them
+        let plannerDefault = defaultModel(for: plannerProvider)
+        if let stored = keyStore.getModel(for: plannerProvider), !stored.isEmpty {
+            plannerModel = stored
+        } else {
+            plannerModel = plannerDefault
+            keyStore.setModel(plannerDefault, for: plannerProvider)
+        }
+        
+        let lessonDefault = defaultModel(for: lessonProvider)
+        if let stored = keyStore.getModel(for: lessonProvider), !stored.isEmpty {
+            lessonModel = stored
+        } else {
+            lessonModel = lessonDefault
+            keyStore.setModel(lessonDefault, for: lessonProvider)
+        }
+        
+        let quizDefault = defaultModel(for: quizProvider)
+        if let stored = keyStore.getModel(for: quizProvider), !stored.isEmpty {
+            quizModel = stored
+        } else {
+            quizModel = quizDefault
+            keyStore.setModel(quizDefault, for: quizProvider)
+        }
+        
+        let demoDefault = defaultModel(for: demoProvider)
+        if let stored = keyStore.getModel(for: demoProvider), !stored.isEmpty {
+            demoModel = stored
+        } else {
+            demoModel = demoDefault
+            keyStore.setModel(demoDefault, for: demoProvider)
         }
     }
     
