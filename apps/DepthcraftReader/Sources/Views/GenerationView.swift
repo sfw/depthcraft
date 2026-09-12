@@ -197,84 +197,43 @@ struct GenerationView: View {
                 }
             }
             
-            Section("Planner") {
-                roleConfiguration(
-                    provider: $plannerProvider,
-                    model: $plannerModel,
-                    temperature: $plannerTemperature
-                )
-            }
-            
-            Section("Lesson Writer") {
-                roleConfiguration(
-                    provider: $lessonProvider,
-                    model: $lessonModel,
-                    temperature: $lessonTemperature
-                )
-            }
-            
-            Section("Quiz Writer") {
-                roleConfiguration(
-                    provider: $quizProvider,
-                    model: $quizModel,
-                    temperature: $quizTemperature
-                )
-            }
-            
             Section {
-                roleConfiguration(
-                    provider: $demoProvider,
-                    model: $demoModel,
-                    temperature: $demoTemperature
-                )
-            } header: {
-                Text("Demo Writer")
-            } footer: {
-                Text("Creates optional interactive demos. Most lessons will have zero demos. Density controlled by depth level.")
-                    .font(.caption)
-            }
-            
-            Section("Advanced") {
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Current knowledge")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Picker("Current knowledge", selection: $knowledgeLevel) {
-                                ForEach(KnowledgeLevel.allCases) { level in
-                                    Text(level.displayName).tag(level)
-                                }
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Current knowledge")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Picker("Current knowledge", selection: $knowledgeLevel) {
+                            ForEach(KnowledgeLevel.allCases) { level in
+                                Text(level.displayName).tag(level)
                             }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            
-                            Text("Higher levels skip/compress foundational content")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
                         
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Desired depth")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Picker("Desired depth", selection: $depthLevel) {
-                                ForEach(DepthLevel.allCases) { level in
-                                    Text(level.displayName).tag(level)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            
-                            Text("Higher levels produce longer, more comprehensive courses")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Higher levels skip foundational content")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 8)
-                } label: {
-                    Text("Knowledge & Depth Controls")
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Desired depth")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Picker("Desired depth", selection: $depthLevel) {
+                            ForEach(DepthLevel.allCases) { level in
+                                Text(level.displayName).tag(level)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        
+                        Text("Higher levels produce longer courses")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.vertical, 8)
             }
             
             Section {
@@ -294,13 +253,85 @@ struct GenerationView: View {
                 .disabled(!canStartPlanning)
             } footer: {
                 if !hasAnyProviderConfigured {
-                    Text("Configure at least one API key in Settings to start generating courses.")
+                    Text("Configure at least one API key in Settings to begin.")
                         .foregroundStyle(.red)
                 } else if !canStartPlanning {
                     Text("Configure API key for \(plannerProvider.displayName) in Settings")
                         .foregroundStyle(.red)
                 }
             }
+            
+            Section {
+                DisclosureGroup {
+                    VStack(spacing: 0) {
+                        modelsSectionContent
+                    }
+                } label: {
+                    Text("Models")
+                }
+            }
+        }
+    }
+    
+    private var modelsSectionContent: some View {
+        Group {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Planner")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                
+                roleConfiguration(
+                    provider: $plannerProvider,
+                    model: $plannerModel,
+                    temperature: $plannerTemperature
+                )
+            }
+            .padding(.bottom, 16)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Lesson Writer")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                roleConfiguration(
+                    provider: $lessonProvider,
+                    model: $lessonModel,
+                    temperature: $lessonTemperature
+                )
+            }
+            .padding(.bottom, 16)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Quiz Writer")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                roleConfiguration(
+                    provider: $quizProvider,
+                    model: $quizModel,
+                    temperature: $quizTemperature
+                )
+            }
+            .padding(.bottom, 16)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Demo Writer")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("Creates optional interactive demos when meaningful.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                roleConfiguration(
+                    provider: $demoProvider,
+                    model: $demoModel,
+                    temperature: $demoTemperature
+                )
+            }
+            .padding(.bottom, 8)
         }
     }
     
