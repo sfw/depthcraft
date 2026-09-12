@@ -997,19 +997,16 @@ final class ExtendRefreshTests: XCTestCase {
     func testSamePathExtensionDoesNotWipePriorContent() async throws {
         let packager = PackagerService()
         let fm = FileManager.default
-        let tempDir = fm.temporaryDirectory
-        
-        let documentsSimulatedURL = tempDir.appendingPathComponent("simulated-documents")
-        try? fm.removeItem(at: documentsSimulatedURL)
-        try fm.createDirectory(at: documentsSimulatedURL, withIntermediateDirectories: true)
-        
-        defer {
-            try? fm.removeItem(at: documentsSimulatedURL)
-        }
         
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        let packageId = "test-same-path"
-        let packageURL = documentsSimulatedURL.appendingPathComponent("\(packageId).depthcraft")
+        let packageId = "test-same-path-\(UUID().uuidString.prefix(8))"
+        
+        let documentsURL = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let packageURL = documentsURL.appendingPathComponent("\(packageId).depthcraft")
+        
+        defer {
+            try? fm.removeItem(at: packageURL)
+        }
         
         let initialManifest = PackageManifest(
             schemaVersion: "0.1.0",
@@ -1139,7 +1136,8 @@ final class ExtendRefreshTests: XCTestCase {
             extendFrom: packageURL
         )
         
-        XCTAssertEqual(resultURL.standardizedFileURL, packageURL.standardizedFileURL, "Should return same path")
+        XCTAssertEqual(resultURL.standardizedFileURL.path, packageURL.standardizedFileURL.path, "Should return same Documents path")
+        XCTAssertEqual(resultURL.path, documentsURL.appendingPathComponent("\(packageId).depthcraft").path, "Should be at expected Documents location")
         
         let finalOriginalLessonURL = resultURL.appendingPathComponent("content/units/u01-original/lessons/l01-original/lesson.md")
         let finalOriginalQuizURL = resultURL.appendingPathComponent("content/units/u01-original/lessons/l01-original/quiz.json")
