@@ -435,22 +435,113 @@ enum MarkdownHTML {
         let sortedAnchors = anchors.sorted { ($0.term?.count ?? 0) > ($1.term?.count ?? 0) }
         
         for anchor in sortedAnchors {
-            guard let term = anchor.term, let gloss = anchor.gloss else { continue }
+            guard let term = anchor.term else { continue }
             
-            // Escape HTML entities in term for matching
+            // Escape HTML entities in term for matching (terms should already be plain text)
             let escapedTerm = escape(term)
             
-            // Only wrap first occurrence to avoid over-decoration
-            if let range = result.range(of: escapedTerm, options: []) {
-                let glossData = gloss
-                    .replacingOccurrences(of: "\"", with: "&quot;")
-                    .replacingOccurrences(of: "\n", with: " ")
-                
-                let wrapped = "<span class=\"explain-term\" data-anchor-id=\"\(anchor.id)\" data-gloss=\"\(glossData)\">\(escapedTerm)</span>"
-                result.replaceSubrange(range, with: wrapped)
-            }
+            // Only wrap first occurrence in text nodes (not inside tags, code, or existing spans)
+            result = wrapTermInTextNodes(html: result, term: escapedTerm, anchorId: anchor.id)
         }
         
         return result
+    }
+    
+    private static func wrapTermInTextNodes(html: String, term: String, anchorId: String) -> String {
+        var output = ""
+        var i = html.startIndex
+        var insideTag = false
+        var insideCode = false
+        var insideExplainSpan = false
+        var codeTagStack: [String] = []
+        var spanDepth = 0
+        var wrapped = false
+        
+        while i < html.endIndex {
+            let char = html[i]
+            
+            // Track tag boundaries
+            if char == "<" {
+                insideTag = true
+                let tagStart = i
+                
+                // Look ahead to identify tag
+                var j = html.index(after: i)
+                var tagName = ""
+                var isClosing = false
+                
+                if j < html.endIndex && html[j] == "/" {
+                    isClosing = true
+                    j = html.index(after: j)
+                }
+                
+                while j < html.endIndex && html[j] != " " && html[j] != ">" {
+                    tagName.append(html[j])
+                    j = html.index(after: j)
+                }
+                
+                let lowerTag = tagName.lowercased()
+                
+                // Track code/pre blocks
+                if lowerTag == "code" || lowerTag == "pre" {
+                    if isClosing {
+                        if !codeTagStack.isEmpty && codeTagStack.last == lowerTag {
+                            codeTagStack.removeLast()
+                            insideCode = !codeTagStack.isEmpty
+                        }
+                    } else {
+                        codeTagStack.append(lowerTag)
+                        insideCode = true
+                    }
+                }
+                
+                // Track explain-term spans
+                if lowerTag == "span" && !isClosing {
+                    // Check if this is an explain-term span
+                    if let tagEnd = html[i...].firstIndex(of: ">") {
+                        let tagContent = String(html[i...tagEnd])
+                        if tagContent.contains("class=\"explain-term\"") || tagContent.contains("class='explain-term'") {
+                            insideExplainSpan = true
+                            spanDepth += 1
+                        }
+                    }
+                } else if lowerTag == "span" && isClosing && insideExplainSpan {
+                    spanDepth -= 1
+                    if spanDepth <= 0 {
+                        insideExplainSpan = false
+                        spanDepth = 0
+                    }
+                }
+            } else if char == ">" && insideTag {
+                insideTag = false
+                output.append(char)
+                i = html.index(after: i)
+                continue
+            }
+            
+            // If we're inside a tag, code block, or existing explain span, just copy
+            if insideTag || insideCode || insideExplainSpan {
+                output.append(char)
+                i = html.index(after: i)
+                continue
+            }
+            
+            // We're in text content - check if term matches here
+            if !wrapped && html[i...].starts(with: term) {
+                // Found first occurrence in text node - wrap it
+                output.append("<span class=\"explain-term\" data-anchor-id=\"\(anchorId)\">")
+                output.append(term)
+                output.append("</span>")
+                i = html.index(i, offsetBy: term.count)
+                wrapped = true
+                continue
+            }
+            
+            // Regular text content
+            output.append(char)
+            i = html.index(after: i)
+        }
+        
+        return output
     }
 }

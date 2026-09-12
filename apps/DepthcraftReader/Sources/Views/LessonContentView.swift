@@ -26,7 +26,7 @@ struct LessonContentView: View {
             }
         }
         .sheet(item: $explainSheet) { sheet in
-            ExplainationSheetView(term: sheet.term, gloss: sheet.gloss)
+            ExplanationSheetView(term: sheet.term, gloss: sheet.gloss)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
@@ -243,22 +243,21 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         
         // Add message handler for explain taps
         let contentController = config.userContentController
-        let tapHandler = ExplainTapHandler(explainSheet: explainSheet)
+        let tapHandler = ExplainTapHandler(explainSheet: explainSheet, explainAnchors: explainAnchors)
         contentController.add(tapHandler, name: "explainTap")
         
         // Inject tap handler script
         let tapScript = WKUserScript(
             source: """
             document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('explain-term')) {
+                const target = e.target.closest('.explain-term');
+                if (target) {
                     e.preventDefault();
-                    const anchorId = e.target.getAttribute('data-anchor-id');
-                    const gloss = e.target.getAttribute('data-gloss');
-                    const term = e.target.textContent;
+                    const anchorId = target.getAttribute('data-anchor-id');
+                    const term = target.textContent;
                     window.webkit.messageHandlers.explainTap.postMessage({
                         anchorId: anchorId,
-                        term: term,
-                        gloss: gloss
+                        term: term
                     });
                 }
             });
@@ -293,16 +292,24 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     
     private class ExplainTapHandler: NSObject, WKScriptMessageHandler {
         var explainSheet: Binding<ExplainSheet?>
+        var explainAnchors: [LessonMeta.Anchor]
         
-        init(explainSheet: Binding<ExplainSheet?>) {
+        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor]) {
             self.explainSheet = explainSheet
+            self.explainAnchors = explainAnchors
         }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "explainTap",
                   let body = message.body as? [String: String],
-                  let term = body["term"],
-                  let gloss = body["gloss"] else {
+                  let anchorId = body["anchorId"],
+                  let term = body["term"] else {
+                return
+            }
+            
+            // Look up gloss by anchor ID
+            guard let anchor = explainAnchors.first(where: { $0.id == anchorId }),
+                  let gloss = anchor.gloss else {
                 return
             }
             
@@ -398,7 +405,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     }
 }
 
-struct ExplainationSheetView: View {
+struct ExplanationSheetView: View {
     let term: String
     let gloss: String
     @Environment(\.dismiss) private var dismiss

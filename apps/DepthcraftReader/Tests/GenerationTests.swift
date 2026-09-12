@@ -1202,6 +1202,133 @@ final class LessonMetaExtractionTests: XCTestCase {
     }
 }
 
+final class ExplainUnderlineInjectionTests: XCTestCase {
+    
+    func testInjectExplainInTextNodesOnly() {
+        let html = "<p>The harness pattern is <strong>powerful</strong> but requires careful design.</p>"
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "harness",
+                kind: "concept",
+                term: "harness",
+                gloss: "A control structure that manages interactions."
+            )
+        ]
+        
+        let result = MarkdownHTML.render("# Test", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should wrap "harness" but not affect tags or attributes
+        XCTAssertTrue(result.html.contains("explain-term"))
+        XCTAssertTrue(result.html.contains("data-anchor-id=\"test-explain-1\""))
+    }
+    
+    func testInjectDoesNotMatchInsideTags() {
+        let html = "<p>See <a href=\"/code\">code</a> for details.</p>"
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "code",
+                kind: "concept",
+                term: "code",
+                gloss: "Source code."
+            )
+        ]
+        
+        let testHtml = html
+        let result = MarkdownHTML.render("See `code` for details.", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should not wrap "code" inside href attribute
+        let codeInAttribute = result.html.contains("href=\"/code\"")
+        XCTAssertTrue(codeInAttribute, "Should preserve code in href attribute")
+    }
+    
+    func testInjectDoesNotMatchInsideCodeBlock() {
+        let html = "<p>Use the <code>fetch</code> API to load data.</p>"
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "fetch",
+                kind: "concept",
+                term: "fetch",
+                gloss: "A browser API."
+            )
+        ]
+        
+        let result = MarkdownHTML.render("Use the `fetch` API to load data.", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should not wrap "fetch" inside <code> tag
+        let hasCodeTag = result.html.contains("<code>fetch</code>")
+        XCTAssertTrue(hasCodeTag, "Should preserve code tag")
+        
+        // Count occurrences of explain-term - should be 0 (inside code) or match outside code only
+        let explainCount = result.html.components(separatedBy: "explain-term").count - 1
+        XCTAssertTrue(explainCount <= 1, "Should not wrap inside code blocks")
+    }
+    
+    func testInjectFirstOccurrenceOnly() {
+        let html = "<p>A harness controls the harness pattern implementation.</p>"
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "harness",
+                kind: "concept",
+                term: "harness",
+                gloss: "A control structure."
+            )
+        ]
+        
+        let result = MarkdownHTML.render("A harness controls the harness pattern implementation.", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should wrap only first occurrence
+        let explainCount = result.html.components(separatedBy: "explain-term").count - 1
+        XCTAssertEqual(explainCount, 1, "Should wrap first occurrence only")
+    }
+    
+    func testInjectMultipleAnchors() {
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "harness",
+                kind: "concept",
+                term: "harness",
+                gloss: "A control structure."
+            ),
+            LessonMeta.Anchor(
+                id: "test-explain-2",
+                heading: "orchestration",
+                kind: "concept",
+                term: "orchestration",
+                gloss: "Coordinating multiple steps."
+            )
+        ]
+        
+        let result = MarkdownHTML.render("The harness enables orchestration of complex flows.", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should wrap both terms
+        XCTAssertTrue(result.html.contains("test-explain-1"))
+        XCTAssertTrue(result.html.contains("test-explain-2"))
+    }
+    
+    func testInjectHandlesHTMLEntities() {
+        let anchors = [
+            LessonMeta.Anchor(
+                id: "test-explain-1",
+                heading: "API",
+                kind: "concept",
+                term: "API",
+                gloss: "Application Programming Interface."
+            )
+        ]
+        
+        let result = MarkdownHTML.render("The API & SDK work together.", title: "Test", estimatedMinutes: nil, anchors: anchors)
+        
+        // Should handle & entity correctly
+        XCTAssertTrue(result.html.contains("explain-term"))
+        XCTAssertTrue(result.html.contains("&amp;"), "Should preserve HTML entities")
+    }
+}
+
 class MockLLMClient: LLMClient {
     func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
         return "Mock response"

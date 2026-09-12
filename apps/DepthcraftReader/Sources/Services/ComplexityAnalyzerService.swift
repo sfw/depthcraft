@@ -88,11 +88,20 @@ class ComplexityAnalyzerService {
         }
         
         return parsed.anchors.enumerated().map { index, item in
-            let anchorId = "explain-\(index + 1)"
+            let anchorId = "\(lessonId)-explain-\(index + 1)"
+            
+            // Validate kind against allowed enum values
+            let validKind: String
+            if ["concept", "prerequisite"].contains(item.kind) {
+                validKind = item.kind
+            } else {
+                validKind = "concept" // Default to concept if LLM returns invalid kind
+            }
+            
             return LessonMeta.Anchor(
                 id: anchorId,
                 heading: item.term,
-                kind: item.kind,
+                kind: validKind,
                 term: item.term,
                 gloss: item.gloss
             )

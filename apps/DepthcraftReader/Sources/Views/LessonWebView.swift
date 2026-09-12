@@ -27,15 +27,14 @@ struct LessonWebView: UIViewRepresentable {
         let tapScript = WKUserScript(
             source: """
             document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('explain-term')) {
+                const target = e.target.closest('.explain-term');
+                if (target) {
                     e.preventDefault();
-                    const anchorId = e.target.getAttribute('data-anchor-id');
-                    const gloss = e.target.getAttribute('data-gloss');
-                    const term = e.target.textContent;
+                    const anchorId = target.getAttribute('data-anchor-id');
+                    const term = target.textContent;
                     window.webkit.messageHandlers.explainTap.postMessage({
                         anchorId: anchorId,
-                        term: term,
-                        gloss: gloss
+                        term: term
                     });
                 }
             });
@@ -64,6 +63,7 @@ struct LessonWebView: UIViewRepresentable {
         }
         context.coordinator.onScrolledToEnd = onScrolledToEnd
         context.coordinator.explainSheet = _explainSheet
+        context.coordinator.explainAnchors = explainAnchors
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -72,13 +72,20 @@ struct LessonWebView: UIViewRepresentable {
         var lastHTML: String?
         var onScrolledToEnd: (() -> Void)?
         var explainSheet: Binding<ExplainSheet?>?
+        var explainAnchors: [LessonMeta.Anchor] = []
         private var hasNotifiedEnd = false
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "explainTap",
                   let body = message.body as? [String: String],
-                  let term = body["term"],
-                  let gloss = body["gloss"] else {
+                  let anchorId = body["anchorId"],
+                  let term = body["term"] else {
+                return
+            }
+            
+            // Look up gloss by anchor ID
+            guard let anchor = explainAnchors.first(where: { $0.id == anchorId }),
+                  let gloss = anchor.gloss else {
                 return
             }
             
