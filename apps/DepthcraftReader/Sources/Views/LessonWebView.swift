@@ -5,11 +5,21 @@ struct ExplainSheet: Identifiable {
     let id = UUID()
     let term: String
     let gloss: String
+    let isBakedAnchor: Bool
+    let lessonContext: LessonContext?
+    
+    struct LessonContext {
+        let courseTitle: String
+        let lessonTitle: String
+        let unitId: String
+        let lessonId: String
+    }
 }
 
 struct LessonWebView: UIViewRepresentable {
     let html: String
     let explainAnchors: [LessonMeta.Anchor]
+    let lessonContext: ExplainSheet.LessonContext?
     let onScrolledToEnd: () -> Void
     @Binding var explainSheet: ExplainSheet?
 
@@ -52,6 +62,7 @@ struct LessonWebView: UIViewRepresentable {
         webView.scrollView.delegate = context.coordinator
         
         context.coordinator.explainSheet = _explainSheet
+        context.coordinator.lessonContext = lessonContext
         
         return webView
     }
@@ -64,6 +75,7 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.onScrolledToEnd = onScrolledToEnd
         context.coordinator.explainSheet = _explainSheet
         context.coordinator.explainAnchors = explainAnchors
+        context.coordinator.lessonContext = lessonContext
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -73,6 +85,7 @@ struct LessonWebView: UIViewRepresentable {
         var onScrolledToEnd: (() -> Void)?
         var explainSheet: Binding<ExplainSheet?>?
         var explainAnchors: [LessonMeta.Anchor] = []
+        var lessonContext: ExplainSheet.LessonContext?
         private var hasNotifiedEnd = false
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -83,14 +96,19 @@ struct LessonWebView: UIViewRepresentable {
                 return
             }
             
-            // Look up gloss by anchor ID
+            // Look up gloss by anchor ID (baked anchor from Slice A)
             guard let anchor = explainAnchors.first(where: { $0.id == anchorId }),
                   let gloss = anchor.gloss else {
                 return
             }
             
             DispatchQueue.main.async {
-                self.explainSheet?.wrappedValue = ExplainSheet(term: term, gloss: gloss)
+                self.explainSheet?.wrappedValue = ExplainSheet(
+                    term: term,
+                    gloss: gloss,
+                    isBakedAnchor: true,
+                    lessonContext: self.lessonContext
+                )
             }
         }
 

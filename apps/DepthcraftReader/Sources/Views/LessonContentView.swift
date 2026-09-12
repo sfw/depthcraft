@@ -10,6 +10,15 @@ struct LessonContentView: View {
     
     @State private var explainSheet: ExplainSheet?
     
+    private var lessonContext: ExplainSheet.LessonContext {
+        ExplainSheet.LessonContext(
+            courseTitle: course.manifest.title,
+            lessonTitle: course.curriculum.lessons[lessonId]?.title ?? "Lesson",
+            unitId: unitId,
+            lessonId: lessonId
+        )
+    }
+    
     var body: some View {
         Group {
             if renderResult.demos.isEmpty {
@@ -17,6 +26,7 @@ struct LessonContentView: View {
                 LessonWebView(
                     html: renderResult.html,
                     explainAnchors: renderResult.explainAnchors,
+                    lessonContext: lessonContext,
                     onScrolledToEnd: onScrolledToEnd,
                     explainSheet: $explainSheet
                 )
@@ -26,9 +36,14 @@ struct LessonContentView: View {
             }
         }
         .sheet(item: $explainSheet) { sheet in
-            ExplanationSheetView(term: sheet.term, gloss: sheet.gloss)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+            ExplanationSheetView(
+                term: sheet.term,
+                gloss: sheet.gloss,
+                isBakedAnchor: sheet.isBakedAnchor,
+                lessonContext: sheet.lessonContext
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
     
@@ -41,6 +56,7 @@ struct LessonContentView: View {
             unitId: unitId,
             lessonId: lessonId,
             explainAnchors: renderResult.explainAnchors,
+            lessonContext: lessonContext,
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
@@ -134,6 +150,7 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     let unitId: String
     let lessonId: String
     let explainAnchors: [LessonMeta.Anchor]
+    let lessonContext: ExplainSheet.LessonContext
     @Binding var explainSheet: ExplainSheet?
     let onScrolledToEnd: () -> Void
     
@@ -144,6 +161,7 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
             unitId: unitId,
             lessonId: lessonId,
             explainAnchors: explainAnchors,
+            lessonContext: lessonContext,
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
@@ -160,18 +178,20 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     let unitId: String
     let lessonId: String
     let explainAnchors: [LessonMeta.Anchor]
+    let lessonContext: ExplainSheet.LessonContext
     var explainSheet: Binding<ExplainSheet?>
     let onScrolledToEnd: () -> Void
     private var hasNotifiedEnd = false
     private var scrollView: UIScrollView!
     private var stackView: UIStackView!
     
-    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
         self.sections = sections
         self.course = course
         self.unitId = unitId
         self.lessonId = lessonId
         self.explainAnchors = explainAnchors
+        self.lessonContext = lessonContext
         self.explainSheet = explainSheet
         self.onScrolledToEnd = onScrolledToEnd
         super.init(nibName: nil, bundle: nil)
@@ -243,7 +263,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         
         // Add message handler for explain taps
         let contentController = config.userContentController
-        let tapHandler = ExplainTapHandler(explainSheet: explainSheet, explainAnchors: explainAnchors)
+        let tapHandler = ExplainTapHandler(explainSheet: explainSheet, explainAnchors: explainAnchors, lessonContext: lessonContext)
         contentController.add(tapHandler, name: "explainTap")
         
         // Inject tap handler script
@@ -293,10 +313,12 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     private class ExplainTapHandler: NSObject, WKScriptMessageHandler {
         var explainSheet: Binding<ExplainSheet?>
         var explainAnchors: [LessonMeta.Anchor]
+        var lessonContext: ExplainSheet.LessonContext
         
-        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor]) {
+        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext) {
             self.explainSheet = explainSheet
             self.explainAnchors = explainAnchors
+            self.lessonContext = lessonContext
         }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -307,14 +329,19 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 return
             }
             
-            // Look up gloss by anchor ID
+            // Look up gloss by anchor ID (baked anchor from Slice A)
             guard let anchor = explainAnchors.first(where: { $0.id == anchorId }),
                   let gloss = anchor.gloss else {
                 return
             }
             
             DispatchQueue.main.async {
-                self.explainSheet.wrappedValue = ExplainSheet(term: term, gloss: gloss)
+                self.explainSheet.wrappedValue = ExplainSheet(
+                    term: term,
+                    gloss: gloss,
+                    isBakedAnchor: true,
+                    lessonContext: self.lessonContext
+                )
             }
         }
     }
@@ -408,7 +435,17 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
 struct ExplanationSheetView: View {
     let term: String
     let gloss: String
+    let isBakedAnchor: Bool
+    let lessonContext: ExplainSheet.LessonContext?
+    
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @EnvironmentObject private var store: CourseStore
+    @State private var showDiscuss = false
+    
+    private var canDiscuss: Bool {
+        networkMonitor.isOnline && lessonContext != nil
+    }
     
     var body: some View {
         NavigationView {
@@ -418,6 +455,27 @@ struct ExplanationSheetView: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
+                    
+                    if canDiscuss {
+                        Button {
+                            showDiscuss = true
+                        } label: {
+                            Label("Discuss", systemImage: "bubble.left.and.bubble.right")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
+                        .padding(.top, 8)
+                    } else if !networkMonitor.isOnline {
+                        HStack(spacing: 8) {
+                            Image(systemName: "wifi.slash")
+                                .foregroundStyle(.secondary)
+                            Text("Discuss requires an internet connection")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -429,6 +487,15 @@ struct ExplanationSheetView: View {
                     Button("Done") {
                         dismiss()
                     }
+                }
+            }
+            .sheet(isPresented: $showDiscuss) {
+                if let context = lessonContext {
+                    DiscussView(
+                        term: term,
+                        initialGloss: gloss,
+                        lessonContext: context
+                    )
                 }
             }
         }
