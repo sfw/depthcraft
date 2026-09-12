@@ -49,16 +49,24 @@ struct QuizFlowView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            .listRowBackground(Color.clear)
 
             ForEach(Array(quiz.items.enumerated()), id: \.element.id) { index, item in
-                Section("Question \(index + 1)") {
+                Section {
                     switch item {
                     case .mc(let mc):
                         mcBlock(mc)
                     case .cloze(let cloze):
                         clozeBlock(cloze)
                     }
+                } header: {
+                    Text("Question \(index + 1)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
                 }
+                .listRowBackground(Color(uiColor: .systemGroupedBackground))
             }
 
             Section {
@@ -68,6 +76,7 @@ struct QuizFlowView: View {
                     } label: {
                         Label("Submit answers", systemImage: "checkmark.circle.fill")
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.teal)
@@ -133,7 +142,10 @@ struct QuizFlowView: View {
                     }
                 }
             }
+            .listRowBackground(Color(uiColor: .systemGroupedBackground))
         }
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemBackground))
         .navigationTitle("Quiz")
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(false)
@@ -143,34 +155,41 @@ struct QuizFlowView: View {
     private func mcBlock(_ item: MCItem) -> some View {
         Text(item.prompt)
             .font(.body.weight(.medium))
-        ForEach(item.choices) { choice in
-            let isSelected = mcSelections[item.id] == choice.id
-            if graded {
-                HStack {
-                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                        .foregroundStyle(isSelected ? Color.teal : Color.secondary)
-                    Text(choice.text)
-                        .foregroundStyle(isSelected ? Color.teal : Color(uiColor: .label))
-                        .multilineTextAlignment(.leading)
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-            } else {
+            .padding(.bottom, 8)
+        
+        VStack(spacing: 8) {
+            ForEach(item.choices) { choice in
+                let isSelected = mcSelections[item.id] == choice.id
                 Button {
-                    mcSelections[item.id] = choice.id
+                    if !graded {
+                        mcSelections[item.id] = choice.id
+                    }
                 } label: {
-                    HStack {
+                    HStack(spacing: 12) {
                         Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                             .foregroundStyle(isSelected ? Color.teal : Color.secondary)
+                            .font(.title3)
                         Text(choice.text)
-                            .foregroundStyle(isSelected ? Color.teal : Color(uiColor: .label))
+                            .foregroundStyle(Color(uiColor: .label))
                             .multilineTextAlignment(.leading)
-                        Spacer()
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(isSelected ? Color.teal.opacity(0.08) : Color(uiColor: .secondarySystemGroupedBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(isSelected ? Color.teal.opacity(0.3) : Color.clear, lineWidth: 1.5)
+                    )
                 }
                 .buttonStyle(.plain)
+                .disabled(graded)
             }
         }
+        
         if graded {
             resultRow(correct: itemResults[item.id] == true, explain: item.explain)
         }
@@ -180,6 +199,8 @@ struct QuizFlowView: View {
     private func clozeBlock(_ item: ClozeItem) -> some View {
         Text(item.prompt)
             .font(.body.weight(.medium))
+            .padding(.bottom, 8)
+        
         TextField("Your answer", text: Binding(
             get: { clozeAnswers[item.id] ?? "" },
             set: { clozeAnswers[item.id] = $0 }
@@ -187,8 +208,13 @@ struct QuizFlowView: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .disabled(graded)
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(.secondarySystemBackground)))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+        )
+        
         if graded {
             resultRow(correct: itemResults[item.id] == true, explain: item.explain)
         }
@@ -196,18 +222,23 @@ struct QuizFlowView: View {
 
     @ViewBuilder
     private func resultRow(correct: Bool, explain: String?) -> some View {
-        HStack {
-            Image(systemName: correct ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(correct ? Color.teal : Color.orange)
-            Text(correct ? "Correct" : "Incorrect")
-                .font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(correct ? Color.teal : Color.orange)
+                    .font(.body)
+                Text(correct ? "Correct" : "Incorrect")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(correct ? Color.teal : Color.orange)
+            }
+            
+            if let explain, !explain.isEmpty {
+                Text(explain)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
-        if let explain, !explain.isEmpty {
-            Text(explain)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 2)
-        }
+        .padding(.top, 8)
     }
 
     private func gradeAll() {

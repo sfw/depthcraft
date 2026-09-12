@@ -35,31 +35,40 @@ struct LessonPlayerView: View {
                     }
                 )
 
-                Divider()
-
-                HStack(spacing: 12) {
-                    if store.progress?.lessons[lessonId]?.completed == true {
-                        Label("Complete", systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(.teal)
-                            .font(.subheadline.weight(.semibold))
-                    } else {
-                        Text("Study, then continue to quiz")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                // Lesson completion control band
+                VStack(spacing: 0) {
+                    Divider()
+                    
+                    HStack(spacing: 12) {
+                        if store.progress?.lessons[lessonId]?.completed == true {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundStyle(.teal)
+                                Text("Complete")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.teal)
+                            }
+                        } else {
+                            Text("Study, then continue to quiz")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            store.markLessonRead(lessonId: lessonId, unitId: unitId)
+                            showQuiz = true
+                        } label: {
+                            Label(quiz == nil ? "Quiz unavailable" : "Continue to quiz", systemImage: "arrow.right.circle.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
+                        .disabled(quiz == nil)
                     }
-                    Spacer()
-                    Button {
-                        store.markLessonRead(lessonId: lessonId, unitId: unitId)
-                        showQuiz = true
-                    } label: {
-                        Label(quiz == nil ? "Quiz unavailable" : "Continue to quiz", systemImage: "arrow.right.circle.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.teal)
-                    .disabled(quiz == nil)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
                 .background(.bar)
             }
         }
