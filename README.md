@@ -10,7 +10,7 @@ Depthcraft generates structured courses from any topic using your own LLM keys, 
 
 ## Who it's for
 
-**Perpetual learners** who already use LLMs to generate markdown notes, save them to Obsidian, and read on flights—but want structure, progress tracking, quizzes with grading, and interactive demos without stitching it all together yourself.
+**Perpetual learners** who already use LLMs to generate markdown notes, save them to Obsidian, and read on flights—but want curriculum spine, progress tracking, quizzes with grading, and interactive demos without stitching it all together yourself.
 
 **Students and professionals** who need offline study materials for planes, trains, commutes, or anywhere connectivity is unreliable or distracting.
 
@@ -26,7 +26,7 @@ Depthcraft generates structured courses from any topic using your own LLM keys, 
 
 2. **Generate a course** — Tap Generate, enter a topic ("Rust async programming", "Renaissance art history", "category theory"). Tune Knowledge (your background: New → Expert) and Depth (thoroughness: Brief → Exhaustive). Depthcraft orchestrates LLM roles (planner, lesson writer, quiz writer, demo writer) to produce a structured curriculum. Review the draft—edit titles, exclude expensive units—then approve to run generation.
 
-3. **Study offline** — Navigate a typographic course home with your progress and a contents list. Read lessons, complete native multiple-choice and cloze quizzes with immediate grading and explanations, interact with sandboxed Three.js demos. Everything works airplane-mode once the package is imported.
+3. **Study offline** — Navigate a typographic course home with editorial cover and contents spine. Read lessons, complete native multiple-choice and cloze quizzes with immediate grading and explanations, interact with sandboxed Three.js demos. Everything works airplane-mode once the package is imported.
 
 4. **Extend when ready** — Tap "Extend this Course" to add new units. Your completed lessons stay marked; new content merges in without clobbering progress. Packages are versioned with collision detection.
 
@@ -43,7 +43,7 @@ Courses live as versioned `.depthcraft` package folders. Progress is device-loca
 - **Extend & refresh**: Append new units while preserving completed progress; version tracking prevents collisions
 
 ### Study experience
-- **Course home**: Typographic cover with title, topic, thin teal progress bar, continue button, and contents spine showing units with circular progress rings and lesson counts
+- **Course home**: Editorial cover with title and topic, thin teal progress marker, resume button, and contents spine listing units with lesson counts
 - **Lesson player**: Study typography with proper measure and scale
 - **Native quizzes**: Multiple-choice and cloze (fill-in-the-blank) with immediate grading and explanation
 - **Interactive demos**: Sandboxed Three.js demos that render inline at lesson positions; fallback to markdown on errors
