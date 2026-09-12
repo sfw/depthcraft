@@ -140,7 +140,131 @@ enum MarkdownHTML {
         """
         return LessonRenderResult(html: html, demos: demos)
     }
+    
+    /// Render markdown for demo fallback without lesson chrome or eyebrow.
+    /// Keeps the leading H1 (unlike lesson render which drops it) for fallback context.
+    static func renderDemoFallback(_ markdown: String) -> String {
+        let (body, _) = convertSimple(markdown)
+        let html = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <style>
+          :root {
+            color-scheme: light dark;
+            --bg: #f7f4ef;
+            --fg: #1c1917;
+            --muted: #57534e;
+            --accent: #0f766e;
+            --code-bg: #ebe7e0;
+          }
+          @media (prefers-color-scheme: dark) {
+            :root {
+              --bg: #1c1917;
+              --fg: #e7e5e4;
+              --muted: #a8a29e;
+              --accent: #5d9b94;
+              --code-bg: #292524;
+            }
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: ui-serif, Georgia, "Times New Roman", serif;
+            font-size: 20px;
+            line-height: 1.7;
+            -webkit-text-size-adjust: 100%;
+          }
+          .page {
+            max-width: 38rem;
+            margin: 0 auto;
+            padding: 2rem 2rem 4rem;
+          }
+          h1 {
+            font-size: 1.5rem;
+            line-height: 1.3;
+            margin: 0 0 1rem;
+            font-weight: 700;
+          }
+          h2 {
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            font-size: 1.15rem;
+            margin: 2rem 0 0.8rem;
+            font-weight: 650;
+          }
+          p { margin: 0 0 1rem; }
+          strong { font-weight: 700; }
+          em { font-style: italic; }
+          code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.88em;
+            background: var(--code-bg);
+            padding: 0.15em 0.4em;
+            border-radius: 0.3em;
+          }
+          ul, ol { margin: 0 0 1rem; padding-left: 1.5rem; }
+          li { margin: 0.3rem 0; }
+        </style>
+        </head>
+        <body>
+          <article class="page">
+            \(body)
+          </article>
+        </body>
+        </html>
+        """
+        return html
+    }
 
+    /// Simple markdown conversion for demo fallback (no demo extraction, keeps leading H1)
+    private static func convertSimple(_ markdown: String) -> (String, [DemoReference]) {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var html: [String] = []
+        var inList = false
+        var i = 0
+        
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.isEmpty {
+                if inList {
+                    html.append("</ul>")
+                    inList = false
+                }
+                i += 1
+                continue
+            }
+
+            if trimmed.hasPrefix("### ") {
+                if inList { html.append("</ul>"); inList = false }
+                html.append("<h3>\(inline(String(trimmed.dropFirst(4))))</h3>")
+            } else if trimmed.hasPrefix("## ") {
+                if inList { html.append("</ul>"); inList = false }
+                html.append("<h2>\(inline(String(trimmed.dropFirst(3))))</h2>")
+            } else if trimmed.hasPrefix("# ") {
+                if inList { html.append("</ul>"); inList = false }
+                html.append("<h1>\(inline(String(trimmed.dropFirst(2))))</h1>")
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                if !inList {
+                    html.append("<ul>")
+                    inList = true
+                }
+                html.append("<li>\(inline(String(trimmed.dropFirst(2))))</li>")
+            } else {
+                if inList { html.append("</ul>"); inList = false }
+                html.append("<p>\(inline(trimmed))</p>")
+            }
+            i += 1
+        }
+        if inList { html.append("</ul>") }
+        return (html.joined(separator: "\n"), [])
+    }
+    
     private static func convert(_ markdown: String) -> (String, [DemoReference]) {
         var lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         var demos: [DemoReference] = []

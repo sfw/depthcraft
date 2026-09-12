@@ -1,10 +1,5 @@
 # Interactive Demo Unavailable
 
-This lesson includes a 3D interactive demonstration of a rotating cube to illustrate coordinate system concepts. Unfortunately, the interactive demo could not be loaded in your current environment.
+This demo requires WebGL support, which is not available in your current environment.
 
-**Key concepts:**
-- 3D graphics use X, Y, Z coordinate systems
-- Objects can be rotated around multiple axes
-- WebGL enables hardware-accelerated 3D rendering in browsers
-
-*Note: This demo requires WebGL support.*
+**What you would see:** A rotating cube demonstrating 3D coordinate systems (X, Y, Z axes) with real-time rotation controls.

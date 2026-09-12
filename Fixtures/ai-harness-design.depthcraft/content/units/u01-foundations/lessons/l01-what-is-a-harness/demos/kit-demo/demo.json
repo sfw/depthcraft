@@ -1,7 +1,7 @@
 {
   "schemaVersion": "0.1.0",
   "demoId": "kit-demo",
-  "title": "Kit Injection Test",
+  "title": "Interactive 3D Module",
   "kit": "three-v0",
   "entry": "index.html",
   "fallback": "fallback.md"
