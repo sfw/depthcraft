@@ -201,7 +201,7 @@ class GenerationOrchestrator: ObservableObject {
             }
             
             progress.phase = .writingDemos
-            progress.currentItem = request.depthLevel == .brief ? "Checking lessons for demos (≤1)" : "Checking lessons for demos"
+            progress.currentItem = "Checking lessons for demos…"
             progress.completedItems = 0
             
             let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)

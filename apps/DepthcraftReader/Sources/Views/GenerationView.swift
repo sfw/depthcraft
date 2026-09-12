@@ -186,57 +186,45 @@ struct GenerationView: View {
     
     private var setupSection: some View {
         Group {
-            Section("Course Topic") {
-                TextField("Topic", text: $topic, axis: .vertical)
-                    .lineLimit(2...4)
-                
-                Picker("Locale", selection: $locale) {
-                    Text("English (Canada)").tag("en-CA")
-                    Text("English (US)").tag("en-US")
-                    Text("French").tag("fr-FR")
+            Section {
+                VStack(alignment: .leading, spacing: 20) {
+                    TextField("Topic", text: $topic, axis: .vertical)
+                        .lineLimit(2...4)
+                        .font(.body)
+                    
+                    Text("Uses your API key · runs on-device after")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    
+                    Button("Start Planning") {
+                        startPlanning()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                    .disabled(!canStartPlanning)
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.vertical, 12)
+            } footer: {
+                if !hasAnyProviderConfigured {
+                    Text("Open Settings to configure an API key")
+                        .foregroundStyle(.red)
+                } else if !canStartPlanning {
+                    Text("Open Settings to configure \(plannerProvider.displayName) key")
+                        .foregroundStyle(.red)
                 }
             }
             
-            Section("Planner") {
-                roleConfiguration(
-                    provider: $plannerProvider,
-                    model: $plannerModel,
-                    temperature: $plannerTemperature
-                )
-            }
-            
-            Section("Lesson Writer") {
-                roleConfiguration(
-                    provider: $lessonProvider,
-                    model: $lessonModel,
-                    temperature: $lessonTemperature
-                )
-            }
-            
-            Section("Quiz Writer") {
-                roleConfiguration(
-                    provider: $quizProvider,
-                    model: $quizModel,
-                    temperature: $quizTemperature
-                )
-            }
-            
             Section {
-                roleConfiguration(
-                    provider: $demoProvider,
-                    model: $demoModel,
-                    temperature: $demoTemperature
-                )
-            } header: {
-                Text("Demo Writer")
-            } footer: {
-                Text("Creates optional interactive demos. Most lessons will have zero demos. Density controlled by depth level.")
-                    .font(.caption)
-            }
-            
-            Section("Advanced") {
                 DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Picker("Locale", selection: $locale) {
+                            Text("English (Canada)").tag("en-CA")
+                            Text("English (US)").tag("en-US")
+                            Text("French").tag("fr-FR")
+                        }
+                        .pickerStyle(.menu)
+                        
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Current knowledge")
                                 .font(.subheadline)
@@ -249,7 +237,7 @@ struct GenerationView: View {
                             .pickerStyle(.segmented)
                             .labelsHidden()
                             
-                            Text("Higher levels skip/compress foundational content")
+                            Text("Higher levels skip foundational content")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -266,41 +254,93 @@ struct GenerationView: View {
                             .pickerStyle(.segmented)
                             .labelsHidden()
                             
-                            Text("Higher levels produce longer, more comprehensive courses")
+                            Text("Higher levels produce longer courses")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                        }
+                        
+                        if hasAnyProviderConfigured && canStartPlanning {
+                            Text(costShapeCue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        
+                        DisclosureGroup {
+                            VStack(spacing: 0) {
+                                modelsSectionContent
+                            }
+                        } label: {
+                            Text("Models")
                         }
                     }
                     .padding(.vertical, 8)
                 } label: {
-                    Text("Knowledge & Depth Controls")
+                    Text("Advanced")
                 }
             }
+        }
+    }
+    
+    private var modelsSectionContent: some View {
+        Group {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Planner")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                
+                roleConfiguration(
+                    provider: $plannerProvider,
+                    model: $plannerModel,
+                    temperature: $plannerTemperature
+                )
+            }
+            .padding(.bottom, 16)
             
-            Section {
-                if hasAnyProviderConfigured && canStartPlanning {
-                    Text(costShapeCue)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Lesson Writer")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                roleConfiguration(
+                    provider: $lessonProvider,
+                    model: $lessonModel,
+                    temperature: $lessonTemperature
+                )
+            }
+            .padding(.bottom, 16)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Quiz Writer")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                roleConfiguration(
+                    provider: $quizProvider,
+                    model: $quizModel,
+                    temperature: $quizTemperature
+                )
+            }
+            .padding(.bottom, 16)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Demo Writer")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("Creates optional interactive demos when meaningful.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 4)
                 }
                 
-                Button("Start Planning") {
-                    startPlanning()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .disabled(!canStartPlanning)
-            } footer: {
-                if !hasAnyProviderConfigured {
-                    Text("Configure at least one API key in Settings to start generating courses.")
-                        .foregroundStyle(.red)
-                } else if !canStartPlanning {
-                    Text("Configure API key for \(plannerProvider.displayName) in Settings")
-                        .foregroundStyle(.red)
-                }
+                roleConfiguration(
+                    provider: $demoProvider,
+                    model: $demoModel,
+                    temperature: $demoTemperature
+                )
             }
+            .padding(.bottom, 8)
         }
     }
     
@@ -340,23 +380,78 @@ struct GenerationView: View {
     
     private var progressSection: some View {
         Section {
-            VStack(spacing: 16) {
-                Text(orchestrator.progress.phase.displayName)
-                    .font(.headline)
+            VStack(alignment: .leading, spacing: 12) {
+                progressStep(
+                    label: "Curriculum",
+                    isActive: orchestrator.progress.phase == .planning,
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.planning.order
+                )
                 
-                ProgressView(value: orchestrator.progress.progressPercent)
+                progressStep(
+                    label: "Lessons",
+                    isActive: orchestrator.progress.phase == .writingLessons,
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingLessons.order
+                )
                 
-                if let item = orchestrator.progress.currentItem {
-                    Text(item)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                progressStep(
+                    label: "Quizzes",
+                    isActive: orchestrator.progress.phase == .writingQuizzes,
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingQuizzes.order
+                )
+                
+                progressStep(
+                    label: "Demos",
+                    isActive: orchestrator.progress.phase == .writingDemos,
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingDemos.order
+                )
+                
+                progressStep(
+                    label: "Package",
+                    isActive: orchestrator.progress.phase == .packaging,
+                    isCompleted: orchestrator.progress.phase == .completed
+                )
+                
+                if let item = orchestrator.progress.currentItem, orchestrator.progress.phase != .idle {
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            
+                            Text("\(orchestrator.progress.completedItems) of \(orchestrator.progress.totalItems)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                    } label: {
+                        Text("Details")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                
-                Text("\(orchestrator.progress.completedItems) of \(orchestrator.progress.totalItems)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical)
+            .padding(.vertical, 8)
+        }
+    }
+    
+    private func progressStep(label: String, isActive: Bool, isCompleted: Bool) -> some View {
+        HStack(spacing: 12) {
+            if isCompleted {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            } else if isActive {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "circle")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+            }
+            
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(isActive ? .teal : .secondary)
         }
     }
     
@@ -554,7 +649,7 @@ struct GenerationView: View {
         do {
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
@@ -562,12 +657,12 @@ struct GenerationView: View {
             // Validate custom endpoint config
             if plannerProvider == .custom {
                 guard !customBaseURL.isEmpty else {
-                    errorMessage = "Custom endpoint requires a base URL"
+                    errorMessage = "Custom endpoint needs a base URL. Check Settings to configure"
                     showingError = true
                     return
                 }
                 guard !customModel.isEmpty else {
-                    errorMessage = "Custom endpoint requires a model"
+                    errorMessage = "Custom endpoint needs a model name. Check Settings to configure"
                     showingError = true
                     return
                 }
@@ -625,57 +720,57 @@ struct GenerationView: View {
         do {
             // Validate all required keys present
             guard canContinueGeneration else {
-                errorMessage = "Missing API keys for lesson writer or quiz writer. Please configure in Settings."
+                errorMessage = "Some API keys are missing. Open Settings to add them"
                 showingError = true
                 return
             }
             
             let lessonKey = try keyStore.getKey(for: lessonProvider)
             guard let lessonKey else {
-                errorMessage = "No API key configured for \(lessonProvider.displayName)"
+                errorMessage = "Add your \(lessonProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let quizKey = try keyStore.getKey(for: quizProvider)
             guard let quizKey else {
-                errorMessage = "No API key configured for \(quizProvider.displayName)"
+                errorMessage = "Add your \(quizProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let demoKey = try keyStore.getKey(for: demoProvider)
             guard let demoKey else {
-                errorMessage = "No API key configured for \(demoProvider.displayName)"
+                errorMessage = "Add your \(demoProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             let plannerKey = try keyStore.getKey(for: plannerProvider)
             guard let plannerKey else {
-                errorMessage = "No API key configured for \(plannerProvider.displayName)"
+                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
                 showingError = true
                 return
             }
             
             // Validate custom endpoints if used
             if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for lesson writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for quiz writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for demo writer requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
             if plannerProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint for planner requires base URL and model"
+                errorMessage = "Custom endpoint needs configuration. Check Settings"
                 showingError = true
                 return
             }
