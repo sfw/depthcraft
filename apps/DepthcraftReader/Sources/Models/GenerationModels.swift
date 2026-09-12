@@ -215,6 +215,12 @@ struct LessonMeta: Codable, Hashable {
         let id: String
         let heading: String
         let kind: String
+        let term: String?
+        let gloss: String?
+        
+        var isExplainAnchor: Bool {
+            term != nil && gloss != nil
+        }
     }
 }
 

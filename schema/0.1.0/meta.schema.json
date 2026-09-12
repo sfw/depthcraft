@@ -10,7 +10,7 @@
     "lessonId": { "type": "string", "minLength": 1 },
     "anchors": {
       "type": "array",
-      "description": "Heading-derived stubs in v0.1 so v0.2 primers attach without rewriting lessons.",
+      "description": "Section headings and tap-to-explain glosses for complex concepts.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -18,7 +18,9 @@
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "heading": { "type": "string", "minLength": 1 },
-          "kind": { "type": "string", "enum": ["section", "concept", "warning"] }
+          "kind": { "type": "string", "enum": ["section", "concept", "warning", "prerequisite"] },
+          "term": { "type": "string", "minLength": 1, "description": "Text to underline for tap-to-explain" },
+          "gloss": { "type": "string", "minLength": 1, "description": "Explanation shown in sheet (markdown)" }
         }
       }
     }
