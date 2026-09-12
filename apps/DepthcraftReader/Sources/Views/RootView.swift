@@ -31,10 +31,7 @@ struct RootView: View {
             }
         }
         .environment(\.navigationPath, $navigationPath)
-        .alert("Course Updated", isPresented: .init(
-            get: { store.pendingPackageUpgrade != nil },
-            set: { if !$0 { store.cancelPackageUpgrade() } }
-        )) {
+        .alert("Course Updated", isPresented: $store.showUpgradeDialog) {
             Button("Apply Update") {
                 store.confirmPackageUpgrade()
             }

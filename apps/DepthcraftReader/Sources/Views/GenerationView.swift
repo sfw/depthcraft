@@ -855,7 +855,12 @@ struct GenerationView: View {
     private func openGeneratedPackage(_ url: URL) {
         courseStore.loadPackage(from: url)
         if courseStore.errorMessage == nil {
-            showingOpenPackage = true
+            // CRITICAL: Don't show "Package Loaded" alert when upgrade dialog pending.
+            // Otherwise "Package Loaded" races "Course Updated" and blocks it (first-Open flake).
+            // After user taps Cancel/Apply, showUpgradeDialog clears and dismiss() handles nav.
+            if !courseStore.showUpgradeDialog {
+                showingOpenPackage = true
+            }
         } else {
             errorMessage = courseStore.errorMessage
             showingError = true
