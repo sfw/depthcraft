@@ -268,10 +268,13 @@ final class PackageValidationTests: XCTestCase {
         let manifest = PackageManifest(
             schemaVersion: "0.1.0",
             packageId: "test-subset-package",
+            contentVersion: 1,
             title: "Test Subset",
             topic: "Test Subset Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
-            locale: "en-CA"
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: nil
         )
         
         let meta = LessonMeta(
@@ -650,6 +653,7 @@ final class ExtendRefreshTests: XCTestCase {
         XCTAssertEqual(mergedProgress.units.count, 2, "Should have both units")
     }
     
+    @MainActor
     func testVersionDetectionRejectsOlderVersion() {
         let store = CourseStore()
         
