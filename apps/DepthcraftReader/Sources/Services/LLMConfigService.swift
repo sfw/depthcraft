@@ -19,12 +19,13 @@ class LLMConfigService {
     
     /// Get the first available LLM configuration
     /// Priority: Anthropic → OpenAI → OpenRouter → Custom
+    /// Uses same model defaults as Generate UI
     func getAvailableConfig() throws -> LLMConfiguration? {
         // Try Anthropic first
         if apiKeyStore.hasAnthropicKey, let key = try apiKeyStore.getKey(for: .anthropic) {
             return LLMConfiguration(
                 provider: .anthropic,
-                model: "claude-sonnet-4-20250514",
+                model: "claude-sonnet-5",
                 apiKey: key,
                 customBaseURL: nil
             )
@@ -44,7 +45,7 @@ class LLMConfigService {
         if apiKeyStore.hasOpenRouterKey, let key = try apiKeyStore.getKey(for: .openrouter) {
             return LLMConfiguration(
                 provider: .openrouter,
-                model: "anthropic/claude-sonnet-4",
+                model: "anthropic/claude-sonnet-5",
                 apiKey: key,
                 customBaseURL: nil
             )
