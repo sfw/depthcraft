@@ -526,15 +526,35 @@ enum MarkdownHTML {
                 continue
             }
             
-            // We're in text content - check if term matches here
+            // We're in text content - check if term matches here (with word boundaries)
             if !wrapped && html[i...].starts(with: term) {
-                // Found first occurrence in text node - wrap it
-                output.append("<span class=\"explain-term\" data-anchor-id=\"\(anchorId)\">")
-                output.append(term)
-                output.append("</span>")
-                i = html.index(i, offsetBy: term.count)
-                wrapped = true
-                continue
+                // Check word boundaries: term must not be inside a larger word
+                let beforeIsWordBoundary: Bool
+                if i == html.startIndex {
+                    beforeIsWordBoundary = true
+                } else {
+                    let prevChar = html[html.index(before: i)]
+                    beforeIsWordBoundary = !prevChar.isLetter && !prevChar.isNumber
+                }
+                
+                let afterIdx = html.index(i, offsetBy: term.count)
+                let afterIsWordBoundary: Bool
+                if afterIdx >= html.endIndex {
+                    afterIsWordBoundary = true
+                } else {
+                    let nextChar = html[afterIdx]
+                    afterIsWordBoundary = !nextChar.isLetter && !nextChar.isNumber
+                }
+                
+                if beforeIsWordBoundary && afterIsWordBoundary {
+                    // Found first occurrence in text node with word boundaries - wrap it
+                    output.append("<span class=\"explain-term\" data-anchor-id=\"\(anchorId)\">")
+                    output.append(term)
+                    output.append("</span>")
+                    i = afterIdx
+                    wrapped = true
+                    continue
+                }
             }
             
             // Regular text content
