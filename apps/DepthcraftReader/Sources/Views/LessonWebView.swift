@@ -60,6 +60,7 @@ struct LessonWebView: UIViewRepresentable {
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.scrollView.delegate = context.coordinator
         
         context.coordinator.explainSheet = _explainSheet
@@ -85,7 +86,7 @@ struct LessonWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, UIScrollViewDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, UIScrollViewDelegate, WKScriptMessageHandler, WKUIDelegate {
         var lastHTML: String?
         var onScrolledToEnd: (() -> Void)?
         var explainSheet: Binding<ExplainSheet?>?
@@ -112,6 +113,7 @@ struct LessonWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
             // Check if we can show "Explain" menu item
             guard isOnline, let glossService = glossService, glossService.hasAPIKey() else {
+                // Preserve system menu (Copy, Look Up) when offline or no keys
                 completionHandler(nil)
                 return
             }

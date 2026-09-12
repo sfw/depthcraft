@@ -350,6 +350,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             lessonContext: lessonContext
         )
         webView.navigationDelegate = delegate
+        webView.uiDelegate = delegate
         // Keep delegate alive by storing in associated object
         objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
         objc_setAssociatedObject(webView, "tapHandler", tapHandler, .OBJC_ASSOCIATION_RETAIN)
@@ -398,7 +399,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         }
     }
     
-    private class HTMLWebViewDelegate: NSObject, WKNavigationDelegate {
+    private class HTMLWebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
         var isOnline: Bool
         var glossService: GlossService
         var explainSheet: Binding<ExplainSheet?>
@@ -447,6 +448,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
             // Check if we can show "Explain" menu item
             guard isOnline, glossService.hasAPIKey() else {
+                // Preserve system menu (Copy, Look Up) when offline or no keys
                 completionHandler(nil)
                 return
             }
