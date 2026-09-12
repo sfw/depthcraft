@@ -8,7 +8,8 @@ final class CourseStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoading = false
     @Published var availablePackages: [URL] = []
-    @Published var pendingPackageUpgrade: (url: URL, manifest: PackageManifest)?
+    @Published var pendingPackageUpgrade: LoadedCourse?
+    @Published var showUpgradeDialog = false
     
     private let progressStore = ProgressStore()
     private let fileManager = FileManager.default
@@ -98,7 +99,8 @@ final class CourseStore: ObservableObject {
                     #if DEBUG
                     print("📦 Detected package upgrade: v\(currentCourse.manifest.contentVersion) → v\(loaded.manifest.contentVersion)")
                     #endif
-                    pendingPackageUpgrade = (url, loaded.manifest)
+                    pendingPackageUpgrade = loaded
+                    showUpgradeDialog = true
                     return
                 } else if loaded.manifest.contentVersion < currentCourse.manifest.contentVersion {
                     errorMessage = "Cannot load older version (v\(loaded.manifest.contentVersion)) of package. Current version is v\(currentCourse.manifest.contentVersion)."
@@ -117,19 +119,16 @@ final class CourseStore: ObservableObject {
     
     func confirmPackageUpgrade() {
         guard let pending = pendingPackageUpgrade else { return }
+        showUpgradeDialog = false
         pendingPackageUpgrade = nil
         
         isLoading = true
         defer { isLoading = false }
-        do {
-            let loaded = try PackageLoader.load(from: pending.url)
-            applyPackageLoad(loaded: loaded, url: pending.url)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        applyPackageLoad(loaded: pending, url: pending.rootURL)
     }
     
     func cancelPackageUpgrade() {
+        showUpgradeDialog = false
         pendingPackageUpgrade = nil
     }
     

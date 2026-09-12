@@ -1861,3 +1861,259 @@ class TrackingLLMClient: LLMClient {
         return "{\"invalid\": \"json\"}"
     }
 }
+
+// MARK: - Package Upgrade Tests
+
+@MainActor
+final class PackageUpgradeTests: XCTestCase {
+    
+    var tempDir: URL!
+    var store: CourseStore!
+    
+    override func setUp() async throws {
+        try await super.setUp()
+        
+        // Create temporary directory for test packages
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        
+        store = CourseStore()
+    }
+    
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: tempDir)
+        tempDir = nil
+        store = nil
+        
+        try await super.tearDown()
+    }
+    
+    func createTestPackage(packageId: String, contentVersion: Int, title: String, lessonCount: Int = 3) throws -> URL {
+        let packageURL = tempDir.appendingPathComponent("\(packageId)-v\(contentVersion).depthcraft")
+        try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
+        
+        // Create manifest
+        let manifest: [String: Any] = [
+            "schemaVersion": "0.1.0",
+            "packageId": packageId,
+            "contentVersion": contentVersion,
+            "title": title,
+            "topic": "Test Topic",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "locale": "en-US"
+        ]
+        let manifestData = try JSONSerialization.data(withJSONObject: manifest)
+        try manifestData.write(to: packageURL.appendingPathComponent("manifest.json"))
+        
+        // Create curriculum
+        var lessons: [String: Any] = [:]
+        var lessonIds: [String] = []
+        for i in 1...lessonCount {
+            let lessonId = "lesson-\(i)"
+            lessonIds.append(lessonId)
+            lessons[lessonId] = [
+                "id": lessonId,
+                "unitId": "unit-1",
+                "title": "Lesson \(i)",
+                "order": i,
+                "status": "approved"
+            ]
+        }
+        
+        let curriculum: [String: Any] = [
+            "schemaVersion": "0.1.0",
+            "status": "approved",
+            "units": [
+                [
+                    "id": "unit-1",
+                    "title": "Test Unit",
+                    "order": 1,
+                    "lessonIds": lessonIds
+                ]
+            ],
+            "lessons": lessons
+        ]
+        let curriculumData = try JSONSerialization.data(withJSONObject: curriculum)
+        try curriculumData.write(to: packageURL.appendingPathComponent("curriculum.json"))
+        
+        // Create lesson HTML files
+        for i in 1...lessonCount {
+            let lessonDir = packageURL.appendingPathComponent("lessons/lesson-\(i)")
+            try FileManager.default.createDirectory(at: lessonDir, withIntermediateDirectories: true)
+            let html = "<html><body><h1>Lesson \(i)</h1></body></html>"
+            try html.write(to: lessonDir.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        }
+        
+        return packageURL
+    }
+    
+    func testFirstOpenAfterExtendShowsDialog() throws {
+        // Load initial version
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        XCTAssertNotNil(store.course, "Initial course should load")
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1)
+        XCTAssertNil(store.pendingPackageUpgrade, "No upgrade should be pending initially")
+        XCTAssertFalse(store.showUpgradeDialog, "Dialog should not show initially")
+        
+        // Simulate user completing a lesson
+        if let lesson = store.course?.curriculum.lessons["lesson-1"] {
+            store.markQuizPassed(lessonId: lesson.id, unitId: lesson.unitId)
+        }
+        XCTAssertTrue(store.progress?.lessons["lesson-1"]?.completed == true, "Lesson should be marked complete")
+        
+        // Load extended version (v2) - this should trigger upgrade flow
+        let v2URL = try createTestPackage(packageId: "test-course", contentVersion: 2, title: "Test Course v2", lessonCount: 5)
+        store.loadPackage(from: v2URL)
+        
+        // Verify upgrade dialog is triggered
+        XCTAssertTrue(store.showUpgradeDialog, "First open after extend MUST show dialog")
+        XCTAssertNotNil(store.pendingPackageUpgrade, "Pending upgrade should be set")
+        XCTAssertEqual(store.pendingPackageUpgrade?.manifest.contentVersion, 2, "Pending upgrade should be v2")
+        
+        // Verify current course is still v1 (upgrade not applied yet)
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1, "Current course should still be v1 until confirmed")
+        XCTAssertTrue(store.progress?.lessons["lesson-1"]?.completed == true, "Progress should be unchanged")
+    }
+    
+    func testCancelDiscardsUpgrade() throws {
+        // Load initial version and mark progress
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        if let lesson = store.course?.curriculum.lessons["lesson-1"] {
+            store.markQuizPassed(lessonId: lesson.id, unitId: lesson.unitId)
+        }
+        
+        let originalCourseURL = store.course?.rootURL
+        let originalProgress = store.progress
+        
+        // Load v2 to trigger upgrade
+        let v2URL = try createTestPackage(packageId: "test-course", contentVersion: 2, title: "Test Course v2", lessonCount: 5)
+        store.loadPackage(from: v2URL)
+        
+        XCTAssertTrue(store.showUpgradeDialog, "Dialog should show")
+        XCTAssertNotNil(store.pendingPackageUpgrade)
+        
+        // User cancels
+        store.cancelPackageUpgrade()
+        
+        // Verify upgrade was discarded
+        XCTAssertFalse(store.showUpgradeDialog, "Dialog should be hidden after cancel")
+        XCTAssertNil(store.pendingPackageUpgrade, "Pending upgrade should be cleared")
+        
+        // Verify current course and progress are unchanged
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1, "Course should still be v1 after cancel")
+        XCTAssertEqual(store.course?.rootURL.path, originalCourseURL?.path, "Course URL should be unchanged")
+        XCTAssertEqual(store.progress?.lessons.count, originalProgress?.lessons.count, "Progress should be unchanged")
+        XCTAssertTrue(store.progress?.lessons["lesson-1"]?.completed == true, "Lesson completion should be preserved")
+    }
+    
+    func testConfirmAppliesUpgradeAndMergesProgress() throws {
+        // Load initial version with 3 lessons
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        // Mark lessons 1 and 2 as complete
+        if let lesson1 = store.course?.curriculum.lessons["lesson-1"] {
+            store.markQuizPassed(lessonId: lesson1.id, unitId: lesson1.unitId)
+        }
+        if let lesson2 = store.course?.curriculum.lessons["lesson-2"] {
+            store.markQuizPassed(lessonId: lesson2.id, unitId: lesson2.unitId)
+        }
+        
+        XCTAssertTrue(store.progress?.lessons["lesson-1"]?.completed == true)
+        XCTAssertTrue(store.progress?.lessons["lesson-2"]?.completed == true)
+        XCTAssertFalse(store.progress?.lessons["lesson-3"]?.completed == true)
+        
+        // Load extended version with 5 lessons
+        let v2URL = try createTestPackage(packageId: "test-course", contentVersion: 2, title: "Test Course v2", lessonCount: 5)
+        store.loadPackage(from: v2URL)
+        
+        XCTAssertTrue(store.showUpgradeDialog)
+        
+        // User confirms upgrade
+        store.confirmPackageUpgrade()
+        
+        // Verify upgrade was applied
+        XCTAssertFalse(store.showUpgradeDialog, "Dialog should be hidden after confirm")
+        XCTAssertNil(store.pendingPackageUpgrade, "Pending upgrade should be cleared after confirm")
+        XCTAssertEqual(store.course?.manifest.contentVersion, 2, "Course should be upgraded to v2")
+        XCTAssertEqual(store.course?.curriculum.lessons.count, 5, "Should have 5 lessons after upgrade")
+        
+        // Verify progress was merged correctly
+        XCTAssertNotNil(store.progress, "Progress should exist")
+        XCTAssertTrue(store.progress?.lessons["lesson-1"]?.completed == true, "Old completed lesson 1 should remain complete")
+        XCTAssertTrue(store.progress?.lessons["lesson-2"]?.completed == true, "Old completed lesson 2 should remain complete")
+        XCTAssertFalse(store.progress?.lessons["lesson-3"]?.completed == true, "Old incomplete lesson 3 should remain incomplete")
+        XCTAssertFalse(store.progress?.lessons["lesson-4"]?.completed == true, "New lesson 4 should be incomplete")
+        XCTAssertFalse(store.progress?.lessons["lesson-5"]?.completed == true, "New lesson 5 should be incomplete")
+    }
+    
+    func testSecondOpenAfterCancelShowsDialogAgain() throws {
+        // Load v1 and mark progress
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        if let lesson = store.course?.curriculum.lessons["lesson-1"] {
+            store.markQuizPassed(lessonId: lesson.id, unitId: lesson.unitId)
+        }
+        
+        // First open of v2 - trigger upgrade
+        let v2URL = try createTestPackage(packageId: "test-course", contentVersion: 2, title: "Test Course v2", lessonCount: 5)
+        store.loadPackage(from: v2URL)
+        
+        XCTAssertTrue(store.showUpgradeDialog, "First open should show dialog")
+        
+        // User cancels
+        store.cancelPackageUpgrade()
+        
+        XCTAssertFalse(store.showUpgradeDialog)
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1, "Should still be on v1")
+        
+        // Second open of v2 - should trigger upgrade again
+        store.loadPackage(from: v2URL)
+        
+        XCTAssertTrue(store.showUpgradeDialog, "Second open should show dialog again")
+        XCTAssertNotNil(store.pendingPackageUpgrade, "Pending upgrade should be set again")
+        XCTAssertEqual(store.pendingPackageUpgrade?.manifest.contentVersion, 2)
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1, "Current course should still be v1 until confirmed")
+    }
+    
+    func testNoUpgradeDialogForSameVersion() throws {
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1)
+        XCTAssertFalse(store.showUpgradeDialog)
+        
+        // Load same version again
+        store.loadPackage(from: v1URL)
+        
+        // Should not trigger upgrade dialog
+        XCTAssertFalse(store.showUpgradeDialog, "Same version should not trigger dialog")
+        XCTAssertNil(store.pendingPackageUpgrade, "No pending upgrade for same version")
+        XCTAssertEqual(store.course?.manifest.contentVersion, 1)
+    }
+    
+    func testCannotLoadOlderVersion() throws {
+        // Load v2 first
+        let v2URL = try createTestPackage(packageId: "test-course", contentVersion: 2, title: "Test Course v2", lessonCount: 5)
+        store.loadPackage(from: v2URL)
+        
+        XCTAssertEqual(store.course?.manifest.contentVersion, 2)
+        XCTAssertNil(store.errorMessage)
+        
+        // Try to load v1 (older)
+        let v1URL = try createTestPackage(packageId: "test-course", contentVersion: 1, title: "Test Course v1", lessonCount: 3)
+        store.loadPackage(from: v1URL)
+        
+        // Should fail with error
+        XCTAssertNotNil(store.errorMessage, "Should have error message")
+        XCTAssertTrue(store.errorMessage?.contains("older version") ?? false, "Error should mention older version")
+        XCTAssertEqual(store.course?.manifest.contentVersion, 2, "Should still be on v2")
+        XCTAssertFalse(store.showUpgradeDialog, "Should not show upgrade dialog for downgrade")
+    }
+}
