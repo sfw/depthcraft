@@ -207,10 +207,11 @@ struct DemoHostView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Content area - unified for all states
             if showingFallback {
-                fallbackView
+                fallbackContentView
             } else if let loadError {
-                errorView(loadError)
+                errorContentView(loadError)
             } else {
                 // Demo content with skeleton state
                 ZStack {
@@ -237,103 +238,9 @@ struct DemoHostView: View {
                     )
                 }
                 .frame(minHeight: 400)
-                
-                // Demo controls - compact bottom band
-                VStack(spacing: 0) {
-                    if let manifest = demoManifest {
-                        HStack {
-                            Text(manifest.title)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
-                        .padding(.bottom, 6)
-                    }
-                    
-                    HStack(spacing: 12) {
-                        Button {
-                            demoKey = UUID()
-                        } label: {
-                            Label("Reset", systemImage: "arrow.counterclockwise")
-                        }
-                        .buttonStyle(.bordered)
-                        .foregroundStyle(.secondary)
-                        
-                        Spacer()
-                        
-                        Button {
-                            // Next step - for v0 this is a no-op placeholder
-                        } label: {
-                            Label("Next", systemImage: "arrow.right")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.teal)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                }
-                .background(.bar)
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.teal.opacity(0.3), lineWidth: 1)
-        )
-        .task {
-            await loadManifest()
-        }
-    }
-    
-    private var skeletonView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Generating demo…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemBackground))
-    }
-    
-    @MainActor
-    private func loadManifest() async {
-        do {
-            let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
-            demoManifest = manifest
-        } catch {
-            // Silently fail - manifest is optional UI chrome
-        }
-    }
-    
-    private var fallbackView: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 16) {
-                if let fallbackMarkdown = loadFallbackMarkdown() {
-                    let fallbackHTML = renderFallbackAsHTML(fallbackMarkdown)
-                    FallbackWebView(html: fallbackHTML)
-                        .padding(16)
-                } else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text("Demo unavailable")
-                            .font(.headline)
-                        Text("This interactive demo could not be loaded.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                }
-            }
-            .frame(minHeight: 400, maxHeight: .infinity)
             
-            // Demo controls for fallback (label + bottom band)
+            // Unified demo controls - single bottom band for all states
             VStack(spacing: 0) {
                 if let manifest = demoManifest {
                     HStack {
@@ -373,6 +280,60 @@ struct DemoHostView: View {
             }
             .background(.bar)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.teal.opacity(0.3), lineWidth: 1)
+        )
+        .task {
+            await loadManifest()
+        }
+    }
+    
+    private var skeletonView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Generating demo…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemBackground))
+    }
+    
+    @MainActor
+    private func loadManifest() async {
+        do {
+            let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+            demoManifest = manifest
+        } catch {
+            // Silently fail - manifest is optional UI chrome
+        }
+    }
+    
+    private var fallbackContentView: some View {
+        VStack(spacing: 16) {
+            if let fallbackMarkdown = loadFallbackMarkdown() {
+                let fallbackHTML = renderFallbackAsHTML(fallbackMarkdown)
+                FallbackWebView(html: fallbackHTML)
+                    .padding(16)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("Demo unavailable")
+                        .font(.headline)
+                    Text("This interactive demo could not be loaded.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            }
+        }
+        .frame(minHeight: 400, maxHeight: .infinity)
     }
     
     private func renderFallbackAsHTML(_ markdown: String) -> String {
@@ -381,61 +342,20 @@ struct DemoHostView: View {
         return renderResult.html
     }
     
-    private func errorView(_ message: String) -> some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("Demo unavailable")
-                    .font(.headline)
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
-            .frame(minHeight: 400, maxHeight: .infinity)
-            
-            // Demo controls for error state
-            VStack(spacing: 0) {
-                if let manifest = demoManifest {
-                    HStack {
-                        Text(manifest.title)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
-                }
-                
-                HStack(spacing: 12) {
-                    Button {
-                        loadError = nil
-                        demoKey = UUID()
-                    } label: {
-                        Label("Reset", systemImage: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundStyle(.secondary)
-                    
-                    Spacer()
-                    
-                    Button {
-                        // Next step - for v0 this is a no-op placeholder
-                    } label: {
-                        Label("Next", systemImage: "arrow.right")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.teal)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-            .background(.bar)
+    private func errorContentView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Demo unavailable")
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
         }
+        .frame(minHeight: 400, maxHeight: .infinity)
     }
     
     private func loadFallbackMarkdown() -> String? {
