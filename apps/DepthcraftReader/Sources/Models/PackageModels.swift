@@ -3,11 +3,44 @@ import Foundation
 struct PackageManifest: Codable, Hashable {
     let schemaVersion: String
     let packageId: String
+    let contentVersion: Int
     let title: String
     let topic: String
     let createdAt: String
     let locale: String
     let generator: GeneratorMetadata?
+    let extendedFrom: ExtensionMetadata?
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(String.self, forKey: .schemaVersion)
+        packageId = try container.decode(String.self, forKey: .packageId)
+        contentVersion = try container.decodeIfPresent(Int.self, forKey: .contentVersion) ?? 1
+        title = try container.decode(String.self, forKey: .title)
+        topic = try container.decode(String.self, forKey: .topic)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        locale = try container.decode(String.self, forKey: .locale)
+        generator = try container.decodeIfPresent(GeneratorMetadata.self, forKey: .generator)
+        extendedFrom = try container.decodeIfPresent(ExtensionMetadata.self, forKey: .extendedFrom)
+    }
+    
+    init(schemaVersion: String, packageId: String, contentVersion: Int, title: String, topic: String, createdAt: String, locale: String, generator: GeneratorMetadata?, extendedFrom: ExtensionMetadata?) {
+        self.schemaVersion = schemaVersion
+        self.packageId = packageId
+        self.contentVersion = contentVersion
+        self.title = title
+        self.topic = topic
+        self.createdAt = createdAt
+        self.locale = locale
+        self.generator = generator
+        self.extendedFrom = extendedFrom
+    }
+}
+
+struct ExtensionMetadata: Codable, Hashable {
+    let priorVersion: Int
+    let extendedAt: String
+    let extendedBy: String?
 }
 
 struct Curriculum: Codable, Hashable {

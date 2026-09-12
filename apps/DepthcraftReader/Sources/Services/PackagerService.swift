@@ -3,6 +3,91 @@ import Foundation
 class PackagerService: PackagerRole {
     private let fileManager = FileManager.default
     
+    private func determineVersioning(
+        topic: String,
+        priorPackageURL: URL?,
+        timestamp: String
+    ) async throws -> (packageId: String, contentVersion: Int, extendedFrom: ExtensionMetadata?) {
+        if let priorURL = priorPackageURL {
+            let priorManifest: PackageManifest = try decode("manifest.json", from: priorURL)
+            let newVersion = priorManifest.contentVersion + 1
+            let extendedFrom = ExtensionMetadata(
+                priorVersion: priorManifest.contentVersion,
+                extendedAt: timestamp,
+                extendedBy: nil
+            )
+            return (priorManifest.packageId, newVersion, extendedFrom)
+        } else {
+            let packageId = generatePackageId(from: topic)
+            return (packageId, 1, nil)
+        }
+    }
+    
+    internal func validateExtension(
+        priorPackageURL: URL,
+        newCurriculum: Curriculum,
+        newLessons: [String: (markdown: String, meta: LessonMeta)]
+    ) async throws {
+        let priorCurriculum: Curriculum = try decode("curriculum.json", from: priorPackageURL)
+        
+        let priorUnitIds = Set(priorCurriculum.units.map(\.id))
+        let priorLessonIds = Set(priorCurriculum.lessons.keys)
+        
+        let newUnitIds = Set(newCurriculum.units.map(\.id))
+        let newLessonIds = Set(newCurriculum.lessons.keys)
+        
+        let unitCollisions = priorUnitIds.intersection(newUnitIds)
+        if !unitCollisions.isEmpty {
+            throw GenerationError.validationFailed(
+                "ID collision: unit IDs \(Array(unitCollisions).sorted()) already exist in prior version"
+            )
+        }
+        
+        let lessonCollisions = priorLessonIds.intersection(newLessonIds)
+        if !lessonCollisions.isEmpty {
+            throw GenerationError.validationFailed(
+                "ID collision: lesson IDs \(Array(lessonCollisions).sorted()) already exist in prior version"
+            )
+        }
+        
+        for (priorLessonId, priorLesson) in priorCurriculum.lessons {
+            if let newLesson = newCurriculum.lessons[priorLessonId] {
+                if priorLesson.title != newLesson.title ||
+                   priorLesson.unitId != newLesson.unitId ||
+                   priorLesson.order != newLesson.order {
+                    throw GenerationError.validationFailed(
+                        "Mutation detected: lesson \(priorLessonId) metadata changed"
+                    )
+                }
+            }
+        }
+        
+        for priorUnit in priorCurriculum.units {
+            if let newUnit = newCurriculum.units.first(where: { $0.id == priorUnit.id }) {
+                if priorUnit.title != newUnit.title ||
+                   priorUnit.order != newUnit.order ||
+                   priorUnit.lessonIds != newUnit.lessonIds {
+                    throw GenerationError.validationFailed(
+                        "Mutation detected: unit \(priorUnit.id) metadata changed"
+                    )
+                }
+            }
+        }
+    }
+    
+    private func decode<T: Decodable>(_ name: String, from root: URL) throws -> T {
+        let url = root.appendingPathComponent(name)
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw GenerationError.validationFailed("Missing file: \(name)")
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw GenerationError.validationFailed("Could not decode \(name): \(error.localizedDescription)")
+        }
+    }
+    
     func packageCourse(
         topic: String,
         locale: String,
@@ -10,19 +95,35 @@ class PackagerService: PackagerRole {
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
         demos: [String: DemoWriterOutput],
-        roleRuns: GeneratorMetadata
+        roleRuns: GeneratorMetadata,
+        extendFrom priorPackageURL: URL?
     ) async throws -> URL {
-        let packageId = generatePackageId(from: topic)
         let timestamp = ISO8601DateFormatter().string(from: Date())
+        
+        let (packageId, contentVersion, extendedFrom) = try await determineVersioning(
+            topic: topic,
+            priorPackageURL: priorPackageURL,
+            timestamp: timestamp
+        )
+        
+        if let priorURL = priorPackageURL {
+            try await validateExtension(
+                priorPackageURL: priorURL,
+                newCurriculum: curriculum,
+                newLessons: lessons
+            )
+        }
         
         let manifest = PackageManifest(
             schemaVersion: "0.1.0",
             packageId: packageId,
+            contentVersion: contentVersion,
             title: topic,
             topic: topic,
             createdAt: timestamp,
             locale: locale,
-            generator: roleRuns
+            generator: roleRuns,
+            extendedFrom: extendedFrom
         )
         
         // Only include lessons that were actually generated (have content + quiz)
@@ -69,7 +170,8 @@ class PackagerService: PackagerRole {
             lessons: lessons,
             quizzes: quizzes,
             demos: demos,
-            roleRuns: roleRuns
+            roleRuns: roleRuns,
+            priorPackageURL: priorPackageURL
         )
         
         return packageURL
@@ -204,16 +306,26 @@ class PackagerService: PackagerRole {
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
         demos: [String: DemoWriterOutput],
-        roleRuns: GeneratorMetadata
+        roleRuns: GeneratorMetadata,
+        priorPackageURL: URL?
     ) async throws -> URL {
         let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let packageURL = documentsURL.appendingPathComponent("\(packageId).depthcraft")
+        let finalPackageURL = documentsURL.appendingPathComponent("\(packageId).depthcraft")
         
-        if fileManager.fileExists(atPath: packageURL.path) {
-            try fileManager.removeItem(at: packageURL)
+        let tempDir = fileManager.temporaryDirectory
+        let stagingURL = tempDir.appendingPathComponent("\(packageId)-\(UUID().uuidString).depthcraft")
+        
+        if fileManager.fileExists(atPath: stagingURL.path) {
+            try fileManager.removeItem(at: stagingURL)
         }
         
-        try fileManager.createDirectory(at: packageURL, withIntermediateDirectories: true)
+        if let priorURL = priorPackageURL {
+            try fileManager.copyItem(at: priorURL, to: stagingURL)
+        } else {
+            try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
+        }
+        
+        let packageURL = stagingURL
         
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -221,20 +333,38 @@ class PackagerService: PackagerRole {
         let manifestData = try encoder.encode(manifest)
         try manifestData.write(to: packageURL.appendingPathComponent("manifest.json"))
         
-        let curriculumData = try encoder.encode(curriculum)
+        let finalCurriculum: Curriculum
+        if let priorURL = priorPackageURL {
+            let priorCurriculum: Curriculum = try decode("curriculum.json", from: priorURL)
+            finalCurriculum = Curriculum(
+                schemaVersion: curriculum.schemaVersion,
+                status: curriculum.status,
+                approvedAt: curriculum.approvedAt,
+                units: priorCurriculum.units + curriculum.units,
+                lessons: priorCurriculum.lessons.merging(curriculum.lessons) { _, new in new }
+            )
+        } else {
+            finalCurriculum = curriculum
+        }
+        
+        let curriculumData = try encoder.encode(finalCurriculum)
         try curriculumData.write(to: packageURL.appendingPathComponent("curriculum.json"))
         
-        let allLessonIds = curriculum.units.flatMap { $0.lessonIds }
-        let allUnitIds = curriculum.units.map { $0.id }
+        let allLessonIds = finalCurriculum.units.flatMap { $0.lessonIds }
+        let allUnitIds = finalCurriculum.units.map { $0.id }
         let progress = DeviceProgress.blank(packageId: packageId, lessonIds: allLessonIds, unitIds: allUnitIds)
         let progressData = try encoder.encode(progress)
         try progressData.write(to: packageURL.appendingPathComponent("progress.json"))
         
         let contentURL = packageURL.appendingPathComponent("content")
-        try fileManager.createDirectory(at: contentURL, withIntermediateDirectories: true)
+        if priorPackageURL == nil {
+            try fileManager.createDirectory(at: contentURL, withIntermediateDirectories: true)
+        }
         
         let unitsURL = contentURL.appendingPathComponent("units")
-        try fileManager.createDirectory(at: unitsURL, withIntermediateDirectories: true)
+        if priorPackageURL == nil {
+            try fileManager.createDirectory(at: unitsURL, withIntermediateDirectories: true)
+        }
         
         for unit in curriculum.units {
             let unitURL = unitsURL.appendingPathComponent(unit.id)
@@ -316,7 +446,13 @@ class PackagerService: PackagerRole {
             }
         }
         
-        return packageURL
+        if fileManager.fileExists(atPath: finalPackageURL.path) {
+            try fileManager.removeItem(at: finalPackageURL)
+        }
+        
+        try fileManager.moveItem(at: stagingURL, to: finalPackageURL)
+        
+        return finalPackageURL
     }
     
     private func insertDemoDirectives(markdown: String, demos: [DemoSpec], lessonId: String) throws -> String {

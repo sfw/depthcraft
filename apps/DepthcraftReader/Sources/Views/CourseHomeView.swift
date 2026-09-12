@@ -81,9 +81,15 @@ struct CourseHomeView: View {
 
                 Section {
                     NavigationLink {
+                        GenerationView(extendFromCourse: course)
+                    } label: {
+                        Label("Extend this Course", systemImage: "arrow.up.forward")
+                    }
+                    
+                    NavigationLink {
                         GenerationView()
                     } label: {
-                        Label("Generate Course", systemImage: "wand.and.stars")
+                        Label("Generate New Course", systemImage: "wand.and.stars")
                     }
                     
                     if !store.availablePackages.isEmpty {

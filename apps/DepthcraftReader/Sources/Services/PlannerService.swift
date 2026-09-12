@@ -9,7 +9,7 @@ class PlannerService: PlannerRole {
         self.temperature = temperature
     }
     
-    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel) async throws -> Curriculum {
+    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, extendingCurriculum: Curriculum? = nil) async throws -> Curriculum {
         let systemPrompt = """
         You are a curriculum planner for the Depthcraft learning platform. Your job is to create a structured curriculum map as JSON.
         
@@ -74,13 +74,41 @@ class PlannerService: PlannerRole {
             depthGuidance = "Create an EXHAUSTIVE curriculum. Provide extensive, comprehensive coverage with deep dives into all major aspects. Aim for approximately 6-8 units with 24-32 lessons total. Estimate 18-25 minutes per lesson."
         }
         
+        let extensionConstraint: String
+        if let extending = extendingCurriculum {
+            let existingUnitIds = extending.units.map { $0.id }.sorted().joined(separator: ", ")
+            let existingLessonIds = extending.lessons.keys.sorted().joined(separator: ", ")
+            let existingUnits = extending.units.map { "\($0.id): \($0.title)" }.joined(separator: "\n")
+            
+            extensionConstraint = """
+            
+            CRITICAL EXTEND MODE:
+            This is an EXTENSION of an existing curriculum. You must generate ONLY NEW units and lessons with COMPLETELY NEW IDs.
+            
+            Existing unit IDs (DO NOT REUSE): \(existingUnitIds)
+            Existing lesson IDs (DO NOT REUSE): \(existingLessonIds)
+            
+            Existing curriculum structure:
+            \(existingUnits)
+            
+            Requirements for extension:
+            - Generate ONLY NEW units with NEW unique IDs (e.g., if prior has u01-u03, start at u04)
+            - Generate ONLY NEW lessons with NEW unique IDs (use higher numbers than existing)
+            - Do NOT re-emit, reshuffle, or reference any existing unit/lesson IDs
+            - Build naturally on the existing content
+            - Output ONLY the delta (new units/lessons), not the full curriculum
+            """
+        } else {
+            extensionConstraint = ""
+        }
+        
         let userPrompt = """
         Create a curriculum for: \(topic)
         Locale: \(locale)
         
         Learner's current knowledge level: \(knowledgeGuidance)
         
-        Desired depth: \(depthGuidance)
+        Desired depth: \(depthGuidance)\(extensionConstraint)
         
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """

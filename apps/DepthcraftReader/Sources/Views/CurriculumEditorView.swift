@@ -7,22 +7,29 @@ struct CurriculumEditorView: View {
     @State private var isSubmitting = false
     let onApprove: (Set<String>) -> Void
     let onCancel: () -> Void
+    let isDelta: Bool
     
-    init(curriculum: Binding<Curriculum>, onApprove: @escaping (Set<String>) -> Void, onCancel: @escaping () -> Void) {
+    init(curriculum: Binding<Curriculum>, onApprove: @escaping (Set<String>) -> Void, onCancel: @escaping () -> Void, isDelta: Bool = false) {
         self._curriculum = curriculum
         self.onApprove = onApprove
         self.onCancel = onCancel
+        self.isDelta = isDelta
         self._selectedUnitIds = State(initialValue: Set(curriculum.wrappedValue.units.map { $0.id }))
     }
     
     var body: some View {
         Form {
             Section {
+                if isDelta {
+                    Text("Extension mode: These are NEW units/lessons only. Existing course content is preserved.")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                }
                 Text("Edit unit and lesson titles below. Check units to generate (uncheck to skip for cost control).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } header: {
-                Text("Draft Curriculum")
+                Text(isDelta ? "Extension Delta (New Units Only)" : "Draft Curriculum")
             }
             
             ForEach(Array(curriculum.units.enumerated()), id: \.element.id) { index, unit in

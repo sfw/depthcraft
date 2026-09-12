@@ -4,14 +4,25 @@
   "title": "DepthcraftPackageManifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "packageId", "title", "topic", "createdAt", "locale"],
+  "required": ["schemaVersion", "packageId", "contentVersion", "title", "topic", "createdAt", "locale"],
   "properties": {
     "schemaVersion": { "const": "0.1.0" },
     "packageId": { "type": "string", "minLength": 1 },
+    "contentVersion": { "type": "integer", "minimum": 1 },
     "title": { "type": "string", "minLength": 1 },
     "topic": { "type": "string", "minLength": 1 },
     "createdAt": { "type": "string", "format": "date-time" },
     "locale": { "type": "string", "minLength": 2 },
+    "extendedFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priorVersion", "extendedAt"],
+      "properties": {
+        "priorVersion": { "type": "integer", "minimum": 1 },
+        "extendedAt": { "type": "string", "format": "date-time" },
+        "extendedBy": { "type": "string" }
+      }
+    },
     "generator": {
       "type": "object",
       "additionalProperties": false,

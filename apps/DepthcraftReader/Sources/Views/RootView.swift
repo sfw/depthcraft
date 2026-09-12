@@ -31,5 +31,21 @@ struct RootView: View {
             }
         }
         .environment(\.navigationPath, $navigationPath)
+        .alert("Course Updated", isPresented: .init(
+            get: { store.pendingPackageUpgrade != nil },
+            set: { if !$0 { store.cancelPackageUpgrade() } }
+        )) {
+            Button("Apply Update") {
+                store.confirmPackageUpgrade()
+            }
+            Button("Cancel", role: .cancel) {
+                store.cancelPackageUpgrade()
+            }
+        } message: {
+            if let pending = store.pendingPackageUpgrade,
+               let current = store.course {
+                Text("A newer version (v\(pending.manifest.contentVersion)) of \"\(pending.manifest.title)\" is available. Your progress for existing lessons will be preserved, and new content will be added.\n\nCurrent: v\(current.manifest.contentVersion)")
+            }
+        }
     }
 }
