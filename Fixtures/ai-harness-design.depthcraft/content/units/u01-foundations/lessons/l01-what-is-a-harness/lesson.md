@@ -6,6 +6,12 @@ An **AI harness** is the thin, reliable control plane around models: tools, role
 
 :::demo id="rotating-cube":::
 
+:::demo id="kit-demo":::
+
+:::demo id="sandbox-test":::
+
+:::demo id="soft-fail-test":::
+
 ## Not the model
 
 The model proposes. The harness constrains, checks schema, and refuses half-written packages. If you conflate the two, offline study inherits online flakiness.

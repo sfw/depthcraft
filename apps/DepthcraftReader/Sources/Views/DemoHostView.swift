@@ -1,6 +1,198 @@
 import SwiftUI
 import WebKit
 
+// MARK: - Kit URL Scheme Handler
+
+/// Handles `kit:` URL scheme to serve app-bundled demo kits (e.g. Three.js)
+/// Example: `kit:three-v0/three.module.min.js` → `Resources/demo-kits/three-v0/three.module.min.js`
+final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
+    private let allowedKits: Set<String>
+    
+    init(allowedKits: Set<String>) {
+        self.allowedKits = allowedKits
+        super.init()
+    }
+    
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let url = urlSchemeTask.request.url else {
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -1, userInfo: nil))
+            return
+        }
+        
+        // Parse kit:three-v0/three.module.min.js → kitId=three-v0, path=three.module.min.js
+        let components = url.absoluteString.dropFirst("kit:".count).split(separator: "/", maxSplits: 1)
+        guard components.count == 2 else {
+            #if DEBUG
+            print("🚫 Invalid kit URL format: \(url.absoluteString)")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid kit URL format"]))
+            return
+        }
+        
+        let kitId = String(components[0])
+        let resourcePath = String(components[1])
+        
+        // Reject path escape attempts (.. or absolute paths)
+        guard !resourcePath.contains(".."),
+              !resourcePath.hasPrefix("/"),
+              !resourcePath.contains("://") else {
+            #if DEBUG
+            print("🚫 Path escape attempt blocked: \(resourcePath)")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -8, userInfo: [NSLocalizedDescriptionKey: "Invalid resource path"]))
+            return
+        }
+        
+        // Verify kit is in allowlist
+        guard allowedKits.contains(kitId) else {
+            #if DEBUG
+            print("🚫 Kit not in allowlist: \(kitId)")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -3, userInfo: [NSLocalizedDescriptionKey: "Kit '\(kitId)' not allowed"]))
+            return
+        }
+        
+        // Resolve kit file in bundle with multiple fallback paths
+        guard let kitFileURL = resolveKitFile(kitId: kitId, resourcePath: resourcePath) else {
+            #if DEBUG
+            print("🚫 Kit file not found after trying all bundle paths")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -5, userInfo: [NSLocalizedDescriptionKey: "Kit file not found"]))
+            return
+        }
+        
+        #if DEBUG
+        print("📦 Kit request: \(url.absoluteString) → \(kitFileURL.path)")
+        #endif
+        
+        // Load file data
+        guard let data = try? Data(contentsOf: kitFileURL) else {
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -6, userInfo: nil))
+            return
+        }
+        
+        // Determine MIME type based on extension
+        let mimeType: String
+        switch kitFileURL.pathExtension.lowercased() {
+        case "js":
+            mimeType = "application/javascript"
+        case "json":
+            mimeType = "application/json"
+        case "css":
+            mimeType = "text/css"
+        case "html":
+            mimeType = "text/html"
+        default:
+            mimeType = "application/octet-stream"
+        }
+        
+        // Create HTTPURLResponse with CORS headers for ES module imports
+        // Plain URLResponse is insufficient for cross-scheme module loading
+        guard let httpResponse = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: [
+                "Content-Type": mimeType,
+                "Content-Length": "\(data.count)",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "public, max-age=31536000"
+            ]
+        ) else {
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -7, userInfo: nil))
+            return
+        }
+        
+        urlSchemeTask.didReceive(httpResponse)
+        urlSchemeTask.didReceive(data)
+        urlSchemeTask.didFinish()
+    }
+    
+    /// Resolve kit file in bundle with multiple fallback paths
+    /// XcodeGen's `type: folder` may nest under Resources/ or copy contents to root
+    private func resolveKitFile(kitId: String, resourcePath: String) -> URL? {
+        let fm = FileManager.default
+        
+        // Try 1: resourceURL/demo-kits/{kitId}/{path} (flat copy)
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidate = resourceURL
+                .appendingPathComponent("demo-kits", isDirectory: true)
+                .appendingPathComponent(kitId, isDirectory: true)
+                .appendingPathComponent(resourcePath)
+            if fm.fileExists(atPath: candidate.path) {
+                #if DEBUG
+                print("✅ Kit found at resourceURL/demo-kits: \(candidate.path)")
+                #endif
+                return candidate
+            }
+        }
+        
+        // Try 2: resourceURL/Resources/demo-kits/{kitId}/{path} (nested under Resources)
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidate = resourceURL
+                .appendingPathComponent("Resources", isDirectory: true)
+                .appendingPathComponent("demo-kits", isDirectory: true)
+                .appendingPathComponent(kitId, isDirectory: true)
+                .appendingPathComponent(resourcePath)
+            if fm.fileExists(atPath: candidate.path) {
+                #if DEBUG
+                print("✅ Kit found at resourceURL/Resources/demo-kits: \(candidate.path)")
+                #endif
+                return candidate
+            }
+        }
+        
+        // Try 3: bundleURL/demo-kits/{kitId}/{path}
+        let bundleURL = Bundle.main.bundleURL
+        let candidate3 = bundleURL
+            .appendingPathComponent("demo-kits", isDirectory: true)
+            .appendingPathComponent(kitId, isDirectory: true)
+            .appendingPathComponent(resourcePath)
+        if fm.fileExists(atPath: candidate3.path) {
+            #if DEBUG
+            print("✅ Kit found at bundleURL/demo-kits: \(candidate3.path)")
+            #endif
+            return candidate3
+        }
+        
+        // Try 4: path(forResource:ofType:inDirectory:)
+        let pathComponents = resourcePath.split(separator: "/")
+        if let fileName = pathComponents.last {
+            let fileNameStr = String(fileName)
+            let directory = "demo-kits/\(kitId)"
+            
+            // Split filename and extension
+            let parts = fileNameStr.split(separator: ".")
+            if parts.count >= 2 {
+                let name = parts.dropLast().joined(separator: ".")
+                let ext = String(parts.last!)
+                
+                if let candidate = Bundle.main.path(forResource: name, ofType: ext, inDirectory: directory) {
+                    #if DEBUG
+                    print("✅ Kit found via path(forResource:): \(candidate)")
+                    #endif
+                    return URL(fileURLWithPath: candidate)
+                }
+            }
+        }
+        
+        #if DEBUG
+        print("❌ Kit file not found in any bundle location")
+        if let resourceURL = Bundle.main.resourceURL {
+            print("   Tried: \(resourceURL.path)/demo-kits/\(kitId)/\(resourcePath)")
+            print("   Tried: \(resourceURL.path)/Resources/demo-kits/\(kitId)/\(resourcePath)")
+        }
+        print("   Tried: \(bundleURL.path)/demo-kits/\(kitId)/\(resourcePath)")
+        #endif
+        
+        return nil
+    }
+    
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        // Task cancelled, nothing to clean up
+    }
+}
+
 struct DemoHostView: View {
     let course: LoadedCourse
     let unitId: String
@@ -110,6 +302,23 @@ struct DemoWebView: UIViewRepresentable {
     
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        
+        // Register kit: URL scheme handler for app-bundled demo kits
+        do {
+            let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+            let kitHandler = KitSchemeHandler(allowedKits: [manifest.kit])
+            config.setURLSchemeHandler(kitHandler, forURLScheme: "kit")
+            context.coordinator.allowedKitId = manifest.kit
+            context.coordinator.kitHandler = kitHandler  // Retain handler
+            #if DEBUG
+            print("✅ Registered kit: scheme handler for kit '\(manifest.kit)'")
+            #endif
+        } catch {
+            #if DEBUG
+            print("⚠️ Failed to load demo manifest for kit registration: \(error)")
+            #endif
+            // Continue without kit handler - will soft-fail if demo tries to use kit:
+        }
         
         // Enable file:// cross-origin access for package-local fetches
         // (allows demo to fetch('./demo.json') from same file:// origin)
@@ -233,6 +442,8 @@ struct DemoWebView: UIViewRepresentable {
         let onError: (String) -> Void
         var lastKey: UUID?
         var allowedDirectory: URL?
+        var allowedKitId: String?
+        var kitHandler: KitSchemeHandler?  // Retain scheme handler
         weak var pendingWebView: WKWebView?
         var contentCheckTimer: Timer?
         
@@ -279,6 +490,12 @@ struct DemoWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
+                return
+            }
+            
+            // Allow kit: URLs (handled by custom scheme handler)
+            if url.scheme == "kit" {
+                decisionHandler(.allow)
                 return
             }
             
