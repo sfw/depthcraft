@@ -148,7 +148,11 @@ class GenerationOrchestrator: ObservableObject {
         
         do {
             let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
-            let lessonWriter = LessonWriterService(client: lessonClient, temperature: request.lessonWriterConfig.temperature)
+            let lessonWriter = LessonWriterService(
+                client: lessonClient,
+                temperature: request.lessonWriterConfig.temperature,
+                depthLevel: request.depthLevel
+            )
             
             // Skip lessons that are already generated (retry resume)
             let remainingLessons = lessonsToGenerate.filter { lessons[$0.id] == nil }
