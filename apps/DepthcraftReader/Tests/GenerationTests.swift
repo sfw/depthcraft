@@ -993,6 +993,172 @@ final class ExtendRefreshTests: XCTestCase {
         let newLessonURL = extendedURL.appendingPathComponent("content/units/u02-new/lessons/l02-new/lesson.md")
         XCTAssertTrue(fm.fileExists(atPath: newLessonURL.path), "New lesson should exist")
     }
+    
+    func testSamePathExtensionDoesNotWipePriorContent() async throws {
+        let packager = PackagerService()
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory
+        
+        let documentsSimulatedURL = tempDir.appendingPathComponent("simulated-documents")
+        try? fm.removeItem(at: documentsSimulatedURL)
+        try fm.createDirectory(at: documentsSimulatedURL, withIntermediateDirectories: true)
+        
+        defer {
+            try? fm.removeItem(at: documentsSimulatedURL)
+        }
+        
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let packageId = "test-same-path"
+        let packageURL = documentsSimulatedURL.appendingPathComponent("\(packageId).depthcraft")
+        
+        let initialManifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: packageId,
+            contentVersion: 1,
+            title: "Test Same Path",
+            topic: "Test",
+            createdAt: timestamp,
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: nil
+        )
+        
+        let initialCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u01-original", title: "Original Unit", order: 1, lessonIds: ["l01-original"])
+            ],
+            lessons: [
+                "l01-original": CurriculumLesson(
+                    id: "l01-original",
+                    unitId: "u01-original",
+                    title: "Original Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        try fm.createDirectory(at: packageURL, withIntermediateDirectories: true)
+        try encoder.encode(initialManifest).write(to: packageURL.appendingPathComponent("manifest.json"))
+        try encoder.encode(initialCurriculum).write(to: packageURL.appendingPathComponent("curriculum.json"))
+        
+        let originalContentURL = packageURL.appendingPathComponent("content/units/u01-original/lessons/l01-original")
+        try fm.createDirectory(at: originalContentURL, withIntermediateDirectories: true)
+        
+        let originalLessonMd = "# Original Lesson\n\nThis content must survive same-path extension."
+        try originalLessonMd.write(to: originalContentURL.appendingPathComponent("lesson.md"), atomically: true, encoding: .utf8)
+        
+        let originalQuiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-original",
+            items: [
+                .mc(MCItem(
+                    id: "q1",
+                    type: "mc",
+                    prompt: "Original?",
+                    choices: [
+                        MCChoice(id: "a", text: "Yes"),
+                        MCChoice(id: "b", text: "No")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        try encoder.encode(originalQuiz).write(to: originalContentURL.appendingPathComponent("quiz.json"))
+        
+        let originalLessonBytes = try Data(contentsOf: originalContentURL.appendingPathComponent("lesson.md"))
+        let originalQuizBytes = try Data(contentsOf: originalContentURL.appendingPathComponent("quiz.json"))
+        
+        let newCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u02-extension", title: "Extension Unit", order: 2, lessonIds: ["l02-extension"])
+            ],
+            lessons: [
+                "l02-extension": CurriculumLesson(
+                    id: "l02-extension",
+                    unitId: "u02-extension",
+                    title: "Extension Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let newMeta = LessonMeta(
+            schemaVersion: "0.1.0",
+            lessonId: "l02-extension",
+            anchors: []
+        )
+        
+        let newQuiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l02-extension",
+            items: [
+                .mc(MCItem(
+                    id: "q2",
+                    type: "mc",
+                    prompt: "Extension?",
+                    choices: [
+                        MCChoice(id: "a", text: "Yes"),
+                        MCChoice(id: "b", text: "No")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        
+        let metadata = GeneratorMetadata(
+            planner: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            lessonWriter: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            quizWriter: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            demoWriter: DemoRun(provider: "anthropic", model: "test", ranAt: timestamp, demosEmitted: 0),
+            packager: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp)
+        )
+        
+        let resultURL = try await packager.packageCourse(
+            topic: "Test Same Path",
+            locale: "en-CA",
+            curriculum: newCurriculum,
+            lessons: ["l02-extension": ("# Extension Lesson\n\nNew content", newMeta)],
+            quizzes: ["l02-extension": newQuiz],
+            demos: [:],
+            roleRuns: metadata,
+            extendFrom: packageURL
+        )
+        
+        XCTAssertEqual(resultURL.standardizedFileURL, packageURL.standardizedFileURL, "Should return same path")
+        
+        let finalOriginalLessonURL = resultURL.appendingPathComponent("content/units/u01-original/lessons/l01-original/lesson.md")
+        let finalOriginalQuizURL = resultURL.appendingPathComponent("content/units/u01-original/lessons/l01-original/quiz.json")
+        
+        let finalLessonBytes = try Data(contentsOf: finalOriginalLessonURL)
+        let finalQuizBytes = try Data(contentsOf: finalOriginalQuizURL)
+        
+        XCTAssertEqual(originalLessonBytes, finalLessonBytes, "Original lesson.md bytes must survive same-path extension")
+        XCTAssertEqual(originalQuizBytes, finalQuizBytes, "Original quiz.json bytes must survive same-path extension")
+        
+        let extensionLessonURL = resultURL.appendingPathComponent("content/units/u02-extension/lessons/l02-extension/lesson.md")
+        XCTAssertTrue(fm.fileExists(atPath: extensionLessonURL.path), "Extension lesson should exist")
+        
+        let finalManifestData = try Data(contentsOf: resultURL.appendingPathComponent("manifest.json"))
+        let finalManifest = try JSONDecoder().decode(PackageManifest.self, from: finalManifestData)
+        XCTAssertEqual(finalManifest.contentVersion, 2, "Version should increment to 2")
+        XCTAssertNotNil(finalManifest.extendedFrom, "Should have extendedFrom metadata")
+        XCTAssertEqual(finalManifest.extendedFrom?.priorVersion, 1, "Should track prior version 1")
+    }
 }
 
 final class LessonMetaExtractionTests: XCTestCase {

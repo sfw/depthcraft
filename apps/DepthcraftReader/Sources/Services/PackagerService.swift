@@ -310,17 +310,22 @@ class PackagerService: PackagerRole {
         priorPackageURL: URL?
     ) async throws -> URL {
         let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let packageURL = documentsURL.appendingPathComponent("\(packageId).depthcraft")
+        let finalPackageURL = documentsURL.appendingPathComponent("\(packageId).depthcraft")
         
-        if fileManager.fileExists(atPath: packageURL.path) {
-            try fileManager.removeItem(at: packageURL)
+        let tempDir = fileManager.temporaryDirectory
+        let stagingURL = tempDir.appendingPathComponent("\(packageId)-\(UUID().uuidString).depthcraft")
+        
+        if fileManager.fileExists(atPath: stagingURL.path) {
+            try fileManager.removeItem(at: stagingURL)
         }
         
         if let priorURL = priorPackageURL {
-            try fileManager.copyItem(at: priorURL, to: packageURL)
+            try fileManager.copyItem(at: priorURL, to: stagingURL)
         } else {
-            try fileManager.createDirectory(at: packageURL, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: stagingURL, withIntermediateDirectories: true)
         }
+        
+        let packageURL = stagingURL
         
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -441,7 +446,13 @@ class PackagerService: PackagerRole {
             }
         }
         
-        return packageURL
+        if fileManager.fileExists(atPath: finalPackageURL.path) {
+            try fileManager.removeItem(at: finalPackageURL)
+        }
+        
+        try fileManager.moveItem(at: stagingURL, to: finalPackageURL)
+        
+        return finalPackageURL
     }
     
     private func insertDemoDirectives(markdown: String, demos: [DemoSpec], lessonId: String) throws -> String {
