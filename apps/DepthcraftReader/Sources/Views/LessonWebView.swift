@@ -95,13 +95,6 @@ struct LessonWebView: UIViewRepresentable {
                 decisionHandler(.cancel)
             }
         }
-        
-        deinit {
-            // Clean up message handler to prevent leaks
-            if let webView = lastHTML as? WKWebView {
-                webView.configuration.userContentController.removeScriptMessageHandler(forName: "explainTap")
-            }
-        }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             checkIfAtEnd(webView.scrollView)
