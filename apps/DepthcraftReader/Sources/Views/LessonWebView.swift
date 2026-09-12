@@ -5,7 +5,6 @@ struct ExplainSheet: Identifiable {
     let id = UUID()
     let term: String
     let gloss: String
-    let isBakedAnchor: Bool
     let lessonContext: LessonContext?
     
     struct LessonContext {
@@ -127,14 +126,18 @@ struct LessonWebView: UIViewRepresentable {
                     return
                 }
                 
-                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { suggestedActions in
                     let explainAction = UIAction(
                         title: "Explain",
                         image: UIImage(systemName: "lightbulb")
                     ) { _ in
                         self.explainSelectedText(selectedText)
                     }
-                    return UIMenu(title: "", children: [explainAction])
+                    
+                    // Append Explain to system actions (Copy, Look Up, etc.)
+                    var actions = suggestedActions
+                    actions.append(explainAction)
+                    return UIMenu(title: "", children: actions)
                 }
                 
                 completionHandler(config)
@@ -155,7 +158,6 @@ struct LessonWebView: UIViewRepresentable {
                     self.explainSheet?.wrappedValue = ExplainSheet(
                         term: text,
                         gloss: gloss,
-                        isBakedAnchor: false,
                         lessonContext: lessonContext
                     )
                 } catch {
@@ -163,7 +165,6 @@ struct LessonWebView: UIViewRepresentable {
                     self.explainSheet?.wrappedValue = ExplainSheet(
                         term: text,
                         gloss: "**Error generating explanation:** \(error.localizedDescription)",
-                        isBakedAnchor: false,
                         lessonContext: lessonContext
                     )
                 }
@@ -188,7 +189,6 @@ struct LessonWebView: UIViewRepresentable {
                 self.explainSheet?.wrappedValue = ExplainSheet(
                     term: term,
                     gloss: gloss,
-                    isBakedAnchor: true,
                     lessonContext: self.lessonContext
                 )
             }

@@ -51,7 +51,6 @@ struct LessonContentView: View {
             ExplanationSheetView(
                 term: sheet.term,
                 gloss: sheet.gloss,
-                isBakedAnchor: sheet.isBakedAnchor,
                 lessonContext: sheet.lessonContext
             )
             .presentationDetents([.medium, .large])
@@ -187,6 +186,7 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     
     func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
         viewController.isOnline = isOnline
+        viewController.updateDelegatesOnlineState()
     }
 }
 
@@ -274,6 +274,22 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 ])
                 stackView.addArrangedSubview(container)
                 demoHost.didMove(toParent: self)
+            }
+        }
+    }
+    
+    func updateDelegatesOnlineState() {
+        // Update isOnline in all WebView delegates
+        for view in stackView.arrangedSubviews {
+            if let webView = view as? WKWebView {
+                // Update delegate
+                if let delegate = objc_getAssociatedObject(webView, "delegate") as? HTMLWebViewDelegate {
+                    delegate.isOnline = isOnline
+                }
+                // Update tap handler
+                if let tapHandler = objc_getAssociatedObject(webView, "tapHandler") as? ExplainTapHandler {
+                    tapHandler.isOnline = isOnline
+                }
             }
         }
     }
@@ -376,7 +392,6 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 self.explainSheet.wrappedValue = ExplainSheet(
                     term: term,
                     gloss: gloss,
-                    isBakedAnchor: true,
                     lessonContext: self.lessonContext
                 )
             }
@@ -446,14 +461,18 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     return
                 }
                 
-                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { suggestedActions in
                     let explainAction = UIAction(
                         title: "Explain",
                         image: UIImage(systemName: "lightbulb")
                     ) { _ in
                         self.explainSelectedText(selectedText)
                     }
-                    return UIMenu(title: "", children: [explainAction])
+                    
+                    // Append Explain to system actions (Copy, Look Up, etc.)
+                    var actions = suggestedActions
+                    actions.append(explainAction)
+                    return UIMenu(title: "", children: actions)
                 }
                 
                 completionHandler(config)
@@ -469,14 +488,12 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     self.explainSheet.wrappedValue = ExplainSheet(
                         term: text,
                         gloss: gloss,
-                        isBakedAnchor: false,
                         lessonContext: self.lessonContext
                     )
                 } catch {
                     self.explainSheet.wrappedValue = ExplainSheet(
                         term: text,
                         gloss: "**Error generating explanation:** \(error.localizedDescription)",
-                        isBakedAnchor: false,
                         lessonContext: self.lessonContext
                     )
                 }
@@ -541,7 +558,6 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
 struct ExplanationSheetView: View {
     let term: String
     let gloss: String
-    let isBakedAnchor: Bool
     let lessonContext: ExplainSheet.LessonContext?
     
     @Environment(\.dismiss) private var dismiss
