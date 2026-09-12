@@ -103,6 +103,7 @@ struct GenerationRequest {
     let generateUnitIds: [String]?
     let knowledgeLevel: KnowledgeLevel
     let depthLevel: DepthLevel
+    let extendFromPackageURL: URL?
 }
 
 // MARK: - Generation state
@@ -184,7 +185,8 @@ protocol PackagerRole {
         lessons: [String: (markdown: String, meta: LessonMeta)],
         quizzes: [String: QuizDocument],
         demos: [String: DemoWriterOutput],
-        roleRuns: GeneratorMetadata
+        roleRuns: GeneratorMetadata,
+        extendFrom: URL?
     ) async throws -> URL
 }
 

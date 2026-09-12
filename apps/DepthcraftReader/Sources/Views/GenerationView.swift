@@ -6,6 +6,8 @@ struct GenerationView: View {
     @EnvironmentObject private var courseStore: CourseStore
     @Environment(\.dismiss) private var dismiss
     
+    let extendFromCourse: LoadedCourse?
+    
     @State private var topic = "AI harness design for educational systems"
     @State private var locale = "en-CA"
     
@@ -36,7 +38,8 @@ struct GenerationView: View {
     @State private var showingOpenPackage = false
     @State private var lastFailedRequest: GenerationRequest?
     
-    init() {
+    init(extendFromCourse: LoadedCourse? = nil) {
+        self.extendFromCourse = extendFromCourse
         let store = APIKeyStore()
         _keyStore = StateObject(wrappedValue: store)
         _orchestrator = StateObject(wrappedValue: GenerationOrchestrator(keyStore: store))
@@ -56,7 +59,7 @@ struct GenerationView: View {
                 progressSection
             }
         }
-        .navigationTitle("Generate Course")
+        .navigationTitle(extendFromCourse != nil ? "Extend Course" : "Generate Course")
         .alert("Error", isPresented: $showingError) {
             Button("OK") {
                 errorMessage = nil
@@ -86,6 +89,13 @@ struct GenerationView: View {
             // Load custom endpoint config from keyStore
             customBaseURL = keyStore.customBaseURL
             customModel = keyStore.customModel
+            
+            // If extending, pre-populate from existing course and default to Brief
+            if let course = extendFromCourse {
+                topic = course.manifest.topic
+                locale = course.manifest.locale
+                depthLevel = .brief
+            }
             
             // Auto-switch to first available provider if needed
             ensureValidProviderSelections()
@@ -595,7 +605,8 @@ struct GenerationView: View {
                 ),
                 generateUnitIds: nil,
                 knowledgeLevel: knowledgeLevel,
-                depthLevel: depthLevel
+                depthLevel: depthLevel,
+                extendFromPackageURL: extendFromCourse?.rootURL
             )
             
             lastFailedRequest = request
@@ -713,7 +724,8 @@ struct GenerationView: View {
                 ),
                 generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds),
                 knowledgeLevel: knowledgeLevel,
-                depthLevel: depthLevel
+                depthLevel: depthLevel,
+                extendFromPackageURL: extendFromCourse?.rootURL
             )
             
             lastFailedRequest = request

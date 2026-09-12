@@ -287,7 +287,8 @@ class GenerationOrchestrator: ObservableObject {
                 lessons: lessons,
                 quizzes: quizzes,
                 demos: demos,
-                roleRuns: metadata
+                roleRuns: metadata,
+                extendFrom: request.extendFromPackageURL
             )
             
             let manifestURL = packageURL.appendingPathComponent("manifest.json")

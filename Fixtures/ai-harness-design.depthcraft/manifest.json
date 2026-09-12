@@ -1,6 +1,7 @@
 {
   "schemaVersion": "0.1.0",
   "packageId": "ai-harness-design-edu-v0",
+  "contentVersion": 1,
   "title": "AI Harness Design for Educational Systems",
   "topic": "AI harness design for educational systems",
   "createdAt": "2026-09-10T02:00:00Z",

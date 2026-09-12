@@ -117,11 +117,13 @@ final class PackageValidationTests: XCTestCase {
         let manifest = PackageManifest(
             schemaVersion: "0.1.0",
             packageId: "test-package",
+            contentVersion: 1,
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
             locale: "en-CA",
-            generator: nil
+            generator: nil,
+            extendedFrom: nil
         )
         
         let meta = LessonMeta(
@@ -192,11 +194,13 @@ final class PackageValidationTests: XCTestCase {
         let manifest = PackageManifest(
             schemaVersion: "0.1.0",
             packageId: "test-package",
+            contentVersion: 1,
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
             locale: "en-CA",
-            generator: nil
+            generator: nil,
+            extendedFrom: nil
         )
         
         XCTAssertThrowsError(
@@ -562,11 +566,13 @@ final class PackageValidationTests: XCTestCase {
         PackageManifest(
             schemaVersion: "0.1.0",
             packageId: "test-package",
+            contentVersion: 1,
             title: "Test",
             topic: "Test Topic",
             createdAt: ISO8601DateFormatter().string(from: Date()),
             locale: "en-CA",
-            generator: nil
+            generator: nil,
+            extendedFrom: nil
         )
     }
     
@@ -599,6 +605,235 @@ final class PackageValidationTests: XCTestCase {
         let quizzes = ["l01-test": quiz]
         
         return (lessons, quizzes)
+    }
+}
+
+final class ExtendRefreshTests: XCTestCase {
+    
+    func testProgressMergePreservesExistingCompletions() {
+        let progressStore = ProgressStore(defaults: UserDefaults(suiteName: "test-suite")!)
+        
+        let existingProgress = DeviceProgress(
+            schemaVersion: "0.1.0",
+            packageId: "test-package",
+            lessons: [
+                "l01-old": LessonProgress(completed: true, quizPassed: true, completedAt: "2024-01-01", markedRead: true),
+                "l02-old": LessonProgress(completed: false, quizPassed: false, completedAt: nil, markedRead: true)
+            ],
+            units: [
+                "u01-old": UnitProgress(completed: true, completedAt: "2024-01-01")
+            ],
+            lastLessonId: "l01-old",
+            lastUnitId: "u01-old"
+        )
+        
+        progressStore.save(existingProgress)
+        
+        let newLessonIds = ["l01-old", "l02-old", "l03-new", "l04-new"]
+        let newUnitIds = ["u01-old", "u02-new"]
+        
+        let mergedProgress = progressStore.load(
+            packageId: "test-package",
+            lessonIds: newLessonIds,
+            unitIds: newUnitIds
+        )
+        
+        XCTAssertTrue(mergedProgress.lessons["l01-old"]?.completed == true, "Old completed lesson should remain completed")
+        XCTAssertTrue(mergedProgress.lessons["l02-old"]?.markedRead == true, "Old read lesson should remain read")
+        XCTAssertFalse(mergedProgress.lessons["l03-new"]?.completed ?? true, "New lesson should start incomplete")
+        XCTAssertFalse(mergedProgress.lessons["l04-new"]?.completed ?? true, "New lesson should start incomplete")
+        
+        XCTAssertTrue(mergedProgress.units["u01-old"]?.completed == true, "Old completed unit should remain completed")
+        XCTAssertFalse(mergedProgress.units["u02-new"]?.completed ?? true, "New unit should start incomplete")
+        
+        XCTAssertEqual(mergedProgress.lessons.count, 4, "Should have all 4 lessons")
+        XCTAssertEqual(mergedProgress.units.count, 2, "Should have both units")
+    }
+    
+    func testVersionDetectionRejectsOlderVersion() {
+        let store = CourseStore()
+        
+        let currentManifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-package",
+            contentVersion: 2,
+            title: "Test Course",
+            topic: "Test",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: ExtensionMetadata(priorVersion: 1, extendedAt: "2024-01-02", extendedBy: nil)
+        )
+        
+        let currentCourse = LoadedCourse(
+            rootURL: URL(fileURLWithPath: "/tmp/current"),
+            manifest: currentManifest,
+            curriculum: Curriculum(schemaVersion: "0.1.0", status: "built", approvedAt: nil, units: [], lessons: [:])
+        )
+        
+        store.course = currentCourse
+        
+        XCTAssertEqual(currentCourse.manifest.contentVersion, 2)
+    }
+    
+    func testIDCollisionDetection() async throws {
+        let packager = PackagerService()
+        let tempDir = FileManager.default.temporaryDirectory
+        
+        let priorURL = tempDir.appendingPathComponent("prior-package.depthcraft")
+        try? FileManager.default.removeItem(at: priorURL)
+        try FileManager.default.createDirectory(at: priorURL, withIntermediateDirectories: true)
+        
+        defer {
+            try? FileManager.default.removeItem(at: priorURL)
+        }
+        
+        let priorManifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-package",
+            contentVersion: 1,
+            title: "Test",
+            topic: "Test",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: nil
+        )
+        
+        let priorCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u01-existing", title: "Existing Unit", order: 1, lessonIds: ["l01-existing"])
+            ],
+            lessons: [
+                "l01-existing": CurriculumLesson(
+                    id: "l01-existing",
+                    unitId: "u01-existing",
+                    title: "Existing Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        try encoder.encode(priorManifest).write(to: priorURL.appendingPathComponent("manifest.json"))
+        try encoder.encode(priorCurriculum).write(to: priorURL.appendingPathComponent("curriculum.json"))
+        
+        let newCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u01-existing", title: "Collision!", order: 2, lessonIds: ["l02-new"])
+            ],
+            lessons: [
+                "l02-new": CurriculumLesson(
+                    id: "l02-new",
+                    unitId: "u01-existing",
+                    title: "New Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        do {
+            try await packager.validateExtension(
+                priorPackageURL: priorURL,
+                newCurriculum: newCurriculum,
+                newLessons: [:]
+            )
+            XCTFail("Should have thrown an error for ID collision")
+        } catch {
+            let description = error.localizedDescription
+            XCTAssertTrue(description.contains("collision"), "Should detect unit ID collision")
+        }
+    }
+    
+    func testAppendOnlyValidation() async throws {
+        let packager = PackagerService()
+        let tempDir = FileManager.default.temporaryDirectory
+        
+        let priorURL = tempDir.appendingPathComponent("prior-package-append.depthcraft")
+        try? FileManager.default.removeItem(at: priorURL)
+        try FileManager.default.createDirectory(at: priorURL, withIntermediateDirectories: true)
+        
+        defer {
+            try? FileManager.default.removeItem(at: priorURL)
+        }
+        
+        let priorManifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-package",
+            contentVersion: 1,
+            title: "Test",
+            topic: "Test",
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: nil
+        )
+        
+        let priorCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u01-old", title: "Old Unit", order: 1, lessonIds: ["l01-old"])
+            ],
+            lessons: [
+                "l01-old": CurriculumLesson(
+                    id: "l01-old",
+                    unitId: "u01-old",
+                    title: "Old Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        try encoder.encode(priorManifest).write(to: priorURL.appendingPathComponent("manifest.json"))
+        try encoder.encode(priorCurriculum).write(to: priorURL.appendingPathComponent("curriculum.json"))
+        
+        let newCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u02-new", title: "New Unit", order: 2, lessonIds: ["l02-new"])
+            ],
+            lessons: [
+                "l02-new": CurriculumLesson(
+                    id: "l02-new",
+                    unitId: "u02-new",
+                    title: "New Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        do {
+            try await packager.validateExtension(
+                priorPackageURL: priorURL,
+                newCurriculum: newCurriculum,
+                newLessons: [:]
+            )
+        } catch {
+            XCTFail("Should not throw error for valid append-only extension: \(error)")
+        }
     }
 }
 

@@ -3,11 +3,19 @@ import Foundation
 struct PackageManifest: Codable, Hashable {
     let schemaVersion: String
     let packageId: String
+    let contentVersion: Int
     let title: String
     let topic: String
     let createdAt: String
     let locale: String
     let generator: GeneratorMetadata?
+    let extendedFrom: ExtensionMetadata?
+}
+
+struct ExtensionMetadata: Codable, Hashable {
+    let priorVersion: Int
+    let extendedAt: String
+    let extendedBy: String?
 }
 
 struct Curriculum: Codable, Hashable {

@@ -35,3 +35,15 @@ Reader: native chrome + WebView for `lesson.md`; native quiz grading recommended
 `progress.json` in a shipped/example package is a **schema fixture / empty template only**.
 
 Runtime progress is **user/device-local state** (iCloud later). Regenerating or re-importing a course zip must **not** overwrite existing learner progress for the same `packageId` (merge/migrate by lesson id; never clobber completions).
+
+## Package versioning (opt-in extend/refresh)
+
+Packages support **append-only growth** with stable IDs:
+
+- `contentVersion` (integer, starts at 1): Incremented when extending an existing package
+- Same `packageId` + version bump = append-only update (new units/lessons only)
+- `extendedFrom`: Tracks prior version and extension timestamp
+- **Progress merge**: Finished lesson IDs preserved; new IDs start incomplete
+- **Validation**: Fail closed on ID collision or mutation of finished lesson bytes
+- **Explicit opt-in**: Generate "Extend this course" + Reader confirm before apply
+- **No template clobber**: Import never overwrites device-local progress from package template

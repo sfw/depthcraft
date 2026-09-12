@@ -8,6 +8,7 @@ final class CourseStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoading = false
     @Published var availablePackages: [URL] = []
+    @Published var pendingPackageUpgrade: (url: URL, manifest: PackageManifest)?
     
     private let progressStore = ProgressStore()
     private let fileManager = FileManager.default
@@ -83,6 +84,7 @@ final class CourseStore: ObservableObject {
             #if DEBUG
             print("📦 Loading package from: \(url.path)")
             print("   Manifest: \(loaded.manifest.packageId)")
+            print("   Version: \(loaded.manifest.contentVersion)")
             print("   Units: \(loaded.curriculum.units.count)")
             print("   Lessons: \(loaded.curriculum.lessons.count)")
             for unit in loaded.curriculum.units.sorted(by: { $0.order < $1.order }) {
@@ -90,29 +92,65 @@ final class CourseStore: ObservableObject {
             }
             #endif
             
-            // Force-clear old course before setting new one to ensure SwiftUI detects the change
-            course = nil
+            if let currentCourse = course,
+               currentCourse.manifest.packageId == loaded.manifest.packageId {
+                if loaded.manifest.contentVersion > currentCourse.manifest.contentVersion {
+                    #if DEBUG
+                    print("📦 Detected package upgrade: v\(currentCourse.manifest.contentVersion) → v\(loaded.manifest.contentVersion)")
+                    #endif
+                    pendingPackageUpgrade = (url, loaded.manifest)
+                    return
+                } else if loaded.manifest.contentVersion < currentCourse.manifest.contentVersion {
+                    errorMessage = "Cannot load older version (v\(loaded.manifest.contentVersion)) of package. Current version is v\(currentCourse.manifest.contentVersion)."
+                    return
+                }
+            }
             
-            // Set new course
-            course = loaded
-            let lessonIds = Array(loaded.curriculum.lessons.keys)
-            let unitIds = loaded.curriculum.units.map(\.id)
-            progress = progressStore.load(
-                packageId: loaded.manifest.packageId,
-                lessonIds: lessonIds,
-                unitIds: unitIds
-            )
-            errorMessage = nil
-            refreshAvailablePackages()
-            
-            // Persist last opened package URL
-            UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
+            applyPackageLoad(loaded: loaded, url: url)
         } catch {
             #if DEBUG
             print("❌ Failed to load package: \(error)")
             #endif
             errorMessage = error.localizedDescription
         }
+    }
+    
+    func confirmPackageUpgrade() {
+        guard let pending = pendingPackageUpgrade else { return }
+        pendingPackageUpgrade = nil
+        
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let loaded = try PackageLoader.load(from: pending.url)
+            applyPackageLoad(loaded: loaded, url: pending.url)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    func cancelPackageUpgrade() {
+        pendingPackageUpgrade = nil
+    }
+    
+    private func applyPackageLoad(loaded: LoadedCourse, url: URL) {
+        // Force-clear old course before setting new one to ensure SwiftUI detects the change
+        course = nil
+        
+        // Set new course
+        course = loaded
+        let lessonIds = Array(loaded.curriculum.lessons.keys)
+        let unitIds = loaded.curriculum.units.map(\.id)
+        progress = progressStore.load(
+            packageId: loaded.manifest.packageId,
+            lessonIds: lessonIds,
+            unitIds: unitIds
+        )
+        errorMessage = nil
+        refreshAvailablePackages()
+        
+        // Persist last opened package URL
+        UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
     }
     
     func refreshAvailablePackages() {
