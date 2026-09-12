@@ -38,9 +38,12 @@ struct UnitView: View {
                                     .frame(width: 6, height: 6)
                                 
                                 VStack(alignment: .leading, spacing: 4) {
+                                    let isCurrent = store.progress?.lastLessonId == lesson.id
+                                    let isCompleted = store.progress?.lessons[lesson.id]?.completed == true
+                                    
                                     Text(lesson.title)
                                         .font(.body)
-                                        .foregroundStyle(store.progress?.lessons[lesson.id]?.completed == true ? .secondary : .primary)
+                                        .foregroundStyle(isCurrent ? .primary : (isCompleted ? .tertiary : .secondary))
                                     
                                     if let minutes = lesson.estimatedMinutes {
                                         Text("\(minutes) min")

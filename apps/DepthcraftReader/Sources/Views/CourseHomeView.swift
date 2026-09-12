@@ -21,10 +21,9 @@ struct CourseHomeView: View {
                             }
                         }
                         
-                        // Colophon: lesson count · offline · model
+                        // Colophon: lesson count · offline · BYOK
                         let totalLessons = course.curriculum.lessons.count
-                        let modelName = course.manifest.generator?.planner?.model ?? "Unknown model"
-                        Text("\(totalLessons) lessons · offline · \(modelName)")
+                        Text("\(totalLessons) lessons · offline · BYOK")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                         
@@ -78,11 +77,9 @@ struct CourseHomeView: View {
                                     
                                     let lessons = store.lessons(for: unit)
                                     let completed = lessons.filter { store.progress?.lessons[$0.id]?.completed == true }.count
-                                    if completed > 0 {
-                                        Text("\(completed) of \(lessons.count)")
-                                            .font(.caption)
-                                            .foregroundStyle(.tertiary)
-                                    }
+                                    Text("\(completed) of \(lessons.count)")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -96,38 +93,12 @@ struct CourseHomeView: View {
                         .foregroundStyle(.secondary)
                 }
                 
-                // Demoted actions section (secondary)
+                // More section (collapsed secondary actions)
                 Section {
                     NavigationLink {
-                        GenerationView(extendFromCourse: course)
+                        MoreMenuView()
                     } label: {
-                        Text("Extend this Course")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    NavigationLink {
-                        GenerationView()
-                    } label: {
-                        Text("Generate New Course")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    if !store.availablePackages.isEmpty {
-                        NavigationLink {
-                            PackageSwitcherView()
-                        } label: {
-                            Text("Switch Package")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    
-                    NavigationLink {
-                        SettingsStubView()
-                    } label: {
-                        Text("Settings")
+                        Text("More")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -135,10 +106,8 @@ struct CourseHomeView: View {
             } else if store.course == nil && !store.isLoading {
                 // Editorial empty state
                 ContentUnavailableView {
-                    Label("No Course Loaded", systemImage: "book.closed")
-                } description: {
-                    Text("Import a course package to begin")
-                        .foregroundStyle(.secondary)
+                    Text("Approve curriculum to unlock the spine")
+                        .font(.system(.body, design: .serif))
                 }
             }
         }
