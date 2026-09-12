@@ -32,6 +32,16 @@ final class KitSchemeHandler: NSObject, WKURLSchemeHandler {
         let kitId = String(components[0])
         let resourcePath = String(components[1])
         
+        // SECURITY: Validate kit ID format (alphanumeric + hyphen only, no path separators)
+        let allowedKitCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-"))
+        guard kitId.rangeOfCharacter(from: allowedKitCharacters.inverted) == nil else {
+            #if DEBUG
+            print("🚫 Invalid kit ID characters: \(kitId)")
+            #endif
+            urlSchemeTask.didFailWithError(NSError(domain: "KitSchemeHandler", code: -9, userInfo: [NSLocalizedDescriptionKey: "Invalid kit ID format"]))
+            return
+        }
+        
         // Reject path escape attempts (.. or absolute paths)
         guard !resourcePath.contains(".."),
               !resourcePath.hasPrefix("/"),
@@ -554,6 +564,20 @@ struct DemoWebView: UIViewRepresentable {
                 let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
                 let demoDir = PackageLoader.demoDirectory(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
                 let entryURL = demoDir.appendingPathComponent(manifest.entry)
+                
+                // SECURITY: Validate entry point extension (only allow safe web content)
+                let allowedExtensions: Set<String> = ["html", "htm"]
+                let entryExtension = entryURL.pathExtension.lowercased()
+                guard allowedExtensions.contains(entryExtension) else {
+                    onError("Invalid demo entry point: must be HTML")
+                    return
+                }
+                
+                // SECURITY: Validate entry URL is within demo directory (prevent escape)
+                guard entryURL.path.hasPrefix(demoDir.path) else {
+                    onError("Invalid demo entry point: path escape detected")
+                    return
+                }
                 
                 guard FileManager.default.fileExists(atPath: entryURL.path) else {
                     onError("Demo entry file not found")
