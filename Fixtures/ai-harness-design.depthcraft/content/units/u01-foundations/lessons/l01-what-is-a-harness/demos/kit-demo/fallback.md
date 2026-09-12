@@ -1,7 +1,5 @@
-# Kit Demo Unavailable
+# Interactive Demo Unavailable
 
-This demo requires WebGL and Three.js support. Your device or browser does not support the required features.
+This demo requires WebGL support, which is not available in your current environment.
 
-## What You Would See
-
-A rotating colorful cube demonstrating 3D coordinate systems and app-bundled kit injection.
+**What you would see:** A rotating colorful cube demonstrating 3D coordinate systems in real time.
