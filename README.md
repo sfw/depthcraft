@@ -14,8 +14,6 @@ Depthcraft generates structured courses from any topic using your own LLM keys, 
 
 **Students and professionals** who need offline study materials for planes, trains, commutes, or anywhere connectivity is unreliable or distracting.
 
-**Course creators** who want to prototype curriculum, generate quiz banks, or produce structured packages with full content control.
-
 **BYOK practitioners** who want both generation and runtime without vendor lock-in, usage tracking, or required cloud services.
 
 ---
@@ -43,7 +41,7 @@ Courses live as versioned `.depthcraft` package folders. Progress is device-loca
 - **Extend & refresh**: Append new units while preserving completed progress; version tracking prevents collisions
 
 ### Study experience
-- **Course home**: Editorial cover with title and topic, thin teal progress marker, resume button, and contents spine listing units with lesson counts
+- **Course home**: Typographic cover with title and topic; Contents spine listing units with thin teal current marker and k of n progress; Continue
 - **Lesson player**: Study typography with proper measure and scale
 - **Native quizzes**: Multiple-choice and cloze (fill-in-the-blank) with immediate grading and explanation
 - **Interactive demos**: Sandboxed Three.js demos that render inline at lesson positions; fallback to markdown on errors
@@ -82,7 +80,7 @@ See [`schema/0.1.0/README.md`](schema/0.1.0/README.md) for full contract details
 
 ## Getting Depthcraft
 
-**Current distribution:** Open-source build. Clone the repo and build with Xcode (see Build from source below).
+**Current distribution:** Open-source field trial. Build from source with Xcode (see below) or install to device from Xcode.
 
 **iPad-first** (iOS 17+). iPhone works but isn't optimized.
 
