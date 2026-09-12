@@ -88,7 +88,7 @@ class LessonWriterService: LessonWriterRole {
                     kind = "section"
                 }
                 
-                anchors.append(LessonMeta.Anchor(id: anchorId, heading: heading, kind: kind))
+                anchors.append(LessonMeta.Anchor(id: anchorId, heading: heading, kind: kind, term: nil, gloss: nil))
             }
         }
         

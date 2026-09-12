@@ -80,8 +80,7 @@ class ComplexityAnalyzerService {
     }
     
     private func parseComplexityResponse(_ response: String, lessonId: String) throws -> [LessonMeta.Anchor] {
-        let extractor = JSONExtractor()
-        guard let jsonString = extractor.extract(from: response),
+        guard let jsonString = JSONExtractor.extractJSON(from: response),
               let jsonData = jsonString.data(using: .utf8),
               let parsed = try? JSONDecoder().decode(ComplexityResponse.self, from: jsonData) else {
             throw GenerationError.invalidResponse("Could not parse complexity analysis JSON")
