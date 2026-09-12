@@ -1,20 +1,20 @@
 # Depthcraft
 
-**Free, open-source, BYOK course generation and offline study for iPad.**
+**Free, open-source, BYOK offline course app for iPad.**
 
-Depthcraft generates structured courses from any topic using your own LLM keys, then delivers them through a refined study experience that works completely offline. No accounts, no backend, no lock-in—just your keys, your device, and focused learning.
+Depthcraft generates structured courses from any topic using your own LLM keys, then delivers them through a clean study interface that works completely offline. No accounts, no backend, no vendor lock-in.
 
-Not mid-flight chat. Full courses—lessons, quizzes, interactive demos—that you generate on the ground and study airplane-mode.
+**Not mid-flight chat.** You generate full courses—lessons, quizzes, interactive demos—on the ground with your keys, then study airplane-mode without network.
 
 ---
 
 ## Who it's for
 
-**Perpetual learners** who already use LLMs to generate markdown notes, dump them into Obsidian, and read on flights—but want structure, progress tracking, quizzes with grading, and interactive demos without stitching it all together yourself.
+**Perpetual learners** who already use LLMs to generate markdown notes, save them to Obsidian, and read on flights—but want structure, progress tracking, quizzes with grading, and interactive demos without stitching it all together yourself.
 
 **Students and professionals** who need offline study materials for planes, trains, commutes, or anywhere connectivity is unreliable or distracting.
 
-**Educators and course creators** who want to prototype curriculum, generate quiz banks, or produce structured packages with full content control.
+**Course creators** who want to prototype curriculum, generate quiz banks, or produce structured packages with full content control.
 
 **BYOK practitioners** who want both generation and runtime without vendor lock-in, usage tracking, or required cloud services.
 
@@ -26,7 +26,7 @@ Not mid-flight chat. Full courses—lessons, quizzes, interactive demos—that y
 
 2. **Generate a course** — Tap Generate, enter a topic ("Rust async programming", "Renaissance art history", "category theory"). Tune Knowledge (your background: New → Expert) and Depth (thoroughness: Brief → Exhaustive). Depthcraft orchestrates LLM roles (planner, lesson writer, quiz writer, demo writer) to produce a structured curriculum. Review the draft—edit titles, exclude expensive units—then approve to run generation.
 
-3. **Study offline** — Navigate a typographic course home with progress tracking. Read rendered lessons with clean study typography. Complete native multiple-choice and cloze quizzes with immediate grading and explanations. Interact with sandboxed Three.js demos that render inline at exact lesson positions. Everything works airplane-mode once the package is imported.
+3. **Study offline** — Navigate a typographic course home with your progress and a contents list. Read lessons, complete native multiple-choice and cloze quizzes with immediate grading and explanations, interact with sandboxed Three.js demos. Everything works airplane-mode once the package is imported.
 
 4. **Extend when ready** — Tap "Extend this Course" to add new units. Your completed lessons stay marked; new content merges in without clobbering progress. Packages are versioned with collision detection.
 
@@ -37,16 +37,16 @@ Courses live as versioned `.depthcraft` package folders. Progress is device-loca
 ## Features
 
 ### Course generation
-- **Two-speed controls**: Knowledge (New → Expert) and Depth (Brief → Exhaustive) sliders tune content for your background and goals
+- **Two-speed controls**: Knowledge (New → Expert) and Depth (Brief → Exhaustive) tune content for your background and goals
 - **Curriculum approval**: Review and edit the draft outline before spending tokens; exclude expensive units for cost control
 - **Multi-provider support**: Configure different LLMs per role (planner, lesson writer, quiz writer, demo writer)
 - **Extend & refresh**: Append new units while preserving completed progress; version tracking prevents collisions
 
 ### Study experience
-- **Course home**: Typographic cover with progress bar, resume button, unit list with circular indicators
-- **Lesson player**: Clean study typography with proper measure and scale; smooth scroll behavior
-- **Native quizzes**: Multiple-choice and cloze (fill-in-the-blank) with immediate grading and explanation feedback
-- **Interactive demos**: Sandboxed Three.js demos render inline at exact lesson positions; soft-fail to markdown fallback on errors
+- **Course home**: Typographic cover with title, topic, thin teal progress bar, continue button, and contents spine showing units with circular progress rings and lesson counts
+- **Lesson player**: Study typography with proper measure and scale
+- **Native quizzes**: Multiple-choice and cloze (fill-in-the-blank) with immediate grading and explanation
+- **Interactive demos**: Sandboxed Three.js demos that render inline at lesson positions; fallback to markdown on errors
 - **Offline-first**: Zero network after import; packages bundle all content and assets
 - **Progress tracking**: Device-local completion keyed by package ID; read intent + quiz pass = lesson complete
 
@@ -82,11 +82,9 @@ See [`schema/0.1.0/README.md`](schema/0.1.0/README.md) for full contract details
 
 ## Getting Depthcraft
 
-**Current distribution:** Open-source build (field trial). Clone the repo and build with Xcode, or request a TestFlight invite (if available—check Issues for current trial status).
+**Current distribution:** Open-source build. Clone the repo and build with Xcode (see Build from source below).
 
-**App Store:** Not yet listed. Public release timeline TBD.
-
-iPad-first (iOS 17+). iPhone works but isn't optimized.
+**iPad-first** (iOS 17+). iPhone works but isn't optimized.
 
 ---
 
@@ -117,7 +115,6 @@ iPad-first (iOS 17+). iPhone works but isn't optimized.
 - Tap-to-explain on lesson terms
 - iCloud progress sync
 - Standalone Mac app
-- App Store distribution
 
 ---
 
@@ -132,7 +129,18 @@ Depthcraft is early-stage open source. Issues, feature requests, and PRs welcome
 
 ### Build from source
 
-See [`apps/DepthcraftReader/README.md`](apps/DepthcraftReader/README.md) for build instructions (requires macOS, Xcode 15+, XcodeGen).
+**Requirements:**
+- macOS with Xcode 15+ (iOS 17 SDK)
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+
+**Steps:**
+```bash
+cd apps/DepthcraftReader
+xcodegen generate
+open DepthcraftReader.xcodeproj
+```
+
+Select the **DepthcraftReader** scheme, choose an **iPad simulator** or device, and Run (⌘R). The app bundles `Fixtures/ai-harness-design.depthcraft` as an example.
 
 ---
 
