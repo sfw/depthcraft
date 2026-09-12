@@ -96,7 +96,11 @@ struct LessonPlayerView: View {
         guard let course = store.course else { return }
         do {
             let md = try PackageLoader.lessonMarkdown(course: course, unitId: unitId, lessonId: lessonId)
-            renderResult = MarkdownHTML.render(md, title: lesson?.title ?? "", estimatedMinutes: lesson?.estimatedMinutes)
+            
+            let meta = try? PackageLoader.lessonMeta(course: course, unitId: unitId, lessonId: lessonId)
+            let anchors = meta?.anchors ?? []
+            
+            renderResult = MarkdownHTML.render(md, title: lesson?.title ?? "", estimatedMinutes: lesson?.estimatedMinutes, anchors: anchors)
             quiz = try PackageLoader.quiz(course: course, unitId: unitId, lessonId: lessonId)
             loadError = nil
         } catch {

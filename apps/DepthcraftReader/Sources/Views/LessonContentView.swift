@@ -8,20 +8,42 @@ struct LessonContentView: View {
     let renderResult: LessonRenderResult
     let onScrolledToEnd: () -> Void
     
+    @State private var explainSheet: ExplainSheet?
+    
     var body: some View {
-        if renderResult.demos.isEmpty {
-            // No demos - use simple web view
-            LessonWebView(html: renderResult.html, onScrolledToEnd: onScrolledToEnd)
-        } else {
-            // Has demos - embed them inline at :::demo::: directive positions
-            inlineLayout
+        Group {
+            if renderResult.demos.isEmpty {
+                // No demos - use simple web view
+                LessonWebView(
+                    html: renderResult.html,
+                    explainAnchors: renderResult.explainAnchors,
+                    onScrolledToEnd: onScrolledToEnd,
+                    explainSheet: $explainSheet
+                )
+            } else {
+                // Has demos - embed them inline at :::demo::: directive positions
+                inlineLayout
+            }
+        }
+        .sheet(item: $explainSheet) { sheet in
+            ExplainationSheetView(term: sheet.term, gloss: sheet.gloss)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
     }
     
     private var inlineLayout: some View {
         let sections = splitHTMLAtDemoPlaceholders(html: renderResult.html, demos: renderResult.demos)
         
-        return InlineContentScrollView(sections: sections, course: course, unitId: unitId, lessonId: lessonId, onScrolledToEnd: onScrolledToEnd)
+        return InlineContentScrollView(
+            sections: sections,
+            course: course,
+            unitId: unitId,
+            lessonId: lessonId,
+            explainAnchors: renderResult.explainAnchors,
+            explainSheet: $explainSheet,
+            onScrolledToEnd: onScrolledToEnd
+        )
     }
     
     private func splitHTMLAtDemoPlaceholders(html: String, demos: [DemoReference]) -> [ContentSection] {
@@ -111,10 +133,20 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     let course: LoadedCourse
     let unitId: String
     let lessonId: String
+    let explainAnchors: [LessonMeta.Anchor]
+    @Binding var explainSheet: ExplainSheet?
     let onScrolledToEnd: () -> Void
     
     func makeUIViewController(context: Context) -> InlineContentViewController {
-        InlineContentViewController(sections: sections, course: course, unitId: unitId, lessonId: lessonId, onScrolledToEnd: onScrolledToEnd)
+        InlineContentViewController(
+            sections: sections,
+            course: course,
+            unitId: unitId,
+            lessonId: lessonId,
+            explainAnchors: explainAnchors,
+            explainSheet: $explainSheet,
+            onScrolledToEnd: onScrolledToEnd
+        )
     }
     
     func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
@@ -127,16 +159,20 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     let course: LoadedCourse
     let unitId: String
     let lessonId: String
+    let explainAnchors: [LessonMeta.Anchor]
+    var explainSheet: Binding<ExplainSheet?>
     let onScrolledToEnd: () -> Void
     private var hasNotifiedEnd = false
     private var scrollView: UIScrollView!
     private var stackView: UIStackView!
     
-    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, onScrolledToEnd: @escaping () -> Void) {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
         self.sections = sections
         self.course = course
         self.unitId = unitId
         self.lessonId = lessonId
+        self.explainAnchors = explainAnchors
+        self.explainSheet = explainSheet
         self.onScrolledToEnd = onScrolledToEnd
         super.init(nibName: nil, bundle: nil)
     }
@@ -202,8 +238,36 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     
     private func createHTMLWebView(html: String) -> WKWebView {
         let config = WKWebViewConfiguration()
-        // Enable JS for height measurement only (navigation still locked down)
+        // Enable JS for height measurement and tap-to-explain (navigation still locked down)
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        
+        // Add message handler for explain taps
+        let contentController = config.userContentController
+        let tapHandler = ExplainTapHandler(explainSheet: explainSheet)
+        contentController.add(tapHandler, name: "explainTap")
+        
+        // Inject tap handler script
+        let tapScript = WKUserScript(
+            source: """
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('explain-term')) {
+                    e.preventDefault();
+                    const anchorId = e.target.getAttribute('data-anchor-id');
+                    const gloss = e.target.getAttribute('data-gloss');
+                    const term = e.target.textContent;
+                    window.webkit.messageHandlers.explainTap.postMessage({
+                        anchorId: anchorId,
+                        term: term,
+                        gloss: gloss
+                    });
+                }
+            });
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        )
+        contentController.addUserScript(tapScript)
+        
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
         webView.backgroundColor = .clear
@@ -220,10 +284,32 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         webView.navigationDelegate = delegate
         // Keep delegate alive by storing in associated object
         objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
+        objc_setAssociatedObject(webView, "tapHandler", tapHandler, .OBJC_ASSOCIATION_RETAIN)
         
         webView.loadHTMLString(html, baseURL: nil)
         
         return webView
+    }
+    
+    private class ExplainTapHandler: NSObject, WKScriptMessageHandler {
+        var explainSheet: Binding<ExplainSheet?>
+        
+        init(explainSheet: Binding<ExplainSheet?>) {
+            self.explainSheet = explainSheet
+        }
+        
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "explainTap",
+                  let body = message.body as? [String: String],
+                  let term = body["term"],
+                  let gloss = body["gloss"] else {
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.explainSheet.wrappedValue = ExplainSheet(term: term, gloss: gloss)
+            }
+        }
     }
     
     private class HTMLWebViewDelegate: NSObject, WKNavigationDelegate {
@@ -308,6 +394,48 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 hasNotifiedEnd = true
                 onScrolledToEnd()
             }
+        }
+    }
+}
+
+struct ExplainationSheetView: View {
+    let term: String
+    let gloss: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(term)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    
+                    Text(parseMarkdown(gloss))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle("Explain")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func parseMarkdown(_ text: String) -> AttributedString {
+        do {
+            return try AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        } catch {
+            return AttributedString(text)
         }
     }
 }

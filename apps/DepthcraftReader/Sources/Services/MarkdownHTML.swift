@@ -8,12 +8,14 @@ struct DemoReference: Hashable {
 struct LessonRenderResult {
     let html: String
     let demos: [DemoReference]
+    let explainAnchors: [LessonMeta.Anchor]
 }
 
 enum MarkdownHTML {
     /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr).
     /// Also extracts :::demo id="...":::  directives.
-    static func render(_ markdown: String, title: String, estimatedMinutes: Int?) -> LessonRenderResult {
+    /// Injects warm ink underlines for tap-to-explain terms when anchors are provided.
+    static func render(_ markdown: String, title: String, estimatedMinutes: Int?, anchors: [LessonMeta.Anchor] = []) -> LessonRenderResult {
         let (body, demos) = convert(markdown)
         let minutesLabel = estimatedMinutes.map { " · \($0) min" } ?? ""
         let html = """
@@ -118,6 +120,25 @@ enum MarkdownHTML {
             border-left: 3px solid var(--accent);
             color: var(--muted);
           }
+          .explain-term {
+            text-decoration: underline;
+            text-decoration-color: rgba(120, 113, 108, 0.4);
+            text-decoration-thickness: 1.5px;
+            text-underline-offset: 3px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: rgba(120, 113, 108, 0.1);
+          }
+          .explain-term:hover {
+            text-decoration-color: rgba(120, 113, 108, 0.7);
+          }
+          @media (prefers-color-scheme: dark) {
+            .explain-term {
+              text-decoration-color: rgba(168, 162, 158, 0.4);
+            }
+            .explain-term:hover {
+              text-decoration-color: rgba(168, 162, 158, 0.7);
+            }
+          }
           .demo-placeholder {
             margin: 2rem 0;
             min-height: 400px;
@@ -138,7 +159,11 @@ enum MarkdownHTML {
         </body>
         </html>
         """
-        return LessonRenderResult(html: html, demos: demos)
+        
+        let explainAnchors = anchors.filter { $0.isExplainAnchor }
+        let htmlWithUnderlines = injectExplainUnderlines(html: html, anchors: explainAnchors)
+        
+        return LessonRenderResult(html: htmlWithUnderlines, demos: demos, explainAnchors: explainAnchors)
     }
     
     /// Render markdown for demo fallback without lesson chrome or eyebrow.
@@ -399,5 +424,33 @@ enum MarkdownHTML {
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+    }
+    
+    private static func injectExplainUnderlines(html: String, anchors: [LessonMeta.Anchor]) -> String {
+        guard !anchors.isEmpty else { return html }
+        
+        var result = html
+        
+        // Sort anchors by term length (longest first) to handle overlapping terms
+        let sortedAnchors = anchors.sorted { ($0.term?.count ?? 0) > ($1.term?.count ?? 0) }
+        
+        for anchor in sortedAnchors {
+            guard let term = anchor.term, let gloss = anchor.gloss else { continue }
+            
+            // Escape HTML entities in term for matching
+            let escapedTerm = escape(term)
+            
+            // Only wrap first occurrence to avoid over-decoration
+            if let range = result.range(of: escapedTerm, options: []) {
+                let glossData = gloss
+                    .replacingOccurrences(of: "\"", with: "&quot;")
+                    .replacingOccurrences(of: "\n", with: " ")
+                
+                let wrapped = "<span class=\"explain-term\" data-anchor-id=\"\(anchor.id)\" data-gloss=\"\(glossData)\">\(escapedTerm)</span>"
+                result.replaceSubrange(range, with: wrapped)
+            }
+        }
+        
+        return result
     }
 }
