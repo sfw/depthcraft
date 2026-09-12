@@ -23,7 +23,7 @@ class PackagerService: PackagerRole {
         }
     }
     
-    private func validateExtension(
+    internal func validateExtension(
         priorPackageURL: URL,
         newCurriculum: Curriculum,
         newLessons: [String: (markdown: String, meta: LessonMeta)]

@@ -30,12 +30,43 @@ class GenerationOrchestrator: ObservableObject {
             let plannerClient = try LLMClientFactory.createClient(config: request.plannerConfig)
             let planner = PlannerService(client: plannerClient, temperature: request.plannerConfig.temperature)
             
+            let priorCurriculum: Curriculum?
+            if let priorURL = request.extendFromPackageURL {
+                let priorCurriculumURL = priorURL.appendingPathComponent("curriculum.json")
+                let priorData = try Data(contentsOf: priorCurriculumURL)
+                priorCurriculum = try JSONDecoder().decode(Curriculum.self, from: priorData)
+            } else {
+                priorCurriculum = nil
+            }
+            
             let curriculum = try await planner.plan(
                 topic: request.topic,
                 locale: request.locale,
                 knowledgeLevel: request.knowledgeLevel,
-                depthLevel: request.depthLevel
+                depthLevel: request.depthLevel,
+                extendingCurriculum: priorCurriculum
             )
+            
+            if let prior = priorCurriculum {
+                let priorUnitIds = Set(prior.units.map(\.id))
+                let priorLessonIds = Set(prior.lessons.keys)
+                let newUnitIds = Set(curriculum.units.map(\.id))
+                let newLessonIds = Set(curriculum.lessons.keys)
+                
+                let unitCollisions = priorUnitIds.intersection(newUnitIds)
+                if !unitCollisions.isEmpty {
+                    throw GenerationError.validationFailed(
+                        "Planner returned existing unit IDs: \(Array(unitCollisions).sorted().joined(separator: ", ")). Extension must generate only new IDs."
+                    )
+                }
+                
+                let lessonCollisions = priorLessonIds.intersection(newLessonIds)
+                if !lessonCollisions.isEmpty {
+                    throw GenerationError.validationFailed(
+                        "Planner returned existing lesson IDs: \(Array(lessonCollisions).sorted().joined(separator: ", ")). Extension must generate only new IDs."
+                    )
+                }
+            }
             
             draftCurriculum = curriculum
             

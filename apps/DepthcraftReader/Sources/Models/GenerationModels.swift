@@ -162,7 +162,7 @@ struct GenerationOutput {
 // MARK: - Role interfaces
 
 protocol PlannerRole {
-    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel) async throws -> Curriculum
+    func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, extendingCurriculum: Curriculum?) async throws -> Curriculum
 }
 
 protocol LessonWriterRole {

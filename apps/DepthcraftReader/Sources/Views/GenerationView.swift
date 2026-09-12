@@ -324,7 +324,8 @@ struct GenerationView: View {
                             },
                             onCancel: {
                                 orchestrator.reset()
-                            }
+                            },
+                            isDelta: extendFromCourse != nil
                         )
                     } label: {
                         Label("Edit & Approve Curriculum", systemImage: "pencil.circle")

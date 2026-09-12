@@ -835,6 +835,164 @@ final class ExtendRefreshTests: XCTestCase {
             XCTFail("Should not throw error for valid append-only extension: \(error)")
         }
     }
+    
+    func testByteImmutabilityAfterExtension() async throws {
+        let packager = PackagerService()
+        let tempDir = FileManager.default.temporaryDirectory
+        let fm = FileManager.default
+        
+        let priorURL = tempDir.appendingPathComponent("prior-package-bytes.depthcraft")
+        try? fm.removeItem(at: priorURL)
+        try fm.createDirectory(at: priorURL, withIntermediateDirectories: true)
+        
+        defer {
+            try? fm.removeItem(at: priorURL)
+        }
+        
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let priorManifest = PackageManifest(
+            schemaVersion: "0.1.0",
+            packageId: "test-bytes",
+            contentVersion: 1,
+            title: "Test",
+            topic: "Test",
+            createdAt: timestamp,
+            locale: "en-CA",
+            generator: nil,
+            extendedFrom: nil
+        )
+        
+        let priorCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u01-prior", title: "Prior Unit", order: 1, lessonIds: ["l01-prior"])
+            ],
+            lessons: [
+                "l01-prior": CurriculumLesson(
+                    id: "l01-prior",
+                    unitId: "u01-prior",
+                    title: "Prior Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        try encoder.encode(priorManifest).write(to: priorURL.appendingPathComponent("manifest.json"))
+        try encoder.encode(priorCurriculum).write(to: priorURL.appendingPathComponent("curriculum.json"))
+        
+        let priorContentURL = priorURL.appendingPathComponent("content/units/u01-prior/lessons/l01-prior")
+        try fm.createDirectory(at: priorContentURL, withIntermediateDirectories: true)
+        
+        let priorLessonMd = "# Prior Lesson\n\nThis is the original lesson content that must not change."
+        try priorLessonMd.write(to: priorContentURL.appendingPathComponent("lesson.md"), atomically: true, encoding: .utf8)
+        
+        let priorQuiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l01-prior",
+            items: [
+                .mc(MCItem(
+                    id: "q1",
+                    type: "mc",
+                    prompt: "Original quiz?",
+                    choices: [
+                        MCChoice(id: "a", text: "Yes"),
+                        MCChoice(id: "b", text: "No")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        try encoder.encode(priorQuiz).write(to: priorContentURL.appendingPathComponent("quiz.json"))
+        
+        let priorLessonBytes = try Data(contentsOf: priorContentURL.appendingPathComponent("lesson.md"))
+        let priorQuizBytes = try Data(contentsOf: priorContentURL.appendingPathComponent("quiz.json"))
+        
+        let newCurriculum = Curriculum(
+            schemaVersion: "0.1.0",
+            status: "built",
+            approvedAt: nil,
+            units: [
+                CurriculumUnit(id: "u02-new", title: "New Unit", order: 2, lessonIds: ["l02-new"])
+            ],
+            lessons: [
+                "l02-new": CurriculumLesson(
+                    id: "l02-new",
+                    unitId: "u02-new",
+                    title: "New Lesson",
+                    order: 1,
+                    status: "built",
+                    estimatedMinutes: 10
+                )
+            ]
+        )
+        
+        let newMeta = LessonMeta(
+            schemaVersion: "0.1.0",
+            lessonId: "l02-new",
+            anchors: []
+        )
+        
+        let newQuiz = QuizDocument(
+            schemaVersion: "0.1.0",
+            lessonId: "l02-new",
+            items: [
+                .mc(MCItem(
+                    id: "q2",
+                    type: "mc",
+                    prompt: "New quiz?",
+                    choices: [
+                        MCChoice(id: "a", text: "Yes"),
+                        MCChoice(id: "b", text: "No")
+                    ],
+                    correctId: "a",
+                    explain: nil
+                ))
+            ]
+        )
+        
+        let metadata = GeneratorMetadata(
+            planner: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            lessonWriter: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            quizWriter: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp),
+            demoWriter: DemoRun(provider: "anthropic", model: "test", ranAt: timestamp, demosEmitted: 0),
+            packager: RoleRun(provider: "anthropic", model: "test", ranAt: timestamp)
+        )
+        
+        let extendedURL = try await packager.packageCourse(
+            topic: "Test",
+            locale: "en-CA",
+            curriculum: newCurriculum,
+            lessons: ["l02-new": ("# New Lesson\n\nNew content", newMeta)],
+            quizzes: ["l02-new": newQuiz],
+            demos: [:],
+            roleRuns: metadata,
+            extendFrom: priorURL
+        )
+        
+        defer {
+            try? fm.removeItem(at: extendedURL)
+        }
+        
+        let extendedPriorLessonURL = extendedURL.appendingPathComponent("content/units/u01-prior/lessons/l01-prior/lesson.md")
+        let extendedPriorQuizURL = extendedURL.appendingPathComponent("content/units/u01-prior/lessons/l01-prior/quiz.json")
+        
+        let extendedLessonBytes = try Data(contentsOf: extendedPriorLessonURL)
+        let extendedQuizBytes = try Data(contentsOf: extendedPriorQuizURL)
+        
+        XCTAssertEqual(priorLessonBytes, extendedLessonBytes, "Prior lesson.md bytes must be identical after extension")
+        XCTAssertEqual(priorQuizBytes, extendedQuizBytes, "Prior quiz.json bytes must be identical after extension")
+        
+        let newLessonURL = extendedURL.appendingPathComponent("content/units/u02-new/lessons/l02-new/lesson.md")
+        XCTAssertTrue(fm.fileExists(atPath: newLessonURL.path), "New lesson should exist")
+    }
 }
 
 final class LessonMetaExtractionTests: XCTestCase {
