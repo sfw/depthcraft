@@ -68,6 +68,8 @@ Before accepting this PR, verify:
 
 ## Reporting Security Issues
 
-Field-trial version → Report to Scott (scott@depthcraft.dev) or Lab Partner (GitHub issue labeled `needs-lab-partner`).
+Field-trial version → Report via GitHub to Lab Partner / Scott:
+- For sensitive issues (exploits, key leakage): Use GitHub's private security advisory or contact maintainers directly through GitHub
+- For non-sensitive security improvements: Open GitHub issue labeled `needs-lab-partner`
 
 Do NOT open public issues for exploits or key leakage.
