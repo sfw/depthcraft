@@ -195,6 +195,7 @@ struct CustomEndpointSheet: View {
     @State private var baseURL: String
     @State private var model: String
     @State private var apiKey: String
+    @State private var hasExistingKey: Bool
     @State private var errorMessage: String?
     
     init(keyStore: APIKeyStore, isPresented: Binding<Bool>) {
@@ -202,12 +203,11 @@ struct CustomEndpointSheet: View {
         self._isPresented = isPresented
         self._baseURL = State(initialValue: keyStore.customBaseURL)
         self._model = State(initialValue: keyStore.customModel)
-        // Load existing key if present
-        if let existingKey = try? keyStore.getKey(for: .custom) {
-            self._apiKey = State(initialValue: existingKey)
-        } else {
-            self._apiKey = State(initialValue: "")
-        }
+        // SECURITY: Never load existing key into the field (prevents shoulder surfing)
+        // Show placeholder if key exists; only update if user enters new key
+        let hasKey = (try? keyStore.getKey(for: .custom)) != nil
+        self._hasExistingKey = State(initialValue: hasKey)
+        self._apiKey = State(initialValue: "")
     }
     
     var body: some View {
@@ -224,9 +224,15 @@ struct CustomEndpointSheet: View {
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                     
-                    SecureField("API Key", text: $apiKey)
+                    SecureField(hasExistingKey ? "API Key (configured)" : "API Key", text: $apiKey)
                         .textContentType(.password)
                         .autocorrectionDisabled()
+                    
+                    if hasExistingKey && apiKey.isEmpty {
+                        Text("Leave blank to keep existing key, or enter new key to replace")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     
                     if let error = errorMessage {
                         Text(error)
@@ -258,7 +264,7 @@ struct CustomEndpointSheet: View {
                     Button("Save") {
                         saveConfig()
                     }
-                    .disabled(baseURL.isEmpty || model.isEmpty || apiKey.isEmpty)
+                    .disabled(baseURL.isEmpty || model.isEmpty || (!hasExistingKey && apiKey.isEmpty))
                 }
             }
         }
@@ -266,7 +272,10 @@ struct CustomEndpointSheet: View {
     
     private func saveConfig() {
         do {
-            try keyStore.setKey(apiKey, for: .custom)
+            // Only update key if user entered a new one
+            if !apiKey.isEmpty {
+                try keyStore.setKey(apiKey, for: .custom)
+            }
             keyStore.setCustomBaseURL(baseURL)
             keyStore.setCustomModel(model)
             isPresented = false
