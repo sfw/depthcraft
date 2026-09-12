@@ -42,15 +42,27 @@ enum PackageLoader {
         #if DEBUG
         print("📖 PackageLoader.load from: \(root.path)")
         #endif
+        
+        // Decode and validate manifest
         let manifest: PackageManifest = try decode("manifest.json", from: root)
+        try SchemaValidator.validateManifest(manifest)
+        
+        // Decode and validate curriculum
         let curriculum: Curriculum = try decode("curriculum.json", from: root)
+        try SchemaValidator.validateCurriculum(curriculum)
+        
         #if DEBUG
-        print("   Decoded curriculum: \(curriculum.units.count) units, \(curriculum.lessons.count) lessons")
+        print("   ✅ Package validated: \(curriculum.units.count) units, \(curriculum.lessons.count) lessons")
         #endif
+        
         return LoadedCourse(rootURL: root, manifest: manifest, curriculum: curriculum)
     }
 
     static func lessonMarkdown(course: LoadedCourse, unitId: String, lessonId: String) throws -> String {
+        // Validate IDs to prevent path traversal
+        try SchemaValidator.validateId(unitId, name: "unitId")
+        try SchemaValidator.validateId(lessonId, name: "lessonId")
+        
         let url = course.rootURL
             .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/lesson.md")
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -60,11 +72,20 @@ enum PackageLoader {
     }
 
     static func unitMarkdown(course: LoadedCourse, unitId: String) -> String? {
+        // Validate unit ID to prevent path traversal
+        guard (try? SchemaValidator.validateId(unitId, name: "unitId")) != nil else {
+            return nil
+        }
+        
         let url = course.rootURL.appendingPathComponent("content/units/\(unitId)/unit.md")
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
     static func quiz(course: LoadedCourse, unitId: String, lessonId: String) throws -> QuizDocument {
+        // Validate IDs to prevent path traversal
+        try SchemaValidator.validateId(unitId, name: "unitId")
+        try SchemaValidator.validateId(lessonId, name: "lessonId")
+        
         let url = course.rootURL
             .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/quiz.json")
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -72,13 +93,21 @@ enum PackageLoader {
         }
         do {
             let data = try Data(contentsOf: url)
-            return try JSONDecoder().decode(QuizDocument.self, from: data)
+            let quiz = try JSONDecoder().decode(QuizDocument.self, from: data)
+            // Validate quiz against schema
+            try SchemaValidator.validateQuiz(quiz, expectedLessonId: lessonId)
+            return quiz
         } catch {
             throw PackageLoaderError.decode("quiz.json", error)
         }
     }
 
     static func demoManifest(course: LoadedCourse, unitId: String, lessonId: String, demoId: String) throws -> DemoManifest {
+        // Validate IDs to prevent path traversal
+        try SchemaValidator.validateId(unitId, name: "unitId")
+        try SchemaValidator.validateId(lessonId, name: "lessonId")
+        try SchemaValidator.validateId(demoId, name: "demoId")
+        
         let url = course.rootURL
             .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/demos/\(demoId)/demo.json")
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -86,13 +115,18 @@ enum PackageLoader {
         }
         do {
             let data = try Data(contentsOf: url)
-            return try JSONDecoder().decode(DemoManifest.self, from: data)
+            let manifest = try JSONDecoder().decode(DemoManifest.self, from: data)
+            // Validate demo manifest against schema
+            try SchemaValidator.validateDemoManifest(manifest, expectedDemoId: demoId)
+            return manifest
         } catch {
             throw PackageLoaderError.decode("demo.json", error)
         }
     }
 
     static func demoDirectory(course: LoadedCourse, unitId: String, lessonId: String, demoId: String) -> URL {
+        // Note: Caller should validate IDs before calling this (validateId throws, can't use in non-throwing function)
+        // This is validated in demoManifest() which is always called before demoDirectory()
         course.rootURL
             .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/demos/\(demoId)")
     }

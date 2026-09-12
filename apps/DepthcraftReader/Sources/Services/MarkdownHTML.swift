@@ -297,9 +297,11 @@ enum MarkdownHTML {
             if trimmed.hasPrefix(":::demo") && trimmed.hasSuffix(":::") {
                 if inList { html.append("</ul>"); inList = false }
                 if let demoId = extractDemoId(from: trimmed) {
-                    let placeholder = "DEMO_PLACEHOLDER_\(demoId)"
+                    // Escape demo ID for safe HTML insertion (defense in depth)
+                    let safeDemoId = escape(demoId)
+                    let placeholder = "DEMO_PLACEHOLDER_\(safeDemoId)"
                     demos.append(DemoReference(demoId: demoId, placeholder: placeholder))
-                    html.append("<div class=\"demo-placeholder\" id=\"\(placeholder)\">Interactive demo</div>")
+                    html.append("<div class=\"demo-placeholder\" id=\"\(escape(placeholder))\">Interactive demo</div>")
                 }
                 i += 1
                 continue
