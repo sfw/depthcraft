@@ -35,9 +35,9 @@ enum MarkdownHTML {
           @media (prefers-color-scheme: dark) {
             :root {
               --bg: #1c1917;
-              --fg: #f5f5f4;
+              --fg: #e7e5e4;
               --muted: #a8a29e;
-              --accent: #5eead4;
+              --accent: #5d9b94;
               --rule: #44403c;
               --code-bg: #292524;
             }

@@ -202,6 +202,8 @@ struct DemoHostView: View {
     @State private var loadError: String?
     @State private var showingFallback = false
     @State private var demoKey = UUID()
+    @State private var demoManifest: DemoManifest?
+    @State private var isLoading = true
     
     var body: some View {
         VStack(spacing: 0) {
@@ -210,40 +212,68 @@ struct DemoHostView: View {
             } else if let loadError {
                 errorView(loadError)
             } else {
-                DemoWebView(
-                    course: course,
-                    unitId: unitId,
-                    lessonId: lessonId,
-                    demoId: demoId,
-                    key: demoKey,
-                    onError: { error in
-                        loadError = error
-                        showingFallback = true
+                // Demo content with skeleton state
+                ZStack {
+                    if isLoading {
+                        skeletonView
                     }
-                )
+                    
+                    DemoWebView(
+                        course: course,
+                        unitId: unitId,
+                        lessonId: lessonId,
+                        demoId: demoId,
+                        key: demoKey,
+                        onError: { error in
+                            loadError = error
+                            showingFallback = true
+                        },
+                        onLoadStart: {
+                            isLoading = true
+                        },
+                        onLoadFinish: {
+                            isLoading = false
+                        }
+                    )
+                }
                 .frame(minHeight: 400)
                 
-                // Demo controls
-                HStack(spacing: 12) {
-                    Button {
-                        demoKey = UUID()
-                    } label: {
-                        Label("Reset", systemImage: "arrow.counterclockwise")
+                // Demo controls - compact bottom band
+                VStack(spacing: 0) {
+                    if let manifest = demoManifest {
+                        HStack {
+                            Text(manifest.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 6)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.teal)
                     
-                    Spacer()
-                    
-                    Button {
-                        // Next step - for v0 this is a no-op placeholder
-                    } label: {
-                        Label("Next", systemImage: "arrow.right")
+                    HStack(spacing: 12) {
+                        Button {
+                            demoKey = UUID()
+                        } label: {
+                            Label("Reset", systemImage: "arrow.counterclockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        Button {
+                            // Next step - for v0 this is a no-op placeholder
+                        } label: {
+                            Label("Next", systemImage: "arrow.right")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.teal)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-                .padding(12)
                 .background(.bar)
             }
         }
@@ -252,22 +282,97 @@ struct DemoHostView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.teal.opacity(0.3), lineWidth: 1)
         )
+        .task {
+            await loadManifest()
+        }
+    }
+    
+    private var skeletonView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Generating demo…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(uiColor: .systemBackground))
+    }
+    
+    @MainActor
+    private func loadManifest() async {
+        do {
+            let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
+            demoManifest = manifest
+        } catch {
+            // Silently fail - manifest is optional UI chrome
+        }
     }
     
     private var fallbackView: some View {
-        VStack(spacing: 16) {
-            if let fallbackMarkdown = loadFallbackMarkdown() {
-                let fallbackHTML = renderFallbackAsHTML(fallbackMarkdown)
-                FallbackWebView(html: fallbackHTML)
-            } else {
-                ContentUnavailableView(
-                    "Demo unavailable",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text("This interactive demo could not be loaded.")
-                )
+        VStack(spacing: 0) {
+            VStack(spacing: 16) {
+                if let fallbackMarkdown = loadFallbackMarkdown() {
+                    let fallbackHTML = renderFallbackAsHTML(fallbackMarkdown)
+                    FallbackWebView(html: fallbackHTML)
+                        .padding(16)
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Demo unavailable")
+                            .font(.headline)
+                        Text("This interactive demo could not be loaded.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                }
             }
+            .frame(minHeight: 400, maxHeight: .infinity)
+            
+            // Demo controls for fallback (label + bottom band)
+            VStack(spacing: 0) {
+                if let manifest = demoManifest {
+                    HStack {
+                        Text(manifest.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                }
+                
+                HStack(spacing: 12) {
+                    Button {
+                        showingFallback = false
+                        loadError = nil
+                        demoKey = UUID()
+                    } label: {
+                        Label("Reset", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Button {
+                        // Next step - for v0 this is a no-op placeholder
+                    } label: {
+                        Label("Next", systemImage: "arrow.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .background(.bar)
         }
-        .frame(minHeight: 400)
     }
     
     private func renderFallbackAsHTML(_ markdown: String) -> String {
@@ -277,12 +382,60 @@ struct DemoHostView: View {
     }
     
     private func errorView(_ message: String) -> some View {
-        ContentUnavailableView(
-            "Demo unavailable",
-            systemImage: "exclamationmark.triangle",
-            description: Text(message)
-        )
-        .frame(minHeight: 400)
+        VStack(spacing: 0) {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Demo unavailable")
+                    .font(.headline)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .frame(minHeight: 400, maxHeight: .infinity)
+            
+            // Demo controls for error state
+            VStack(spacing: 0) {
+                if let manifest = demoManifest {
+                    HStack {
+                        Text(manifest.title)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                }
+                
+                HStack(spacing: 12) {
+                    Button {
+                        loadError = nil
+                        demoKey = UUID()
+                    } label: {
+                        Label("Reset", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Button {
+                        // Next step - for v0 this is a no-op placeholder
+                    } label: {
+                        Label("Next", systemImage: "arrow.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .background(.bar)
+        }
     }
     
     private func loadFallbackMarkdown() -> String? {
@@ -299,6 +452,8 @@ struct DemoWebView: UIViewRepresentable {
     let demoId: String
     let key: UUID
     let onError: (String) -> Void
+    var onLoadStart: (() -> Void)?
+    var onLoadFinish: (() -> Void)?
     
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -423,6 +578,8 @@ struct DemoWebView: UIViewRepresentable {
     }
     
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onLoadStart = onLoadStart
+        context.coordinator.onLoadFinish = onLoadFinish
         if context.coordinator.lastKey != key {
             context.coordinator.lastKey = key
             context.coordinator.pendingWebView = webView
@@ -431,7 +588,7 @@ struct DemoWebView: UIViewRepresentable {
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId, onError: onError)
+        Coordinator(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId, onError: onError, onLoadStart: onLoadStart, onLoadFinish: onLoadFinish)
     }
     
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -440,6 +597,8 @@ struct DemoWebView: UIViewRepresentable {
         let lessonId: String
         let demoId: String
         let onError: (String) -> Void
+        var onLoadStart: (() -> Void)?
+        var onLoadFinish: (() -> Void)?
         var lastKey: UUID?
         var allowedDirectory: URL?
         var allowedKitId: String?
@@ -447,12 +606,14 @@ struct DemoWebView: UIViewRepresentable {
         weak var pendingWebView: WKWebView?
         var contentCheckTimer: Timer?
         
-        init(course: LoadedCourse, unitId: String, lessonId: String, demoId: String, onError: @escaping (String) -> Void) {
+        init(course: LoadedCourse, unitId: String, lessonId: String, demoId: String, onError: @escaping (String) -> Void, onLoadStart: (() -> Void)? = nil, onLoadFinish: (() -> Void)? = nil) {
             self.course = course
             self.unitId = unitId
             self.lessonId = lessonId
             self.demoId = demoId
             self.onError = onError
+            self.onLoadStart = onLoadStart
+            self.onLoadFinish = onLoadFinish
         }
         
         // Handle error messages from JavaScript
@@ -466,6 +627,10 @@ struct DemoWebView: UIViewRepresentable {
         }
         
         func loadDemo(into webView: WKWebView) {
+            DispatchQueue.main.async { [weak self] in
+                self?.onLoadStart?()
+            }
+            
             do {
                 let manifest = try PackageLoader.demoManifest(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
                 let demoDir = PackageLoader.demoDirectory(course: course, unitId: unitId, lessonId: lessonId, demoId: demoId)
@@ -612,6 +777,10 @@ struct DemoWebView: UIViewRepresentable {
                         return { hasContent: false, reason: 'no meaningful content detected' };
                     })();
                     """) { result, error in
+                    DispatchQueue.main.async {
+                        self.onLoadFinish?()
+                    }
+                    
                     if let resultDict = result as? [String: Any],
                        let hasContent = resultDict["hasContent"] as? Bool,
                        !hasContent {
