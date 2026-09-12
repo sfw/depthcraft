@@ -9,6 +9,8 @@ struct LessonContentView: View {
     let onScrolledToEnd: () -> Void
     
     @State private var explainSheet: ExplainSheet?
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @StateObject private var apiKeyStore = APIKeyStore()
     
     private var lessonContext: ExplainSheet.LessonContext {
         ExplainSheet.LessonContext(
@@ -19,6 +21,14 @@ struct LessonContentView: View {
         )
     }
     
+    private var configService: LLMConfigService {
+        LLMConfigService(apiKeyStore: apiKeyStore)
+    }
+    
+    private var glossService: GlossService {
+        GlossService(configService: configService)
+    }
+    
     var body: some View {
         Group {
             if renderResult.demos.isEmpty {
@@ -27,6 +37,8 @@ struct LessonContentView: View {
                     html: renderResult.html,
                     explainAnchors: renderResult.explainAnchors,
                     lessonContext: lessonContext,
+                    isOnline: networkMonitor.isOnline,
+                    glossService: glossService,
                     onScrolledToEnd: onScrolledToEnd,
                     explainSheet: $explainSheet
                 )
@@ -57,6 +69,8 @@ struct LessonContentView: View {
             lessonId: lessonId,
             explainAnchors: renderResult.explainAnchors,
             lessonContext: lessonContext,
+            isOnline: networkMonitor.isOnline,
+            glossService: glossService,
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
@@ -151,6 +165,8 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     let lessonId: String
     let explainAnchors: [LessonMeta.Anchor]
     let lessonContext: ExplainSheet.LessonContext
+    let isOnline: Bool
+    let glossService: GlossService
     @Binding var explainSheet: ExplainSheet?
     let onScrolledToEnd: () -> Void
     
@@ -162,13 +178,15 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
             lessonId: lessonId,
             explainAnchors: explainAnchors,
             lessonContext: lessonContext,
+            isOnline: isOnline,
+            glossService: glossService,
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
     }
     
     func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
-        // Update if needed
+        viewController.isOnline = isOnline
     }
 }
 
@@ -179,19 +197,23 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     let lessonId: String
     let explainAnchors: [LessonMeta.Anchor]
     let lessonContext: ExplainSheet.LessonContext
+    var isOnline: Bool
+    let glossService: GlossService
     var explainSheet: Binding<ExplainSheet?>
     let onScrolledToEnd: () -> Void
     private var hasNotifiedEnd = false
     private var scrollView: UIScrollView!
     private var stackView: UIStackView!
     
-    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
         self.sections = sections
         self.course = course
         self.unitId = unitId
         self.lessonId = lessonId
         self.explainAnchors = explainAnchors
         self.lessonContext = lessonContext
+        self.isOnline = isOnline
+        self.glossService = glossService
         self.explainSheet = explainSheet
         self.onScrolledToEnd = onScrolledToEnd
         super.init(nibName: nil, bundle: nil)
@@ -263,7 +285,13 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         
         // Add message handler for explain taps
         let contentController = config.userContentController
-        let tapHandler = ExplainTapHandler(explainSheet: explainSheet, explainAnchors: explainAnchors, lessonContext: lessonContext)
+        let tapHandler = ExplainTapHandler(
+            explainSheet: explainSheet,
+            explainAnchors: explainAnchors,
+            lessonContext: lessonContext,
+            isOnline: isOnline,
+            glossService: glossService
+        )
         contentController.add(tapHandler, name: "explainTap")
         
         // Inject tap handler script
@@ -299,7 +327,12 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         webView.heightAnchor.constraint(equalToConstant: provisionalHeight).isActive = true
         
         // Load HTML and measure height
-        let delegate = HTMLWebViewDelegate()
+        let delegate = HTMLWebViewDelegate(
+            isOnline: isOnline,
+            glossService: glossService,
+            explainSheet: explainSheet,
+            lessonContext: lessonContext
+        )
         webView.navigationDelegate = delegate
         // Keep delegate alive by storing in associated object
         objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
@@ -314,11 +347,15 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         var explainSheet: Binding<ExplainSheet?>
         var explainAnchors: [LessonMeta.Anchor]
         var lessonContext: ExplainSheet.LessonContext
+        var isOnline: Bool
+        var glossService: GlossService
         
-        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext) {
+        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService) {
             self.explainSheet = explainSheet
             self.explainAnchors = explainAnchors
             self.lessonContext = lessonContext
+            self.isOnline = isOnline
+            self.glossService = glossService
         }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -347,7 +384,21 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     }
     
     private class HTMLWebViewDelegate: NSObject, WKNavigationDelegate {
+        var isOnline: Bool
+        var glossService: GlossService
+        var explainSheet: Binding<ExplainSheet?>
+        var lessonContext: ExplainSheet.LessonContext
+        weak var webView: WKWebView?
+        
+        init(isOnline: Bool, glossService: GlossService, explainSheet: Binding<ExplainSheet?>, lessonContext: ExplainSheet.LessonContext) {
+            self.isOnline = isOnline
+            self.glossService = glossService
+            self.explainSheet = explainSheet
+            self.lessonContext = lessonContext
+        }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            self.webView = webView
+            
             // Measure content height and update constraint
             webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
                 var height: CGFloat = 0
@@ -373,6 +424,61 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         }
                         webView.layoutIfNeeded()
                     }
+                }
+            }
+        }
+        
+        @available(iOS 16.0, *)
+        func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
+            // Check if we can show "Explain" menu item
+            guard isOnline, glossService.hasAPIKey() else {
+                completionHandler(nil)
+                return
+            }
+            
+            // Get selected text
+            webView.evaluateJavaScript("window.getSelection().toString()") { [weak self] result, error in
+                guard let self = self,
+                      let selectedText = result as? String,
+                      !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      selectedText.count <= 200 else {
+                    completionHandler(nil)
+                    return
+                }
+                
+                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                    let explainAction = UIAction(
+                        title: "Explain",
+                        image: UIImage(systemName: "lightbulb")
+                    ) { _ in
+                        self.explainSelectedText(selectedText)
+                    }
+                    return UIMenu(title: "", children: [explainAction])
+                }
+                
+                completionHandler(config)
+            }
+        }
+        
+        private func explainSelectedText(_ text: String) {
+            Task { @MainActor in
+                do {
+                    let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
+                    let gloss = try await glossService.generateGloss(for: text, lessonContext: contextString)
+                    
+                    self.explainSheet.wrappedValue = ExplainSheet(
+                        term: text,
+                        gloss: gloss,
+                        isBakedAnchor: false,
+                        lessonContext: self.lessonContext
+                    )
+                } catch {
+                    self.explainSheet.wrappedValue = ExplainSheet(
+                        term: text,
+                        gloss: "**Error generating explanation:** \(error.localizedDescription)",
+                        isBakedAnchor: false,
+                        lessonContext: self.lessonContext
+                    )
                 }
             }
         }
@@ -448,7 +554,7 @@ struct ExplanationSheetView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(parseMarkdown(gloss))

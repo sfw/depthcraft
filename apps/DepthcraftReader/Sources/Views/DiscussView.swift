@@ -13,12 +13,12 @@ struct DiscussView: View {
     @State private var isGenerating = false
     @State private var error: String?
     
-    private var glossService: GlossService {
-        GlossService(apiKeyStore: apiKeyStore)
+    private var configService: LLMConfigService {
+        LLMConfigService(apiKeyStore: apiKeyStore)
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Chat messages
                 ScrollViewReader { proxy in
@@ -77,7 +77,7 @@ struct DiscussView: View {
                     TextField("Ask a question...", text: $inputText, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(1...4)
-                        .disabled(isGenerating || !glossService.hasAPIKey())
+                        .disabled(isGenerating || !configService.hasAPIKey())
                     
                     Button {
                         Task {
@@ -88,12 +88,12 @@ struct DiscussView: View {
                             .font(.title2)
                             .foregroundStyle(.teal)
                     }
-                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGenerating || !glossService.hasAPIKey())
+                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGenerating || !configService.hasAPIKey())
                 }
                 .padding()
                 .background(.bar)
                 
-                if !glossService.hasAPIKey() {
+                if !configService.hasAPIKey() {
                     HStack(spacing: 8) {
                         Image(systemName: "key.slash")
                             .foregroundStyle(.orange)
@@ -132,7 +132,7 @@ struct DiscussView: View {
             let conversationContext = buildConversationContext()
             
             // Get response from LLM
-            guard let config = try getAvailableLLMConfig() else {
+            guard let config = try configService.getAvailableConfig() else {
                 throw GlossServiceError.noAPIKey
             }
             
@@ -174,53 +174,6 @@ struct DiscussView: View {
             context += "\(prefix): \(message.content)\n\n"
         }
         return context
-    }
-    
-    private func getAvailableLLMConfig() throws -> LLMConfiguration? {
-        // Try Anthropic first
-        if apiKeyStore.hasAnthropicKey, let key = try apiKeyStore.getKey(for: .anthropic) {
-            return LLMConfiguration(
-                provider: .anthropic,
-                model: "claude-sonnet-4-20250514",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try OpenAI
-        if apiKeyStore.hasOpenAIKey, let key = try apiKeyStore.getKey(for: .openai) {
-            return LLMConfiguration(
-                provider: .openai,
-                model: "gpt-4o",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try OpenRouter
-        if apiKeyStore.hasOpenRouterKey, let key = try apiKeyStore.getKey(for: .openrouter) {
-            return LLMConfiguration(
-                provider: .openrouter,
-                model: "anthropic/claude-sonnet-4",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try Custom
-        if apiKeyStore.hasCustomKey,
-           let key = try apiKeyStore.getKey(for: .custom),
-           let baseURL = apiKeyStore.getCustomBaseURL(),
-           let model = apiKeyStore.getCustomModel() {
-            return LLMConfiguration(
-                provider: .custom,
-                model: model,
-                apiKey: key,
-                customBaseURL: baseURL
-            )
-        }
-        
-        return nil
     }
 }
 

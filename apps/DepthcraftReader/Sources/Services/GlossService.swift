@@ -19,16 +19,16 @@ enum GlossServiceError: LocalizedError {
 
 @MainActor
 class GlossService {
-    private let apiKeyStore: APIKeyStore
+    private let configService: LLMConfigService
     
-    init(apiKeyStore: APIKeyStore) {
-        self.apiKeyStore = apiKeyStore
+    init(configService: LLMConfigService) {
+        self.configService = configService
     }
     
     /// Generate a gloss/explanation for a term or passage in the context of a lesson
     func generateGloss(for text: String, lessonContext: String) async throws -> String {
         // Get API key and create LLM client
-        guard let config = try getAvailableLLMConfig() else {
+        guard let config = try configService.getAvailableConfig() else {
             throw GlossServiceError.noAPIKey
         }
         
@@ -67,57 +67,6 @@ class GlossService {
     
     /// Check if we have any API key configured
     func hasAPIKey() -> Bool {
-        return apiKeyStore.hasAnthropicKey || 
-               apiKeyStore.hasOpenAIKey || 
-               apiKeyStore.hasOpenRouterKey || 
-               apiKeyStore.hasCustomKey
-    }
-    
-    /// Get the first available LLM configuration
-    private func getAvailableLLMConfig() throws -> LLMConfiguration? {
-        // Try Anthropic first
-        if apiKeyStore.hasAnthropicKey, let key = try apiKeyStore.getKey(for: .anthropic) {
-            return LLMConfiguration(
-                provider: .anthropic,
-                model: "claude-sonnet-4-20250514",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try OpenAI
-        if apiKeyStore.hasOpenAIKey, let key = try apiKeyStore.getKey(for: .openai) {
-            return LLMConfiguration(
-                provider: .openai,
-                model: "gpt-4o",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try OpenRouter
-        if apiKeyStore.hasOpenRouterKey, let key = try apiKeyStore.getKey(for: .openrouter) {
-            return LLMConfiguration(
-                provider: .openrouter,
-                model: "anthropic/claude-sonnet-4",
-                apiKey: key,
-                customBaseURL: nil
-            )
-        }
-        
-        // Try Custom
-        if apiKeyStore.hasCustomKey, 
-           let key = try apiKeyStore.getKey(for: .custom),
-           let baseURL = apiKeyStore.getCustomBaseURL(),
-           let model = apiKeyStore.getCustomModel() {
-            return LLMConfiguration(
-                provider: .custom,
-                model: model,
-                apiKey: key,
-                customBaseURL: baseURL
-            )
-        }
-        
-        return nil
+        return configService.hasAPIKey()
     }
 }

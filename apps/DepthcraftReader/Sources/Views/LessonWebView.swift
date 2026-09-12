@@ -19,7 +19,9 @@ struct ExplainSheet: Identifiable {
 struct LessonWebView: UIViewRepresentable {
     let html: String
     let explainAnchors: [LessonMeta.Anchor]
-    let lessonContext: ExplainSheet.LessonContext?
+    let lessonContext: ExplainSheet.LessonContext
+    let isOnline: Bool
+    let glossService: GlossService
     let onScrolledToEnd: () -> Void
     @Binding var explainSheet: ExplainSheet?
 
@@ -63,6 +65,8 @@ struct LessonWebView: UIViewRepresentable {
         
         context.coordinator.explainSheet = _explainSheet
         context.coordinator.lessonContext = lessonContext
+        context.coordinator.isOnline = isOnline
+        context.coordinator.glossService = glossService
         
         return webView
     }
@@ -76,6 +80,8 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.explainSheet = _explainSheet
         context.coordinator.explainAnchors = explainAnchors
         context.coordinator.lessonContext = lessonContext
+        context.coordinator.isOnline = isOnline
+        context.coordinator.glossService = glossService
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -86,7 +92,83 @@ struct LessonWebView: UIViewRepresentable {
         var explainSheet: Binding<ExplainSheet?>?
         var explainAnchors: [LessonMeta.Anchor] = []
         var lessonContext: ExplainSheet.LessonContext?
+        var isOnline: Bool = false
+        var glossService: GlossService?
         private var hasNotifiedEnd = false
+        private weak var webView: WKWebView?
+        
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            // Store weak reference for text selection handling
+            self.webView = webView
+            
+            // Airplane-mode: block any navigation away from the loaded HTML (including taps on explain terms, which are handled by JS)
+            if navigationAction.navigationType == .other || navigationAction.navigationType == .reload {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+            }
+        }
+        
+        @available(iOS 16.0, *)
+        func webView(_ webView: WKWebView, contextMenuConfigurationFor elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
+            // Check if we can show "Explain" menu item
+            guard isOnline, let glossService = glossService, glossService.hasAPIKey() else {
+                completionHandler(nil)
+                return
+            }
+            
+            // Get selected text
+            webView.evaluateJavaScript("window.getSelection().toString()") { [weak self] result, error in
+                guard let self = self,
+                      let selectedText = result as? String,
+                      !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      selectedText.count <= 200 else { // Reasonable limit for explain
+                    completionHandler(nil)
+                    return
+                }
+                
+                let config = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+                    let explainAction = UIAction(
+                        title: "Explain",
+                        image: UIImage(systemName: "lightbulb")
+                    ) { _ in
+                        self.explainSelectedText(selectedText)
+                    }
+                    return UIMenu(title: "", children: [explainAction])
+                }
+                
+                completionHandler(config)
+            }
+        }
+        
+        private func explainSelectedText(_ text: String) {
+            guard let glossService = glossService,
+                  let lessonContext = lessonContext else {
+                return
+            }
+            
+            Task { @MainActor in
+                do {
+                    let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
+                    let gloss = try await glossService.generateGloss(for: text, lessonContext: contextString)
+                    
+                    self.explainSheet?.wrappedValue = ExplainSheet(
+                        term: text,
+                        gloss: gloss,
+                        isBakedAnchor: false,
+                        lessonContext: lessonContext
+                    )
+                } catch {
+                    // Show error in sheet
+                    self.explainSheet?.wrappedValue = ExplainSheet(
+                        term: text,
+                        gloss: "**Error generating explanation:** \(error.localizedDescription)",
+                        isBakedAnchor: false,
+                        lessonContext: lessonContext
+                    )
+                }
+            }
+        }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "explainTap",
@@ -109,15 +191,6 @@ struct LessonWebView: UIViewRepresentable {
                     isBakedAnchor: true,
                     lessonContext: self.lessonContext
                 )
-            }
-        }
-
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // Airplane-mode: block any navigation away from the loaded HTML (including taps on explain terms, which are handled by JS)
-            if navigationAction.navigationType == .other || navigationAction.navigationType == .reload {
-                decisionHandler(.allow)
-            } else {
-                decisionHandler(.cancel)
             }
         }
 

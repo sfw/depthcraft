@@ -3,7 +3,7 @@ import Network
 
 @MainActor
 class NetworkMonitor: ObservableObject {
-    @Published private(set) var isOnline = false
+    @Published private(set) var isOnline = true // Start optimistic to avoid flash
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "dev.depthcraft.network.monitor")
     
