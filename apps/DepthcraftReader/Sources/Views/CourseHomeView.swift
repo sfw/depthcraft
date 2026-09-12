@@ -23,7 +23,7 @@ struct CourseHomeView: View {
                         
                         // Colophon: lesson count · offline · model
                         let totalLessons = course.curriculum.lessons.count
-                        let modelName = course.manifest.generator?.planner.model ?? "Unknown model"
+                        let modelName = course.manifest.generator?.planner?.model ?? "Unknown model"
                         Text("\(totalLessons) lessons · offline · \(modelName)")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
