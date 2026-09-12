@@ -7,106 +7,138 @@ struct CourseHomeView: View {
     var body: some View {
         List {
             if let course = store.course {
+                // Cover band: title, subtitle, colophon
                 Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(course.manifest.title)
-                            .font(.largeTitle.weight(.bold))
-                            .fixedSize(horizontal: false, vertical: true)
-                        if course.manifest.title.localizedCaseInsensitiveCompare(course.manifest.topic) != .orderedSame {
-                            Text(course.manifest.topic)
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(course.manifest.title)
+                                .font(.system(.title, design: .serif, weight: .semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            if course.manifest.title.localizedCaseInsensitiveCompare(course.manifest.topic) != .orderedSame {
+                                Text(course.manifest.topic)
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        ProgressView(value: store.courseProgressFraction()) {
-                            Text("Course progress")
-                        } currentValueLabel: {
-                            Text("\(Int(store.courseProgressFraction() * 100))%")
-                                .monospacedDigit()
-                        }
-                        .tint(.teal)
-
+                        
+                        // Colophon: lesson count · offline · model
+                        let totalLessons = course.curriculum.lessons.count
+                        let modelName = course.manifest.generator?.planner.model ?? "Unknown model"
+                        Text("\(totalLessons) lessons · offline · \(modelName)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        
+                        // Continue button (teal accent)
                         if let resume = store.resumeTarget(),
                            let lesson = course.curriculum.lessons[resume.lessonId] {
                             Button {
                                 navigationPath.wrappedValue.append(.lesson(unitId: resume.unitId, lessonId: resume.lessonId))
                             } label: {
-                                Label("Resume · \(lesson.title)", systemImage: "play.fill")
-                                    .font(.headline)
+                                HStack(spacing: 8) {
+                                    Text("Continue")
+                                        .font(.subheadline.weight(.medium))
+                                    Text("·")
+                                        .foregroundStyle(.secondary)
+                                    Text(lesson.title)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                }
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.teal)
-                            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                            .controlSize(.regular)
                         }
                     }
                     .padding(.vertical, 8)
                 }
-
-                Section("Units") {
+                .listRowBackground(Color(.systemGroupedBackground))
+                
+                // Spine: numbered units (clean TOC)
+                Section {
                     ForEach(store.orderedUnits()) { unit in
                         NavigationLink(value: NavigationDestination.unit(unitId: unit.id)) {
-                            HStack(spacing: 14) {
-                                ZStack {
-                                    Circle()
-                                        .stroke(Color.teal.opacity(0.25), lineWidth: 4)
-                                    Circle()
-                                        .trim(from: 0, to: store.unitProgressFraction(unit))
-                                        .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                                        .rotationEffect(.degrees(-90))
-                                    if store.progress?.units[unit.id]?.completed == true {
-                                        Image(systemName: "checkmark")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundStyle(.teal)
-                                    } else {
-                                        Text("\(unit.order)")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.secondary)
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                // Unit number
+                                Text("\(unit.order)")
+                                    .font(.system(.callout, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(minWidth: 20, alignment: .trailing)
+                                
+                                // Current unit marker (teal accent bar)
+                                if store.progress?.lastUnitId == unit.id {
+                                    Rectangle()
+                                        .fill(Color.teal)
+                                        .frame(width: 2, height: 16)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(unit.title)
+                                        .font(.body)
+                                        .foregroundStyle(store.progress?.units[unit.id]?.completed == true ? .secondary : .primary)
+                                    
+                                    let lessons = store.lessons(for: unit)
+                                    let completed = lessons.filter { store.progress?.lessons[$0.id]?.completed == true }.count
+                                    if completed > 0 {
+                                        Text("\(completed) of \(lessons.count)")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
                                     }
                                 }
-                                .frame(width: 36, height: 36)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(unit.title)
-                                        .font(.headline)
-                                    let lessons = store.lessons(for: unit)
-                                    let done = lessons.filter { store.progress?.lessons[$0.id]?.completed == true }.count
-                                    Text("\(done)/\(lessons.count) lessons")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 6)
                         }
                     }
+                } header: {
+                    Text("Contents")
+                        .textCase(nil)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
-
+                
+                // Demoted actions section (secondary)
                 Section {
                     NavigationLink {
                         GenerationView(extendFromCourse: course)
                     } label: {
-                        Label("Extend this Course", systemImage: "arrow.up.forward")
+                        Text("Extend this Course")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                     
                     NavigationLink {
                         GenerationView()
                     } label: {
-                        Label("Generate New Course", systemImage: "wand.and.stars")
+                        Text("Generate New Course")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                     
                     if !store.availablePackages.isEmpty {
                         NavigationLink {
                             PackageSwitcherView()
                         } label: {
-                            Label("Switch Package", systemImage: "folder")
+                            Text("Switch Package")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     
                     NavigationLink {
                         SettingsStubView()
                     } label: {
-                        Label("Settings", systemImage: "key")
+                        Text("Settings")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                } footer: {
-                    Text("Airplane-mode study only — no network required. Progress stays on this device.")
+                }
+            } else if store.course == nil && !store.isLoading {
+                // Editorial empty state
+                ContentUnavailableView {
+                    Label("No Course Loaded", systemImage: "book.closed")
+                } description: {
+                    Text("Import a course package to begin")
+                        .foregroundStyle(.secondary)
                 }
             }
         }

@@ -11,39 +11,46 @@ struct UnitView: View {
     var body: some View {
         List {
             if let unit {
-                Section {
-                    if let rawBlurb = store.course.flatMap({ PackageLoader.unitMarkdown(course: $0, unitId: unitId) }),
-                       let cleanedBlurb = cleanMarkdownText(rawBlurb),
-                       !cleanedBlurb.isEmpty {
+                if let rawBlurb = store.course.flatMap({ PackageLoader.unitMarkdown(course: $0, unitId: unitId) }),
+                   let cleanedBlurb = cleanMarkdownText(rawBlurb),
+                   !cleanedBlurb.isEmpty {
+                    Section {
                         Text(cleanedBlurb)
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }
-                    ProgressView(value: store.unitProgressFraction(unit))
-                        .tint(.teal)
                 }
 
                 Section("Lessons") {
                     ForEach(store.lessons(for: unit)) { lesson in
                         NavigationLink(value: NavigationDestination.lesson(unitId: unitId, lessonId: lesson.id)) {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: statusIcon(for: lesson.id))
-                                    .foregroundStyle(statusColor(for: lesson.id))
-                                    .frame(width: 22)
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                // Current lesson marker (teal accent)
+                                if store.progress?.lastLessonId == lesson.id {
+                                    Rectangle()
+                                        .fill(Color.teal)
+                                        .frame(width: 2, height: 16)
+                                }
+                                
+                                // Read indicator (subtle dot)
+                                Circle()
+                                    .fill(store.progress?.lessons[lesson.id]?.completed == true ? Color.secondary : Color.clear)
+                                    .frame(width: 6, height: 6)
+                                
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(lesson.title)
-                                        .font(.headline)
-                                    HStack(spacing: 8) {
-                                        if let minutes = lesson.estimatedMinutes {
-                                            Label("\(minutes) min", systemImage: "clock")
-                                        }
-                                        Text(statusLabel(for: lesson.id))
+                                        .font(.body)
+                                        .foregroundStyle(store.progress?.lessons[lesson.id]?.completed == true ? .secondary : .primary)
+                                    
+                                    if let minutes = lesson.estimatedMinutes {
+                                        Text("\(minutes) min")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
                                     }
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -53,25 +60,6 @@ struct UnitView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func statusIcon(for lessonId: String) -> String {
-        let p = store.progress?.lessons[lessonId]
-        if p?.completed == true { return "checkmark.circle.fill" }
-        if p?.markedRead == true || p?.quizPassed == true { return "circle.lefthalf.filled" }
-        return "circle"
-    }
-
-    private func statusColor(for lessonId: String) -> Color {
-        store.progress?.lessons[lessonId]?.completed == true ? .teal : .secondary
-    }
-
-    private func statusLabel(for lessonId: String) -> String {
-        let p = store.progress?.lessons[lessonId]
-        if p?.completed == true { return "Complete" }
-        if p?.quizPassed == true { return "Quiz passed" }
-        if p?.markedRead == true { return "In progress" }
-        return "Not started"
-    }
-    
     private func cleanMarkdownText(_ text: String) -> String? {
         var lines = text.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n")
         
