@@ -3,10 +3,12 @@ import Foundation
 class LessonWriterService: LessonWriterRole {
     private let client: LLMClient
     private let temperature: Double
+    private let depthLevel: DepthLevel
     
-    init(client: LLMClient, temperature: Double = 0.7) {
+    init(client: LLMClient, temperature: Double = 0.7, depthLevel: DepthLevel = .standard) {
         self.client = client
         self.temperature = temperature
+        self.depthLevel = depthLevel
     }
     
     func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
@@ -39,7 +41,26 @@ class LessonWriterService: LessonWriterRole {
             temperature: temperature,
             maxTokens: 4096
         )
-        let meta = extractMeta(from: markdown, lessonId: lesson.id)
+        
+        var meta = extractMeta(from: markdown, lessonId: lesson.id)
+        
+        let complexityAnalyzer = ComplexityAnalyzerService(
+            client: client,
+            temperature: 0.5,
+            depthLevel: depthLevel
+        )
+        
+        let explainAnchors = try await complexityAnalyzer.analyzeComplexity(
+            markdown: markdown,
+            lessonTitle: lesson.title,
+            lessonId: lesson.id
+        )
+        
+        meta = LessonMeta(
+            schemaVersion: meta.schemaVersion,
+            lessonId: meta.lessonId,
+            anchors: meta.anchors + explainAnchors
+        )
         
         return (markdown, meta)
     }
@@ -67,7 +88,7 @@ class LessonWriterService: LessonWriterRole {
                     kind = "section"
                 }
                 
-                anchors.append(LessonMeta.Anchor(id: anchorId, heading: heading, kind: kind))
+                anchors.append(LessonMeta.Anchor(id: anchorId, heading: heading, kind: kind, term: nil, gloss: nil))
             }
         }
         

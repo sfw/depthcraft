@@ -64,6 +64,20 @@ enum PackageLoader {
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
+    static func lessonMeta(course: LoadedCourse, unitId: String, lessonId: String) throws -> LessonMeta {
+        let url = course.rootURL
+            .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/meta.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw PackageLoaderError.missingFile("meta.json")
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(LessonMeta.self, from: data)
+        } catch {
+            throw PackageLoaderError.decode("meta.json", error)
+        }
+    }
+
     static func quiz(course: LoadedCourse, unitId: String, lessonId: String) throws -> QuizDocument {
         let url = course.rootURL
             .appendingPathComponent("content/units/\(unitId)/lessons/\(lessonId)/quiz.json")

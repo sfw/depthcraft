@@ -8,12 +8,14 @@ struct DemoReference: Hashable {
 struct LessonRenderResult {
     let html: String
     let demos: [DemoReference]
+    let explainAnchors: [LessonMeta.Anchor]
 }
 
 enum MarkdownHTML {
     /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr).
     /// Also extracts :::demo id="...":::  directives.
-    static func render(_ markdown: String, title: String, estimatedMinutes: Int?) -> LessonRenderResult {
+    /// Injects warm ink underlines for tap-to-explain terms when anchors are provided.
+    static func render(_ markdown: String, title: String, estimatedMinutes: Int?, anchors: [LessonMeta.Anchor] = []) -> LessonRenderResult {
         let (body, demos) = convert(markdown)
         let minutesLabel = estimatedMinutes.map { " · \($0) min" } ?? ""
         let html = """
@@ -118,6 +120,25 @@ enum MarkdownHTML {
             border-left: 3px solid var(--accent);
             color: var(--muted);
           }
+          .explain-term {
+            text-decoration: underline;
+            text-decoration-color: rgba(120, 113, 108, 0.35);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: rgba(120, 113, 108, 0.1);
+          }
+          .explain-term:hover {
+            text-decoration-color: rgba(120, 113, 108, 0.6);
+          }
+          @media (prefers-color-scheme: dark) {
+            .explain-term {
+              text-decoration-color: rgba(168, 162, 158, 0.35);
+            }
+            .explain-term:hover {
+              text-decoration-color: rgba(168, 162, 158, 0.6);
+            }
+          }
           .demo-placeholder {
             margin: 2rem 0;
             min-height: 400px;
@@ -138,7 +159,11 @@ enum MarkdownHTML {
         </body>
         </html>
         """
-        return LessonRenderResult(html: html, demos: demos)
+        
+        let explainAnchors = anchors.filter { $0.isExplainAnchor }
+        let htmlWithUnderlines = injectExplainUnderlines(html: html, anchors: explainAnchors)
+        
+        return LessonRenderResult(html: htmlWithUnderlines, demos: demos, explainAnchors: explainAnchors)
     }
     
     /// Render markdown for demo fallback without lesson chrome or eyebrow.
@@ -399,5 +424,144 @@ enum MarkdownHTML {
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+    }
+    
+    private static func injectExplainUnderlines(html: String, anchors: [LessonMeta.Anchor]) -> String {
+        guard !anchors.isEmpty else { return html }
+        
+        var result = html
+        
+        // Sort anchors by term length (longest first) to handle overlapping terms
+        let sortedAnchors = anchors.sorted { ($0.term?.count ?? 0) > ($1.term?.count ?? 0) }
+        
+        for anchor in sortedAnchors {
+            guard let term = anchor.term else { continue }
+            
+            // Escape HTML entities in term for matching (terms should already be plain text)
+            let escapedTerm = escape(term)
+            
+            // Only wrap first occurrence in text nodes (not inside tags, code, or existing spans)
+            result = wrapTermInTextNodes(html: result, term: escapedTerm, anchorId: anchor.id)
+        }
+        
+        return result
+    }
+    
+    private static func wrapTermInTextNodes(html: String, term: String, anchorId: String) -> String {
+        var output = ""
+        var i = html.startIndex
+        var insideTag = false
+        var insideCode = false
+        var insideExplainSpan = false
+        var codeTagStack: [String] = []
+        var spanDepth = 0
+        var wrapped = false
+        
+        while i < html.endIndex {
+            let char = html[i]
+            
+            // Track tag boundaries
+            if char == "<" {
+                insideTag = true
+                let tagStart = i
+                
+                // Look ahead to identify tag
+                var j = html.index(after: i)
+                var tagName = ""
+                var isClosing = false
+                
+                if j < html.endIndex && html[j] == "/" {
+                    isClosing = true
+                    j = html.index(after: j)
+                }
+                
+                while j < html.endIndex && html[j] != " " && html[j] != ">" {
+                    tagName.append(html[j])
+                    j = html.index(after: j)
+                }
+                
+                let lowerTag = tagName.lowercased()
+                
+                // Track code/pre blocks
+                if lowerTag == "code" || lowerTag == "pre" {
+                    if isClosing {
+                        if !codeTagStack.isEmpty && codeTagStack.last == lowerTag {
+                            codeTagStack.removeLast()
+                            insideCode = !codeTagStack.isEmpty
+                        }
+                    } else {
+                        codeTagStack.append(lowerTag)
+                        insideCode = true
+                    }
+                }
+                
+                // Track explain-term spans
+                if lowerTag == "span" && !isClosing {
+                    // Check if this is an explain-term span
+                    if let tagEnd = html[i...].firstIndex(of: ">") {
+                        let tagContent = String(html[i...tagEnd])
+                        if tagContent.contains("class=\"explain-term\"") || tagContent.contains("class='explain-term'") {
+                            insideExplainSpan = true
+                            spanDepth += 1
+                        }
+                    }
+                } else if lowerTag == "span" && isClosing && insideExplainSpan {
+                    spanDepth -= 1
+                    if spanDepth <= 0 {
+                        insideExplainSpan = false
+                        spanDepth = 0
+                    }
+                }
+            } else if char == ">" && insideTag {
+                insideTag = false
+                output.append(char)
+                i = html.index(after: i)
+                continue
+            }
+            
+            // If we're inside a tag, code block, or existing explain span, just copy
+            if insideTag || insideCode || insideExplainSpan {
+                output.append(char)
+                i = html.index(after: i)
+                continue
+            }
+            
+            // We're in text content - check if term matches here (with word boundaries)
+            if !wrapped && html[i...].starts(with: term) {
+                // Check word boundaries: term must not be inside a larger word
+                let beforeIsWordBoundary: Bool
+                if i == html.startIndex {
+                    beforeIsWordBoundary = true
+                } else {
+                    let prevChar = html[html.index(before: i)]
+                    beforeIsWordBoundary = !prevChar.isLetter && !prevChar.isNumber
+                }
+                
+                let afterIdx = html.index(i, offsetBy: term.count)
+                let afterIsWordBoundary: Bool
+                if afterIdx >= html.endIndex {
+                    afterIsWordBoundary = true
+                } else {
+                    let nextChar = html[afterIdx]
+                    afterIsWordBoundary = !nextChar.isLetter && !nextChar.isNumber
+                }
+                
+                if beforeIsWordBoundary && afterIsWordBoundary {
+                    // Found first occurrence in text node with word boundaries - wrap it
+                    output.append("<span class=\"explain-term\" data-anchor-id=\"\(anchorId)\">")
+                    output.append(term)
+                    output.append("</span>")
+                    i = afterIdx
+                    wrapped = true
+                    continue
+                }
+            }
+            
+            // Regular text content
+            output.append(char)
+            i = html.index(after: i)
+        }
+        
+        return output
     }
 }
