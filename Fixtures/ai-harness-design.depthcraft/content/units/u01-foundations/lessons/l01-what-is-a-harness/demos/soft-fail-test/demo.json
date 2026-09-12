@@ -1,8 +1,0 @@
-{
-  "schemaVersion": "0.1.0",
-  "demoId": "soft-fail-test",
-  "title": "Soft-Fail Test (Invalid Kit)",
-  "kit": "nonexistent-kit",
-  "entry": "index.html",
-  "fallback": "fallback.md"
-}
