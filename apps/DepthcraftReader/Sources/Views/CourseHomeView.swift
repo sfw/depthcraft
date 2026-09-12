@@ -104,10 +104,20 @@ struct CourseHomeView: View {
                     }
                 }
             } else if store.course == nil && !store.isLoading {
-                // Editorial empty state
+                // Editorial empty state with Generate CTA
                 ContentUnavailableView {
                     Text("Approve curriculum to unlock the spine")
                         .font(.system(.body, design: .serif))
+                } actions: {
+                    NavigationLink {
+                        GenerationView()
+                    } label: {
+                        Text("Generate a course")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                    .controlSize(.regular)
                 }
             }
         }
