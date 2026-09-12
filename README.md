@@ -144,4 +144,6 @@ Select the **DepthcraftReader** scheme, choose an **iPad simulator** or device, 
 
 ## License
 
-Licensing is under review. This codebase is open for inspection and experimentation; formal license terms will be published soon. Open an issue if you have licensing questions.
+Depthcraft is licensed under the [GNU General Public License v3.0](LICENSE). This is a copyleft license that ensures derivatives remain open source and that copyright and license notices are preserved. Anyone is free to use, modify, and distribute this software, provided that any derivative works are also released under GPL-3.0.
+
+Copyright © 2026 Scott Winder
