@@ -384,25 +384,25 @@ struct GenerationView: View {
                 progressStep(
                     label: "Curriculum",
                     isActive: orchestrator.progress.phase == .planning,
-                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.planning.rawValue
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.planning.order
                 )
                 
                 progressStep(
                     label: "Lessons",
                     isActive: orchestrator.progress.phase == .writingLessons,
-                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingLessons.rawValue
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingLessons.order
                 )
                 
                 progressStep(
                     label: "Quizzes",
                     isActive: orchestrator.progress.phase == .writingQuizzes,
-                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingQuizzes.rawValue
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingQuizzes.order
                 )
                 
                 progressStep(
                     label: "Demos",
                     isActive: orchestrator.progress.phase == .writingDemos,
-                    isCompleted: orchestrator.progress.phase.rawValue > GenerationPhase.writingDemos.rawValue
+                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingDemos.order
                 )
                 
                 progressStep(

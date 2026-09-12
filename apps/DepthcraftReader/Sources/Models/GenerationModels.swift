@@ -132,6 +132,20 @@ enum GenerationPhase: String, CaseIterable {
         case .failed: return "Failed"
         }
     }
+    
+    var order: Int {
+        switch self {
+        case .idle: return 0
+        case .planning: return 1
+        case .awaitingApproval: return 2
+        case .writingLessons: return 3
+        case .writingQuizzes: return 4
+        case .writingDemos: return 5
+        case .packaging: return 6
+        case .completed: return 7
+        case .failed: return -1  // Failed is not part of sequential progress
+        }
+    }
 }
 
 struct GenerationProgress {
