@@ -28,7 +28,12 @@ class GenerationOrchestrator: ObservableObject {
         
         do {
             let plannerClient = try LLMClientFactory.createClient(config: request.plannerConfig)
-            let planner = PlannerService(client: plannerClient, temperature: request.plannerConfig.temperature)
+            let planner = PlannerService(
+                client: plannerClient,
+                temperature: request.plannerConfig.temperature,
+                provider: request.plannerConfig.provider,
+                model: request.plannerConfig.model
+            )
             
             let priorCurriculum: Curriculum?
             if let priorURL = request.extendFromPackageURL {
@@ -151,7 +156,9 @@ class GenerationOrchestrator: ObservableObject {
             let lessonWriter = LessonWriterService(
                 client: lessonClient,
                 temperature: request.lessonWriterConfig.temperature,
-                depthLevel: request.depthLevel
+                depthLevel: request.depthLevel,
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model
             )
             
             // Skip lessons that are already generated (retry resume)
@@ -181,7 +188,12 @@ class GenerationOrchestrator: ObservableObject {
             progress.completedItems = 0
             
             let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
-            let quizWriter = QuizWriterService(client: quizClient, temperature: request.quizWriterConfig.temperature)
+            let quizWriter = QuizWriterService(
+                client: quizClient,
+                temperature: request.quizWriterConfig.temperature,
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
             
             // Skip quizzes that are already generated (retry resume)
             let remainingQuizzes = lessonsToGenerate.filter { quizzes[$0.id] == nil }
@@ -212,7 +224,9 @@ class GenerationOrchestrator: ObservableObject {
             let demoWriter = DemoWriterService(
                 client: demoClient,
                 temperature: request.demoWriterConfig.temperature,
-                depthLevel: request.depthLevel
+                depthLevel: request.depthLevel,
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
             )
             
             // Skip demos that are already generated (retry resume)

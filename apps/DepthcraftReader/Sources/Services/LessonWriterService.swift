@@ -4,11 +4,15 @@ class LessonWriterService: LessonWriterRole {
     private let client: LLMClient
     private let temperature: Double?
     private let depthLevel: DepthLevel
+    private let provider: LLMProvider
+    private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel = .standard) {
+    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel = .standard, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
         self.depthLevel = depthLevel
+        self.provider = provider
+        self.model = model
     }
     
     func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
@@ -35,13 +39,16 @@ class LessonWriterService: LessonWriterRole {
         Output ONLY the markdown content.
         """
         
+        // Use full model max - no artificial caps
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
         let markdown: String
         do {
             markdown = try await client.complete(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
-                maxTokens: 4096
+                maxTokens: maxTokens
             )
         } catch let error as LLMClientError {
             // Wrap LLM client errors with stage name for UI
@@ -53,7 +60,9 @@ class LessonWriterService: LessonWriterRole {
         let complexityAnalyzer = ComplexityAnalyzerService(
             client: client,
             temperature: temperature,
-            depthLevel: depthLevel
+            depthLevel: depthLevel,
+            provider: provider,
+            model: model
         )
         
         let explainAnchors = try await complexityAnalyzer.analyzeComplexity(

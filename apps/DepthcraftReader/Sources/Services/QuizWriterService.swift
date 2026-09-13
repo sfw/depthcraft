@@ -3,10 +3,14 @@ import Foundation
 class QuizWriterService: QuizWriterRole {
     private let client: LLMClient
     private let temperature: Double?
+    private let provider: LLMProvider
+    private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil) {
+    init(client: LLMClient, temperature: Double? = nil, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
+        self.provider = provider
+        self.model = model
     }
     
     func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson) async throws -> QuizDocument {
@@ -73,11 +77,14 @@ class QuizWriterService: QuizWriterRole {
         Remember: Output ONLY the JSON object with no additional text or formatting.
         """
         
+        // Use full model max - no artificial caps
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
         let response = try await client.complete(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
             temperature: temperature,
-            maxTokens: 4096
+            maxTokens: maxTokens
         )
         
         // Try to extract and decode JSON with robust handling

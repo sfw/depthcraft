@@ -3,10 +3,14 @@ import Foundation
 class PlannerService: PlannerRole {
     private let client: LLMClient
     private let temperature: Double?
+    private let provider: LLMProvider
+    private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil) {
+    init(client: LLMClient, temperature: Double? = nil, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
+        self.provider = provider
+        self.model = model
     }
     
     func plan(topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, extendingCurriculum: Curriculum? = nil) async throws -> Curriculum {
@@ -113,14 +117,14 @@ class PlannerService: PlannerRole {
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """
         
-        // Use higher max_tokens (8192) for planner to accommodate large Exhaustive curricula.
-        // Note: Some models (e.g., tencent/hy4-preview via OpenRouter) may have lower
-        // effective output limits and can still truncate despite this setting.
+        // Use full model max to avoid artificial truncation
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
         let response = try await client.complete(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
             temperature: temperature,
-            maxTokens: 8192
+            maxTokens: maxTokens
         )
         
         // Check for truncated JSON first
