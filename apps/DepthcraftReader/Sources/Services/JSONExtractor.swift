@@ -150,10 +150,13 @@ struct JSONExtractor {
             let stringIndex = text.index(text.startIndex, offsetBy: index)
             
             // Reset string state on newline (JSON strings can't contain unescaped newlines)
-            // This prevents malformed/incomplete JSON from breaking state tracking
+            // If we're in a string at a newline, the JSON is malformed — abandon it
             if char == "\n" || char == "\r" {
                 if inString && !escapeNext {
+                    // Malformed JSON with unclosed string - abandon this candidate
                     inString = false
+                    depth = 0
+                    startIndex = nil
                 }
                 escapeNext = false
             }
