@@ -23,11 +23,11 @@ class LLMConfigService {
     /// Uses the global/role configuration from Generate settings
     func getAvailableConfig() throws -> LLMConfiguration? {
         // Use Explain role config (which may follow global or be overridden)
-        return try? roleConfigService.getLLMConfig(for: .explain, temperature: 0.7)
+        return try? roleConfigService.getLLMConfig(for: .explain)
     }
     
     /// Get configuration for Discuss role
     func getDiscussConfig() throws -> LLMConfiguration? {
-        return try? roleConfigService.getLLMConfig(for: .discuss, temperature: 0.7)
+        return try? roleConfigService.getLLMConfig(for: .discuss)
     }
 }

@@ -416,7 +416,7 @@ struct GenerationView: View {
     
     private func startPlanning() {
         do {
-            let plannerConfig = try roleConfig.getLLMConfig(for: .planner, temperature: 0.7)
+            let plannerConfig = try roleConfig.getLLMConfig(for: .planner)
             
             // Lesson/quiz/demo configs will be set later during continueGeneration
             // For now, use empty placeholders
@@ -460,10 +460,10 @@ struct GenerationView: View {
                 return
             }
             
-            let plannerConfig = try roleConfig.getLLMConfig(for: .planner, temperature: 0.7)
-            let lessonConfig = try roleConfig.getLLMConfig(for: .lessons, temperature: 0.7)
-            let quizConfig = try roleConfig.getLLMConfig(for: .quizzes, temperature: 0.7)
-            let demoConfig = try roleConfig.getLLMConfig(for: .demos, temperature: 0.7)
+            let plannerConfig = try roleConfig.getLLMConfig(for: .planner)
+            let lessonConfig = try roleConfig.getLLMConfig(for: .lessons)
+            let quizConfig = try roleConfig.getLLMConfig(for: .quizzes)
+            let demoConfig = try roleConfig.getLLMConfig(for: .demos)
             
             let request = GenerationRequest(
                 topic: topic,

@@ -59,7 +59,7 @@ class GlossService {
             let gloss = try await client.complete(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
-                temperature: 0.7,
+                temperature: config.temperature,
                 maxTokens: 300
             )
             return gloss.trimmingCharacters(in: .whitespacesAndNewlines)

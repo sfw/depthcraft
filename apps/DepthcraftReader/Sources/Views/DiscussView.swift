@@ -153,7 +153,7 @@ struct DiscussView: View {
             let response = try await client.complete(
                 systemPrompt: systemPrompt,
                 userPrompt: conversationContext + "\n\nStudent: \(userMessage)\n\nAssistant:",
-                temperature: 0.7,
+                temperature: config.temperature,
                 maxTokens: 400
             )
             

@@ -123,6 +123,9 @@ class APIKeyStore: ObservableObject {
     private let openaiModelKey = "llm.openai.model"
     private let openrouterModelKey = "llm.openrouter.model"
     
+    // Global temperature setting (for all roles that follow global)
+    private let globalTemperatureKey = "llm.global.temperature"
+    
     init() {
         refreshStatus()
     }
@@ -198,6 +201,23 @@ class APIKeyStore: ObservableObject {
             UserDefaults.standard.set(value, forKey: openrouterModelKey)
         case .custom:
             setCustomModel(value)
+        }
+    }
+    
+    /// Get global temperature setting
+    /// Returns nil if unset (provider default); otherwise returns value in range 0.0-2.0
+    func getGlobalTemperature() -> Double? {
+        let value = UserDefaults.standard.object(forKey: globalTemperatureKey) as? Double
+        return value
+    }
+    
+    /// Set global temperature
+    /// Pass nil to unset (use provider default); otherwise value should be in range 0.0-2.0
+    func setGlobalTemperature(_ value: Double?) {
+        if let value = value {
+            UserDefaults.standard.set(value, forKey: globalTemperatureKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: globalTemperatureKey)
         }
     }
     
