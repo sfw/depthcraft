@@ -5,6 +5,7 @@ import SwiftUI
 final class CourseStore: ObservableObject {
     @Published var course: LoadedCourse?
     @Published var progress: DeviceProgress?
+    @Published var notes: CourseNotes?
     @Published var errorMessage: String?
     @Published var isLoading = false
     @Published var availablePackages: [URL] = []
@@ -12,6 +13,7 @@ final class CourseStore: ObservableObject {
     @Published var showUpgradeDialog = false
     
     private let progressStore = ProgressStore()
+    private let notesStore = NotesStore()
     private let fileManager = FileManager.default
     private let lastOpenedPackageKey = "lastOpenedPackageURL"
 
@@ -30,6 +32,7 @@ final class CourseStore: ObservableObject {
                 lessonIds: lessonIds,
                 unitIds: unitIds
             )
+            notes = notesStore.load(packageId: loaded.manifest.packageId)
             errorMessage = nil
             refreshAvailablePackages()
             
@@ -145,6 +148,7 @@ final class CourseStore: ObservableObject {
             lessonIds: lessonIds,
             unitIds: unitIds
         )
+        notes = notesStore.load(packageId: loaded.manifest.packageId)
         errorMessage = nil
         refreshAvailablePackages()
         
@@ -229,5 +233,33 @@ final class CourseStore: ObservableObject {
             return (unit.id, lesson.id)
         }
         return nil
+    }
+    
+    func addHighlight(_ highlight: HighlightNote) {
+        guard var notes else { return }
+        notesStore.addHighlight(&notes, highlight: highlight)
+        self.notes = notes
+    }
+    
+    func removeHighlight(highlightId: String) {
+        guard var notes else { return }
+        notesStore.removeHighlight(&notes, highlightId: highlightId)
+        self.notes = notes
+    }
+    
+    func updateHighlight(_ highlight: HighlightNote) {
+        guard var notes else { return }
+        notesStore.updateHighlight(&notes, highlight: highlight)
+        self.notes = notes
+    }
+    
+    func highlights(for lessonId: String) -> [HighlightNote] {
+        guard let notes else { return [] }
+        return notesStore.highlights(for: notes, lessonId: lessonId)
+    }
+    
+    func allHighlights() -> [HighlightNote] {
+        guard let notes else { return [] }
+        return notesStore.allHighlights(for: notes)
     }
 }

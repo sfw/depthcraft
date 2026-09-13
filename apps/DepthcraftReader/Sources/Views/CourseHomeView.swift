@@ -93,6 +93,54 @@ struct CourseHomeView: View {
                         .foregroundStyle(.secondary)
                 }
                 
+                // Notes section (highlighted passages)
+                let allHighlights = store.allHighlights()
+                if !allHighlights.isEmpty {
+                    Section {
+                        ForEach(allHighlights.prefix(5)) { highlight in
+                            if let lesson = course.curriculum.lessons[highlight.lessonId] {
+                                NavigationLink(value: NavigationDestination.lesson(unitId: highlight.unitId, lessonId: highlight.lessonId)) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(highlight.text)
+                                            .font(.body)
+                                            .lineLimit(2)
+                                            .foregroundStyle(.primary)
+                                        
+                                        HStack(spacing: 8) {
+                                            Text(lesson.title)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            
+                                            Text("·")
+                                                .foregroundStyle(.tertiary)
+                                            
+                                            Text(timeAgo(from: highlight.createdAt))
+                                                .font(.caption)
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                        
+                        if allHighlights.count > 5 {
+                            Button {
+                                // TODO: Navigate to full notes view
+                            } label: {
+                                Text("See all \(allHighlights.count) notes")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.teal)
+                            }
+                        }
+                    } header: {
+                        Text("Notes")
+                            .textCase(nil)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
                 // More section (collapsed secondary actions)
                 Section {
                     NavigationLink {
@@ -122,5 +170,29 @@ struct CourseHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+    
+    private func timeAgo(from isoString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: isoString) else { return "recently" }
+        
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+        
+        if interval < 60 {
+            return "just now"
+        } else if interval < 3600 {
+            let minutes = Int(interval / 60)
+            return "\(minutes)m ago"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours)h ago"
+        } else if interval < 604800 {
+            let days = Int(interval / 86400)
+            return "\(days)d ago"
+        } else {
+            let weeks = Int(interval / 604800)
+            return "\(weeks)w ago"
+        }
     }
 }

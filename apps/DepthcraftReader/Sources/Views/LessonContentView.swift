@@ -9,7 +9,11 @@ struct LessonContentView: View {
     let onScrolledToEnd: () -> Void
     
     @State private var explainSheet: ExplainSheet?
+    @State private var highlightAction: HighlightAction?
+    @State private var showHighlightActions = false
+    @State private var highlightToRemove: String?
     @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @EnvironmentObject private var store: CourseStore
     @StateObject private var apiKeyStore = APIKeyStore()
     
     private var lessonContext: ExplainSheet.LessonContext {
@@ -29,6 +33,10 @@ struct LessonContentView: View {
         GlossService(configService: configService)
     }
     
+    private var savedHighlights: [HighlightNote] {
+        store.highlights(for: lessonId)
+    }
+    
     var body: some View {
         Group {
             if renderResult.demos.isEmpty {
@@ -39,6 +47,15 @@ struct LessonContentView: View {
                     lessonContext: lessonContext,
                     isOnline: networkMonitor.isOnline,
                     glossService: glossService,
+                    highlights: savedHighlights,
+                    highlightToRemove: $highlightToRemove,
+                    onHighlightSaved: { highlight in
+                        store.addHighlight(highlight)
+                    },
+                    onHighlightAction: { action in
+                        highlightAction = action
+                        showHighlightActions = true
+                    },
                     onScrolledToEnd: onScrolledToEnd,
                     explainSheet: $explainSheet
                 )
@@ -56,6 +73,100 @@ struct LessonContentView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .confirmationDialog("Highlight Actions", isPresented: $showHighlightActions, presenting: highlightAction) { action in
+            Button("Explain") {
+                handleExplain(action: action)
+            }
+            
+            Button("Discuss") {
+                handleDiscuss(action: action)
+            }
+            .disabled(!networkMonitor.isOnline || !configService.hasAPIKey())
+            
+            Button("Remove", role: .destructive) {
+                handleRemove(action: action)
+            }
+            
+            Button("Cancel", role: .cancel) {}
+        } message: { action in
+            Text(action.text.prefix(100) + (action.text.count > 100 ? "..." : ""))
+        }
+    }
+    
+    private func handleExplain(action: HighlightAction) {
+        guard networkMonitor.isOnline, configService.hasAPIKey() else {
+            // Show offline toast or error
+            return
+        }
+        
+        Task { @MainActor in
+            do {
+                let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
+                let gloss = try await glossService.generateGloss(for: action.text, lessonContext: contextString)
+                
+                // Update highlight with gloss
+                if var highlight = store.highlights(for: lessonId).first(where: { $0.id == action.highlightId }) {
+                    highlight.gloss = gloss
+                    store.updateHighlight(highlight)
+                }
+                
+                explainSheet = ExplainSheet(
+                    term: action.text,
+                    gloss: gloss,
+                    lessonContext: lessonContext
+                )
+            } catch {
+                explainSheet = ExplainSheet(
+                    term: action.text,
+                    gloss: "**Error generating explanation:** \(error.localizedDescription)",
+                    lessonContext: lessonContext
+                )
+            }
+        }
+    }
+    
+    private func handleDiscuss(action: HighlightAction) {
+        guard networkMonitor.isOnline, configService.hasAPIKey() else {
+            return
+        }
+        
+        Task { @MainActor in
+            // Get or generate gloss first
+            var gloss: String
+            if let highlight = store.highlights(for: lessonId).first(where: { $0.id == action.highlightId }),
+               let existingGloss = highlight.gloss {
+                gloss = existingGloss
+            } else {
+                do {
+                    let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
+                    gloss = try await glossService.generateGloss(for: action.text, lessonContext: contextString)
+                    
+                    // Update highlight with gloss
+                    if var highlight = store.highlights(for: lessonId).first(where: { $0.id == action.highlightId }) {
+                        highlight.gloss = gloss
+                        store.updateHighlight(highlight)
+                    }
+                } catch {
+                    gloss = "**Error generating explanation:** \(error.localizedDescription)"
+                }
+            }
+            
+            explainSheet = ExplainSheet(
+                term: action.text,
+                gloss: gloss,
+                lessonContext: lessonContext
+            )
+        }
+    }
+    
+    private func handleRemove(action: HighlightAction) {
+        store.removeHighlight(highlightId: action.highlightId)
+        highlightToRemove = action.highlightId
+        
+        // Reset after a brief delay to allow WebView to process
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            highlightToRemove = nil
+        }
     }
     
     private var inlineLayout: some View {
@@ -70,6 +181,15 @@ struct LessonContentView: View {
             lessonContext: lessonContext,
             isOnline: networkMonitor.isOnline,
             glossService: glossService,
+            highlights: savedHighlights,
+            highlightToRemove: $highlightToRemove,
+            onHighlightSaved: { highlight in
+                store.addHighlight(highlight)
+            },
+            onHighlightAction: { action in
+                highlightAction = action
+                showHighlightActions = true
+            },
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
@@ -166,6 +286,10 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     let lessonContext: ExplainSheet.LessonContext
     let isOnline: Bool
     let glossService: GlossService
+    let highlights: [HighlightNote]
+    @Binding var highlightToRemove: String?
+    let onHighlightSaved: (HighlightNote) -> Void
+    let onHighlightAction: (HighlightAction) -> Void
     @Binding var explainSheet: ExplainSheet?
     let onScrolledToEnd: () -> Void
     
@@ -179,6 +303,10 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
             lessonContext: lessonContext,
             isOnline: isOnline,
             glossService: glossService,
+            highlights: highlights,
+            highlightToRemove: $highlightToRemove,
+            onHighlightSaved: onHighlightSaved,
+            onHighlightAction: onHighlightAction,
             explainSheet: $explainSheet,
             onScrolledToEnd: onScrolledToEnd
         )
@@ -187,6 +315,11 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
         viewController.isOnline = isOnline
         viewController.updateDelegatesOnlineState()
+        
+        // Handle highlight removal
+        if let removeId = highlightToRemove {
+            viewController.removeHighlightVisual(highlightId: removeId)
+        }
     }
 }
 
@@ -199,13 +332,17 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     let lessonContext: ExplainSheet.LessonContext
     var isOnline: Bool
     let glossService: GlossService
+    let highlights: [HighlightNote]
+    var highlightToRemove: Binding<String?>
+    let onHighlightSaved: (HighlightNote) -> Void
+    let onHighlightAction: (HighlightAction) -> Void
     var explainSheet: Binding<ExplainSheet?>
     let onScrolledToEnd: () -> Void
     private var hasNotifiedEnd = false
     private var scrollView: UIScrollView!
     private var stackView: UIStackView!
     
-    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, highlights: [HighlightNote], highlightToRemove: Binding<String?>, onHighlightSaved: @escaping (HighlightNote) -> Void, onHighlightAction: @escaping (HighlightAction) -> Void, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
         self.sections = sections
         self.course = course
         self.unitId = unitId
@@ -214,6 +351,10 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         self.lessonContext = lessonContext
         self.isOnline = isOnline
         self.glossService = glossService
+        self.highlights = highlights
+        self.highlightToRemove = highlightToRemove
+        self.onHighlightSaved = onHighlightSaved
+        self.onHighlightAction = onHighlightAction
         self.explainSheet = explainSheet
         self.onScrolledToEnd = onScrolledToEnd
         super.init(nibName: nil, bundle: nil)
@@ -294,6 +435,19 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         }
     }
     
+    func removeHighlightVisual(highlightId: String) {
+        // Remove from all WebViews in the stack
+        for view in stackView.arrangedSubviews {
+            if let webView = view as? WKWebView {
+                webView.evaluateJavaScript("window.removeSavedHighlight('\(highlightId)')") { _, error in
+                    if let error = error {
+                        print("Failed to remove highlight visual: \(error)")
+                    }
+                }
+            }
+        }
+    }
+    
     private func createHTMLWebView(html: String) -> WKWebView {
         let config = WKWebViewConfiguration()
         // Enable JS for height measurement and tap-to-explain (navigation still locked down)
@@ -311,11 +465,15 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             explainAnchors: explainAnchors,
             lessonContext: lessonContext,
             isOnline: isOnline,
-            glossService: glossService
+            glossService: glossService,
+            highlights: highlights,
+            onHighlightSaved: onHighlightSaved,
+            onHighlightAction: onHighlightAction
         )
         contentController.add(tapHandler, name: "explainTap")
         contentController.add(tapHandler, name: "paintSelection")
         contentController.add(tapHandler, name: "clearPaint")
+        contentController.add(tapHandler, name: "highlightTap")
         
         // Inject paint selection script (same as LessonWebView)
         let paintScript = WKUserScript(
@@ -330,7 +488,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // Create floating capsule
                 const capsule = document.createElement('div');
                 capsule.id = 'explain-capsule';
-                capsule.textContent = 'Release to explain';
+                capsule.textContent = 'Release to highlight';
                 capsule.style.cssText = `
                     position: fixed;
                     top: 50%;
@@ -373,8 +531,16 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         background-color: rgba(20, 184, 166, 0.3);
                         border-radius: 2px;
                     }
+                    .saved-highlight {
+                        background-color: rgba(20, 184, 166, 0.3);
+                        border-radius: 2px;
+                        cursor: pointer;
+                    }
                 `;
                 document.head.appendChild(style);
+                
+                // Store saved highlights
+                let savedHighlights = [];
                 
                 // Apply teal ink highlight using CSS Highlight API (no DOM mutation)
                 function applyPaintHighlight(range) {
@@ -479,13 +645,27 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     return range;
                 }
                 
-                // Handle baked explain terms
+                // Handle baked explain terms and saved highlights
                 document.addEventListener('click', function(e) {
-                    const target = e.target.closest('.explain-term');
-                    if (target) {
+                    // Check for saved highlight tap
+                    const highlightTarget = e.target.closest('.saved-highlight');
+                    if (highlightTarget) {
                         e.preventDefault();
-                        const anchorId = target.getAttribute('data-anchor-id');
-                        const term = target.textContent;
+                        const highlightId = highlightTarget.getAttribute('data-highlight-id');
+                        const text = highlightTarget.textContent;
+                        window.webkit.messageHandlers.highlightTap.postMessage({
+                            highlightId: highlightId,
+                            text: text
+                        });
+                        return;
+                    }
+                    
+                    // Check for baked explain terms
+                    const explainTarget = e.target.closest('.explain-term');
+                    if (explainTarget) {
+                        e.preventDefault();
+                        const anchorId = explainTarget.getAttribute('data-anchor-id');
+                        const term = explainTarget.textContent;
                         window.webkit.messageHandlers.explainTap.postMessage({
                             anchorId: anchorId,
                             term: term
@@ -559,7 +739,29 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     if (currentPaintRange) {
                         const text = currentPaintRange.toString().trim();
                         if (text.length > 0 && text.length <= 200) {
-                            window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                            // Generate a unique ID for this highlight
+                            const highlightId = 'hl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                            
+                            // Wrap the range in a span with the highlight ID
+                            try {
+                                const span = document.createElement('span');
+                                span.className = 'saved-highlight';
+                                span.setAttribute('data-highlight-id', highlightId);
+                                currentPaintRange.surroundContents(span);
+                                
+                                // Clear CSS Highlight API after wrapping
+                                if (CSS.highlights) {
+                                    CSS.highlights.clear();
+                                }
+                                
+                                // Send save message to native
+                                window.webkit.messageHandlers.paintSelection.postMessage({ 
+                                    text: text,
+                                    highlightId: highlightId
+                                });
+                            } catch(e) {
+                                console.warn('Failed to wrap highlight:', e);
+                            }
                         }
                     }
                 };
@@ -594,10 +796,31 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         if (range) {
                             const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
                             if (wordRange) {
-                                applyPaintHighlight(wordRange);
                                 const text = wordRange.toString().trim();
                                 if (text.length > 0 && text.length <= 200) {
-                                    window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                                    // Generate a unique ID for this highlight
+                                    const highlightId = 'hl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                                    
+                                    // Wrap the range in a span with the highlight ID
+                                    try {
+                                        const span = document.createElement('span');
+                                        span.className = 'saved-highlight';
+                                        span.setAttribute('data-highlight-id', highlightId);
+                                        wordRange.surroundContents(span);
+                                        
+                                        // Clear CSS Highlight API after wrapping
+                                        if (CSS.highlights) {
+                                            CSS.highlights.clear();
+                                        }
+                                        
+                                        // Send save message to native
+                                        window.webkit.messageHandlers.paintSelection.postMessage({ 
+                                            text: text,
+                                            highlightId: highlightId
+                                        });
+                                    } catch(e) {
+                                        console.warn('Failed to wrap double-tap highlight:', e);
+                                    }
                                 }
                             }
                         }
@@ -609,6 +832,47 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         lastTapY = touch.clientY;
                     }
                 }, { passive: false });
+                
+                // Restore saved highlights
+                window.restoreSavedHighlights = function(highlightsJson) {
+                    try {
+                        savedHighlights = JSON.parse(highlightsJson);
+                        
+                        // Find and wrap text nodes matching saved highlights
+                        for (const highlight of savedHighlights) {
+                            const walker = document.createTreeWalker(
+                                document.body,
+                                NodeFilter.SHOW_TEXT,
+                                null,
+                                false
+                            );
+                            
+                            let node;
+                            while (node = walker.nextNode()) {
+                                const text = node.textContent;
+                                const index = text.indexOf(highlight.text);
+                                if (index !== -1 && !node.parentElement.classList.contains('saved-highlight')) {
+                                    try {
+                                        const range = document.createRange();
+                                        range.setStart(node, index);
+                                        range.setEnd(node, index + highlight.text.length);
+                                        
+                                        const span = document.createElement('span');
+                                        span.className = 'saved-highlight';
+                                        span.setAttribute('data-highlight-id', highlight.id);
+                                        range.surroundContents(span);
+                                        
+                                        break; // Only wrap first occurrence
+                                    } catch(e) {
+                                        console.warn('Failed to restore highlight:', e);
+                                    }
+                                }
+                            }
+                        }
+                    } catch(e) {
+                        console.error('Failed to parse highlights:', e);
+                    }
+                };
             })();
             """,
             injectionTime: .atDocumentEnd,
@@ -639,6 +903,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         // Wire up webView and delegate references (fix #1: enable clearPaint)
         tapHandler.webView = webView
         tapHandler.delegate = delegate
+        delegate.highlights = highlights
         
         // Keep delegate alive by storing in associated object
         objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
@@ -662,15 +927,21 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         var lessonContext: ExplainSheet.LessonContext
         var isOnline: Bool
         var glossService: GlossService
+        var highlights: [HighlightNote]
+        var onHighlightSaved: (HighlightNote) -> Void
+        var onHighlightAction: (HighlightAction) -> Void
         weak var webView: WKWebView?
         weak var delegate: HTMLWebViewDelegate?
         
-        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService) {
+        init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, highlights: [HighlightNote], onHighlightSaved: @escaping (HighlightNote) -> Void, onHighlightAction: @escaping (HighlightAction) -> Void) {
             self.explainSheet = explainSheet
             self.explainAnchors = explainAnchors
             self.lessonContext = lessonContext
             self.isOnline = isOnline
             self.glossService = glossService
+            self.highlights = highlights
+            self.onHighlightSaved = onHighlightSaved
+            self.onHighlightAction = onHighlightAction
         }
         
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -696,50 +967,36 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     self.clearPaint()
                 }
             } else if message.name == "paintSelection" {
-                // Paint selection completed (long-press or double-tap)
+                // Paint selection completed - save highlight
                 guard let body = message.body as? [String: String],
+                      let text = body["text"],
+                      let highlightId = body["highlightId"] else {
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    let highlight = HighlightNote(
+                        id: highlightId,
+                        lessonId: self.lessonContext.lessonId,
+                        unitId: self.lessonContext.unitId,
+                        text: text
+                    )
+                    self.onHighlightSaved(highlight)
+                }
+            } else if message.name == "highlightTap" {
+                // Saved highlight tapped - show action sheet
+                guard let body = message.body as? [String: String],
+                      let highlightId = body["highlightId"],
                       let text = body["text"] else {
                     return
                 }
                 
                 DispatchQueue.main.async {
-                    self.explainText(text)
+                    self.onHighlightAction(HighlightAction(highlightId: highlightId, text: text))
                 }
             } else if message.name == "clearPaint" {
                 // Clear paint (tap outside / Done)
                 clearPaint()
-            }
-        }
-        
-        private func explainText(_ text: String) {
-            // Check online + BYOK
-            guard isOnline, glossService.hasAPIKey() else {
-                // Offline - show toast (fix #2: offline double-tap)
-                delegate?.showOfflineToast()
-                clearPaint()
-                return
-            }
-            
-            Task { @MainActor in
-                do {
-                    let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
-                    let gloss = try await glossService.generateGloss(for: text, lessonContext: contextString)
-                    
-                    self.explainSheet.wrappedValue = ExplainSheet(
-                        term: text,
-                        gloss: gloss,
-                        lessonContext: self.lessonContext
-                    )
-                    // Fix #3: Clear paint after successful explain
-                    self.clearPaint()
-                } catch {
-                    self.explainSheet.wrappedValue = ExplainSheet(
-                        term: text,
-                        gloss: "**Error generating explanation:** \(error.localizedDescription)",
-                        lessonContext: self.lessonContext
-                    )
-                    self.clearPaint()
-                }
             }
         }
         
@@ -754,6 +1011,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         var glossService: GlossService
         var explainSheet: Binding<ExplainSheet?>
         var lessonContext: ExplainSheet.LessonContext
+        var highlights: [HighlightNote] = []
         weak var webView: WKWebView?
         private var offlineToastWorkItem: DispatchWorkItem?
         
@@ -764,8 +1022,41 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             self.lessonContext = lessonContext
         }
         
+        private func restoreSavedHighlights() {
+            guard !highlights.isEmpty, let webView = webView else { return }
+            
+            let highlightsJson = highlights.map { highlight in
+                """
+                {"id": "\(highlight.id)", "text": \(escapeJSON(highlight.text))}
+                """
+            }.joined(separator: ", ")
+            
+            let json = "[\(highlightsJson)]"
+            webView.evaluateJavaScript("window.restoreSavedHighlights('\(escapeJavaScript(json))')") { _, error in
+                if let error = error {
+                    print("Failed to restore highlights: \(error)")
+                }
+            }
+        }
+        
+        private func escapeJSON(_ text: String) -> String {
+            let encoded = try? JSONEncoder().encode(text)
+            return String(data: encoded ?? Data(), encoding: .utf8) ?? "\"\""
+        }
+        
+        private func escapeJavaScript(_ text: String) -> String {
+            text.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+        }
+        
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             self.webView = webView
+            
+            // Restore saved highlights
+            restoreSavedHighlights()
             
             // Measure content height and update constraint
             webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
