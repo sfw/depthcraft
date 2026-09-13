@@ -30,6 +30,11 @@ struct LessonWebView: UIViewRepresentable {
         // Enable minimal JS for tap-to-explain (offline, no network)
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         
+        // Disable system text interaction (we own selection via paint/double-tap/baked)
+        if #available(iOS 14.5, *) {
+            config.defaultWebpagePreferences.isTextInteractionEnabled = false
+        }
+        
         // Add message handlers
         let contentController = config.userContentController
         contentController.add(context.coordinator, name: "explainTap")
@@ -400,11 +405,6 @@ struct LessonWebView: UIViewRepresentable {
             
             switch gesture.state {
             case .began:
-                // Disable WKWebView text interaction (owns selection fully)
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = false
-                }
-                
                 // Haptic feedback
                 let feedback = UIImpactFeedbackGenerator(style: .medium)
                 feedback.impactOccurred()
@@ -420,19 +420,9 @@ struct LessonWebView: UIViewRepresentable {
                 // End paint selection and trigger explain
                 webView.evaluateJavaScript("window.endPaintSelection()") { _, _ in }
                 
-                // Re-enable WKWebView text interaction
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = true
-                }
-                
             case .cancelled, .failed:
                 // Clear paint
                 webView.evaluateJavaScript("window.clearPaintSelection()") { _, _ in }
-                
-                // Re-enable WKWebView text interaction
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = true
-                }
                 
             default:
                 break

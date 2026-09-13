@@ -299,6 +299,11 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         // Enable JS for height measurement and tap-to-explain (navigation still locked down)
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         
+        // Disable system text interaction (we own selection via paint/double-tap/baked)
+        if #available(iOS 14.5, *) {
+            config.defaultWebpagePreferences.isTextInteractionEnabled = false
+        }
+        
         // Add message handlers
         let contentController = config.userContentController
         let tapHandler = ExplainTapHandler(
@@ -798,11 +803,6 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             
             switch gesture.state {
             case .began:
-                // Disable WKWebView text interaction (owns selection fully)
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = false
-                }
-                
                 // Haptic feedback
                 let feedback = UIImpactFeedbackGenerator(style: .medium)
                 feedback.impactOccurred()
@@ -818,11 +818,6 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // End paint selection and trigger explain
                 webView.evaluateJavaScript("window.endPaintSelection()") { _, _ in }
                 
-                // Re-enable WKWebView text interaction
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = true
-                }
-                
                 // Check if we need to show offline toast
                 if !isOnline || !glossService.hasAPIKey() {
                     showOfflineToast()
@@ -832,11 +827,6 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             case .cancelled, .failed:
                 // Clear paint
                 clearPaint()
-                
-                // Re-enable WKWebView text interaction
-                if #available(iOS 14.5, *) {
-                    webView.configuration.defaultWebpagePreferences.isTextInteractionEnabled = true
-                }
                 
             default:
                 break
