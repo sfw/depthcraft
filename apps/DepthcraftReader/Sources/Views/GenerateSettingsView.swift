@@ -6,8 +6,8 @@ struct GenerateSettingsView: View {
     @StateObject private var roleConfig: LLMRoleConfigService
     @StateObject private var modelService: LLMModelService
     
-    @State private var showingModelPicker = false
     @State private var modelPickerTarget: ModelPickerTarget?
+    @State private var roleCustomModelPicker: RoleCustomModelPicker?
     
     init() {
         let store = APIKeyStore()
@@ -28,6 +28,14 @@ struct GenerateSettingsView: View {
         }
     }
     
+    struct RoleCustomModelPicker: Identifiable {
+        let role: GenerationRole
+        let provider: LLMProvider
+        let currentModel: String
+        
+        var id: String { "\(role.rawValue)-\(provider.rawValue)" }
+    }
+    
     var body: some View {
         Form {
             globalSection
@@ -36,6 +44,14 @@ struct GenerateSettingsView: View {
         .navigationTitle("Generate")
         .sheet(item: $modelPickerTarget) { target in
             modelPickerSheet(for: target)
+        }
+        .sheet(item: $roleCustomModelPicker) { picker in
+            ModelPickerView(
+                provider: picker.provider,
+                currentModel: picker.currentModel
+            ) { selectedModel in
+                roleConfig.setRoleOverride(for: picker.role, provider: picker.provider, model: selectedModel)
+            }
         }
     }
     
@@ -199,10 +215,20 @@ struct GenerateSettingsView: View {
                     }
                     
                     Button {
-                        let currentConfig = roleConfig.getRoleOverride(for: role) ?? (roleConfig.globalProvider, roleConfig.globalModel)
+                        // Get current config for the role
+                        let override = roleConfig.getRoleOverride(for: role)
+                        let currentProvider = override?.provider ?? roleConfig.globalProvider
+                        let currentModel = override?.model ?? roleConfig.globalModel
                         
-                        // Show model picker for the provider
-                        showProviderModelPicker(role: role, provider: currentConfig.provider, currentModel: currentConfig.model)
+                        // Dismiss this sheet and show model picker
+                        modelPickerTarget = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            roleCustomModelPicker = RoleCustomModelPicker(
+                                role: role,
+                                provider: currentProvider,
+                                currentModel: currentModel
+                            )
+                        }
                     } label: {
                         HStack {
                             Text("Select custom model")
@@ -231,23 +257,6 @@ struct GenerateSettingsView: View {
                     }
                 }
             }
-        }
-    }
-    
-    private func showProviderModelPicker(role: GenerationRole, provider: LLMProvider, currentModel: String) {
-        // This will be shown as a sheet within the role picker
-        // For simplicity, we'll inline the model picker here
-        // In a more complex app, we'd navigate or show another sheet
-        
-        // For now, we'll use the same pattern but need to handle the nested navigation
-        // Let's simplify: selecting "Select custom model" dismisses and shows the model picker
-        modelPickerTarget = nil
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Show custom model picker as a separate sheet
-            // This is a workaround for nested sheets
-            // In the actual implementation, we'd need to restructure this
-            roleConfig.setRoleOverride(for: role, provider: provider, model: currentModel)
         }
     }
     
