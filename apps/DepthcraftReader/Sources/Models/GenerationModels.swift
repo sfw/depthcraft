@@ -22,10 +22,10 @@ struct LLMConfiguration {
     let provider: LLMProvider
     let model: String
     let apiKey: String
-    let temperature: Double
+    let temperature: Double?
     let customBaseURL: String?
     
-    init(provider: LLMProvider, model: String, apiKey: String, temperature: Double = 0.7, customBaseURL: String? = nil) {
+    init(provider: LLMProvider, model: String, apiKey: String, temperature: Double? = nil, customBaseURL: String? = nil) {
         self.provider = provider
         self.model = model
         self.apiKey = apiKey

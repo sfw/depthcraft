@@ -155,7 +155,7 @@ class LLMRoleConfigService: ObservableObject {
     }
     
     /// Get LLM configuration for a role (ready for client creation)
-    /// Temperature: uses global setting if set, otherwise omits (provider default)
+    /// Temperature: uses global setting if set, otherwise nil (omit/provider default)
     func getLLMConfig(for role: GenerationRole) throws -> LLMConfiguration {
         let (provider, model) = getEffectiveConfig(for: role)
         
@@ -170,8 +170,8 @@ class LLMRoleConfigService: ObservableObject {
             customBaseURL = nil
         }
         
-        // Get global temperature (nil = provider default)
-        let temperature = apiKeyStore.getGlobalTemperature() ?? 0.7
+        // Get global temperature (nil = omit/provider default)
+        let temperature = apiKeyStore.getGlobalTemperature()
         
         return LLMConfiguration(
             provider: provider,
