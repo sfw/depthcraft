@@ -2378,7 +2378,9 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
-            depthLevel: .standard
+            depthLevel: .standard,
+            provider: .anthropic,
+            model: "test-model"
         )
         
         do {
@@ -2408,7 +2410,9 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
-            depthLevel: .standard
+            depthLevel: .standard,
+            provider: .anthropic,
+            model: "test-model"
         )
         
         do {
@@ -2445,7 +2449,9 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
-            depthLevel: .standard
+            depthLevel: .standard,
+            provider: .anthropic,
+            model: "test-model"
         )
         
         let anchors = try await analyzer.analyzeComplexity(
