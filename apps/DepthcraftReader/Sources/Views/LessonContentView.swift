@@ -545,6 +545,11 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             lessonContext: lessonContext
         )
         webView.navigationDelegate = delegate
+        
+        // Wire up webView and delegate references (fix #1: enable clearPaint)
+        tapHandler.webView = webView
+        tapHandler.delegate = delegate
+        
         // Keep delegate alive by storing in associated object
         objc_setAssociatedObject(webView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
         objc_setAssociatedObject(webView, "tapHandler", tapHandler, .OBJC_ASSOCIATION_RETAIN)
@@ -567,6 +572,8 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         var lessonContext: ExplainSheet.LessonContext
         var isOnline: Bool
         var glossService: GlossService
+        weak var webView: WKWebView?
+        weak var delegate: HTMLWebViewDelegate?
         
         init(explainSheet: Binding<ExplainSheet?>, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService) {
             self.explainSheet = explainSheet
@@ -596,9 +603,10 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         gloss: gloss,
                         lessonContext: self.lessonContext
                     )
+                    self.clearPaint()
                 }
             } else if message.name == "paintSelection" {
-                // Paint selection completed
+                // Paint selection completed (long-press or double-tap)
                 guard let body = message.body as? [String: String],
                       let text = body["text"] else {
                     return
@@ -608,14 +616,17 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     self.explainText(text)
                 }
             } else if message.name == "clearPaint" {
-                // Clear paint (no-op here, handled in JS)
+                // Clear paint (tap outside / Done)
+                clearPaint()
             }
         }
         
         private func explainText(_ text: String) {
             // Check online + BYOK
             guard isOnline, glossService.hasAPIKey() else {
-                // Offline - will show toast from delegate
+                // Offline - show toast (fix #2: offline double-tap)
+                delegate?.showOfflineToast()
+                clearPaint()
                 return
             }
             
@@ -629,14 +640,22 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         gloss: gloss,
                         lessonContext: self.lessonContext
                     )
+                    // Fix #3: Clear paint after successful explain
+                    self.clearPaint()
                 } catch {
                     self.explainSheet.wrappedValue = ExplainSheet(
                         term: text,
                         gloss: "**Error generating explanation:** \(error.localizedDescription)",
                         lessonContext: self.lessonContext
                     )
+                    self.clearPaint()
                 }
             }
+        }
+        
+        private func clearPaint() {
+            // Fix #1: Actually clear paint in inline path
+            webView?.evaluateJavaScript("window.clearPaintSelection()") { _, _ in }
         }
     }
     
@@ -732,7 +751,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             webView?.evaluateJavaScript("window.clearPaintSelection()") { _, _ in }
         }
         
-        private func showOfflineToast() {
+        func showOfflineToast() {
             guard let webView = webView else { return }
             
             // Cancel any existing toast

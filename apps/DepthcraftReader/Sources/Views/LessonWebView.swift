@@ -447,6 +447,8 @@ struct LessonWebView: UIViewRepresentable {
                         gloss: gloss,
                         lessonContext: self.lessonContext
                     )
+                    // Clear any painted selection after opening sheet
+                    self.clearPaint()
                 }
             } else if message.name == "paintSelection" {
                 // Paint selection completed (long-press or double-tap)
