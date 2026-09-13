@@ -65,7 +65,7 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
 3. **Quiz content**: Rendered with SwiftUI `Text()` views (inherently XSS-safe, no HTML interpretation)
 4. **Demo fallback**: Uses safe `renderDemoFallback()` markdown WebView (no lesson eyebrow, JS disabled)
 
-### P2: Privacy & Offline Posture (PR #28)
+### P2: Privacy & Offline Posture (PR #31)
 1. **Study path is offline-first**:
    - Lesson/Quiz/Demo/Notes rendering: 100% local (no accidental network calls)
    - Progress tracking: Device-local only (`UserDefaults` by `packageId`)
@@ -169,7 +169,7 @@ Before public release, test:
 
 ## Changelog
 
-### 2026-09-13 — P2 Privacy & Offline Hardening (PR #28)
+### 2026-09-13 — P2 Privacy & Offline Hardening (PR #31)
 - ✅ **Offline study path verification**: Audited all study path components (lesson/quiz/demo/notes) — confirmed zero accidental network calls
 - ✅ **Progress store audit**: Verified API keys never stored in `ProgressStore` or `NotesStore` (device-local completion data only)
 - ✅ **Error message sanitization**: Added `LLMClientError.sanitizeErrorMessage()` to redact Authorization headers, API keys, and sensitive tokens
