@@ -62,10 +62,7 @@ class ComplexityAnalyzerService {
             maxTokens: 2048
         )
         
-        guard let anchors = try? parseComplexityResponse(response, lessonId: lessonId) else {
-            return []
-        }
-        
+        let anchors = try parseComplexityResponse(response, lessonId: lessonId)
         return Array(anchors.prefix(maxAnchors))
     }
     
