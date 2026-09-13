@@ -55,12 +55,18 @@ class ComplexityAnalyzerService {
         Identify up to \(maxAnchors) terms that need explanation. Return JSON with anchors array.
         """
         
-        let response = try await client.complete(
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            temperature: temperature,
-            maxTokens: 2048
-        )
+        let response: String
+        do {
+            response = try await client.complete(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                temperature: temperature,
+                maxTokens: 2048
+            )
+        } catch let error as LLMClientError {
+            // Wrap LLM client errors with stage name for UI
+            throw GenerationError.invalidResponse("Complexity: \(error.localizedDescription)")
+        }
         
         let anchors = try parseComplexityResponse(response, lessonId: lessonId)
         return Array(anchors.prefix(maxAnchors))

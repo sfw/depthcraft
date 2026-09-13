@@ -35,12 +35,18 @@ class LessonWriterService: LessonWriterRole {
         Output ONLY the markdown content.
         """
         
-        let markdown = try await client.complete(
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            temperature: temperature,
-            maxTokens: 4096
-        )
+        let markdown: String
+        do {
+            markdown = try await client.complete(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                temperature: temperature,
+                maxTokens: 4096
+            )
+        } catch let error as LLMClientError {
+            // Wrap LLM client errors with stage name for UI
+            throw GenerationError.invalidResponse("Lessons: \(error.localizedDescription)")
+        }
         
         var meta = extractMeta(from: markdown, lessonId: lesson.id)
         
