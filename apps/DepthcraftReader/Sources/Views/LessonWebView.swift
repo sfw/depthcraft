@@ -41,7 +41,8 @@ struct LessonWebView: UIViewRepresentable {
             source: """
             (function() {
                 // Teal ink paint selection system
-                let paintedRange = null;
+                let paintStartAnchor = null;  // Stable start position (survives DOM mutations)
+                let paintedRange = null;      // Current painted range (for extraction)
                 let isSelecting = false;
                 
                 // Create floating capsule
@@ -66,12 +67,28 @@ struct LessonWebView: UIViewRepresentable {
                 `;
                 document.body.appendChild(capsule);
                 
-                // Apply teal ink highlight
+                // Apply teal ink highlight (fix: clear first, then re-apply fresh)
                 function applyPaint(range) {
-                    clearPaint();
                     if (!range) return;
                     
-                    paintedRange = range;
+                    // Clear all existing highlights first
+                    const painted = document.querySelectorAll('.teal-ink-paint');
+                    painted.forEach(span => {
+                        const parent = span.parentNode;
+                        if (parent) {
+                            while (span.firstChild) {
+                                parent.insertBefore(span.firstChild, span);
+                            }
+                            parent.removeChild(span);
+                            parent.normalize();
+                        }
+                    });
+                    
+                    // Clone range to avoid mutation issues
+                    const freshRange = range.cloneRange();
+                    paintedRange = freshRange;
+                    
+                    // Apply new highlight
                     const span = document.createElement('span');
                     span.className = 'teal-ink-paint';
                     span.style.cssText = `
@@ -81,12 +98,17 @@ struct LessonWebView: UIViewRepresentable {
                     `;
                     
                     try {
-                        range.surroundContents(span);
+                        freshRange.surroundContents(span);
                     } catch(e) {
-                        // If surroundContents fails, try extractContents approach
-                        const contents = range.extractContents();
-                        span.appendChild(contents);
-                        range.insertNode(span);
+                        // If surroundContents fails (crosses element boundaries), use extraction
+                        try {
+                            const contents = freshRange.extractContents();
+                            span.appendChild(contents);
+                            freshRange.insertNode(span);
+                        } catch(err) {
+                            // Fallback: just highlight what we can
+                            console.warn('Paint highlight failed:', err);
+                        }
                     }
                 }
                 
@@ -94,13 +116,16 @@ struct LessonWebView: UIViewRepresentable {
                     const painted = document.querySelectorAll('.teal-ink-paint');
                     painted.forEach(span => {
                         const parent = span.parentNode;
-                        while (span.firstChild) {
-                            parent.insertBefore(span.firstChild, span);
+                        if (parent) {
+                            while (span.firstChild) {
+                                parent.insertBefore(span.firstChild, span);
+                            }
+                            parent.removeChild(span);
+                            parent.normalize();
                         }
-                        parent.removeChild(span);
-                        parent.normalize();
                     });
                     paintedRange = null;
+                    paintStartAnchor = null;
                 }
                 
                 function getWordBoundaryRange(node, offset) {
@@ -119,6 +144,26 @@ struct LessonWebView: UIViewRepresentable {
                         }
                     }
                     return null;
+                }
+                
+                // Find original text node under a paint span (if wrapped)
+                function findOriginalTextNode(node, offset) {
+                    // If we're inside a paint span, drill down to the text node
+                    let current = node;
+                    while (current && current.nodeType !== Node.TEXT_NODE) {
+                        if (current.classList && current.classList.contains('teal-ink-paint')) {
+                            // Inside paint span - get first text node
+                            const walker = document.createTreeWalker(
+                                current,
+                                NodeFilter.SHOW_TEXT,
+                                null
+                            );
+                            const textNode = walker.nextNode();
+                            if (textNode) return { node: textNode, offset: offset };
+                        }
+                        current = current.firstChild;
+                    }
+                    return { node: node, offset: offset };
                 }
                 
                 function expandToWordBoundaries(startNode, startOffset, endNode, endOffset) {
@@ -169,25 +214,82 @@ struct LessonWebView: UIViewRepresentable {
                     
                     const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
                     if (wordRange) {
+                        // Store stable start position BEFORE any DOM mutation
+                        paintStartAnchor = {
+                            node: wordRange.startContainer,
+                            offset: wordRange.startOffset
+                        };
                         applyPaint(wordRange);
                     }
                 };
                 
                 window.updatePaintSelection = function(x, y) {
-                    if (!isSelecting || !paintedRange) return;
+                    if (!isSelecting || !paintStartAnchor) return;
                     
-                    const range = document.caretRangeFromPoint(x, y);
-                    if (!range) return;
+                    const currentRange = document.caretRangeFromPoint(x, y);
+                    if (!currentRange) return;
                     
-                    // Expand selection word-by-word
-                    const expandedRange = expandToWordBoundaries(
-                        paintedRange.startContainer,
-                        paintedRange.startOffset,
-                        range.startContainer,
-                        range.startOffset
-                    );
+                    // Find current position, drilling through any paint spans
+                    let currentNode = currentRange.startContainer;
+                    let currentOffset = currentRange.startOffset;
                     
-                    applyPaint(expandedRange);
+                    // If we hit a paint span, unwrap to find the original text node
+                    if (currentNode.nodeType === Node.ELEMENT_NODE) {
+                        const walker = document.createTreeWalker(
+                            currentNode,
+                            NodeFilter.SHOW_TEXT,
+                            null
+                        );
+                        const textNode = walker.nextNode();
+                        if (textNode) {
+                            currentNode = textNode;
+                            currentOffset = 0;
+                        }
+                    }
+                    
+                    // Check if we're inside a paint span and get the underlying text node
+                    let checkNode = currentNode;
+                    while (checkNode && checkNode !== document.body) {
+                        if (checkNode.classList && checkNode.classList.contains('teal-ink-paint')) {
+                            // We're inside the paint span - find the actual text position
+                            const walker = document.createTreeWalker(
+                                checkNode,
+                                NodeFilter.SHOW_TEXT,
+                                null
+                            );
+                            let textNode;
+                            let accumulatedOffset = 0;
+                            while ((textNode = walker.nextNode())) {
+                                if (textNode === currentNode) {
+                                    currentOffset = accumulatedOffset + currentOffset;
+                                    currentNode = checkNode.firstChild;
+                                    while (currentNode && currentNode.nodeType !== Node.TEXT_NODE) {
+                                        currentNode = currentNode.firstChild;
+                                    }
+                                    if (!currentNode) currentNode = textNode;
+                                    break;
+                                }
+                                accumulatedOffset += textNode.textContent.length;
+                            }
+                            break;
+                        }
+                        checkNode = checkNode.parentNode;
+                    }
+                    
+                    try {
+                        // Create fresh range from stable start to current end (word boundaries)
+                        const expandedRange = expandToWordBoundaries(
+                            paintStartAnchor.node,
+                            paintStartAnchor.offset,
+                            currentNode,
+                            currentOffset
+                        );
+                        
+                        // Clear old paint and apply fresh highlight
+                        applyPaint(expandedRange);
+                    } catch(e) {
+                        console.warn('Paint update failed:', e);
+                    }
                 };
                 
                 window.endPaintSelection = function() {
