@@ -1187,6 +1187,9 @@ final class LessonMetaExtractionTests: XCTestCase {
         let writer = LessonWriterService(
             client: MockLLMClient(),
             temperature: nil,
+            topic: "Test Topic",
+            locale: "en-US",
+            knowledgeLevel: .working,
             depthLevel: .standard,
             provider: .anthropic,
             model: "test-model"
@@ -2378,6 +2381,8 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
+            topic: "Test Topic",
+            knowledgeLevel: .working,
             depthLevel: .standard,
             provider: .anthropic,
             model: "test-model"
@@ -2410,6 +2415,8 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
+            topic: "Test Topic",
+            knowledgeLevel: .working,
             depthLevel: .standard,
             provider: .anthropic,
             model: "test-model"
@@ -2449,6 +2456,8 @@ final class ComplexityAnalyzerErrorTests: XCTestCase {
         let analyzer = ComplexityAnalyzerService(
             client: mockClient,
             temperature: nil,
+            topic: "Test Topic",
+            knowledgeLevel: .working,
             depthLevel: .standard,
             provider: .anthropic,
             model: "test-model"

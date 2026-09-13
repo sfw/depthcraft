@@ -3,23 +3,35 @@ import Foundation
 class ComplexityAnalyzerService {
     private let client: LLMClient
     private let temperature: Double?
+    private let topic: String
+    private let knowledgeLevel: KnowledgeLevel
     private let depthLevel: DepthLevel
     private let provider: LLMProvider
     private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
+    init(client: LLMClient, temperature: Double? = nil, topic: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
+        self.topic = topic
+        self.knowledgeLevel = knowledgeLevel
         self.depthLevel = depthLevel
         self.provider = provider
         self.model = model
     }
     
     func analyzeComplexity(markdown: String, lessonTitle: String, lessonId: String) async throws -> [LessonMeta.Anchor] {
-        let maxAnchors = maxAnchorsForDepth()
-        
-        guard maxAnchors > 0 else {
-            return []
+        let knowledgeGuidance: String
+        switch knowledgeLevel {
+        case .new:
+            knowledgeGuidance = "NEW to this topic (foundational concepts, basic terminology)"
+        case .some:
+            knowledgeGuidance = "SOME knowledge (key foundations, moderate pace)"
+        case .working:
+            knowledgeGuidance = "WORKING knowledge (skip basics, intermediate concepts)"
+        case .strong:
+            knowledgeGuidance = "STRONG knowledge (compress foundations, advanced concepts)"
+        case .expert:
+            knowledgeGuidance = "EXPERT (deep familiarity, cutting-edge topics)"
         }
         
         let systemPrompt = """
@@ -28,21 +40,22 @@ class ComplexityAnalyzerService {
         Focus on:
         - Technical jargon or domain-specific terms
         - Complex concepts that require prerequisite knowledge
-        - Terms that might be unfamiliar to learners
+        - Terms that might be unfamiliar to learners at this knowledge level
         
         Guidelines:
-        - Be selective: only \(maxAnchors) most impactful terms
-        - Choose terms that appear in the lesson text verbatim (for exact matching)
-        - Write concise glosses (2-3 sentences, plain language)
-        - Warm, editorial tone (not Wikipedia-dry)
+        - Be selective: calibrate to the learner's knowledge level
+        - Anchors = verbatim spans from the lesson (term → multi-word phrase → short clause)
+        - Use the shortest span that uniquely marks the hard idea
+        - Write warm, editorial glosses (2-3 sentences, plain language)
+        - Soft safety cap: 24 anchors maximum (but be selective, not exhaustive)
         
         Return ONLY valid JSON matching this structure:
         {
           "anchors": [
             {
-              "term": "exact text from lesson",
+              "term": "exact verbatim span from lesson",
               "kind": "concept",
-              "gloss": "Brief explanation in 2-3 sentences."
+              "gloss": "Warm, editorial explanation in 2-3 sentences."
             }
           ]
         }
@@ -51,12 +64,15 @@ class ComplexityAnalyzerService {
         """
         
         let userPrompt = """
+        Course topic: \(topic)
         Lesson: \(lessonTitle)
+        
+        Learner knowledge level: \(knowledgeGuidance)
         
         Content:
         \(markdown)
         
-        Identify up to \(maxAnchors) terms that need explanation. Return JSON with anchors array.
+        Identify terms that need explanation, calibrated to the learner's knowledge level. Be selective. Return JSON with anchors array.
         """
         
         // Use full model max - no artificial caps
@@ -76,17 +92,9 @@ class ComplexityAnalyzerService {
         }
         
         let anchors = try parseComplexityResponse(response, lessonId: lessonId)
-        return Array(anchors.prefix(maxAnchors))
-    }
-    
-    private func maxAnchorsForDepth() -> Int {
-        switch depthLevel {
-        case .brief: return 1
-        case .standard: return 2
-        case .deep: return 3
-        case .thorough: return 4
-        case .exhaustive: return 5
-        }
+        
+        // Soft safety cap: trim to 24 if model overfires
+        return Array(anchors.prefix(24))
     }
     
     private func parseComplexityResponse(_ response: String, lessonId: String) throws -> [LessonMeta.Anchor] {

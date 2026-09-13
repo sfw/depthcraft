@@ -184,7 +184,7 @@ protocol LessonWriterRole {
 }
 
 protocol QuizWriterRole {
-    func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson) async throws -> QuizDocument
+    func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson, unit: CurriculumUnit) async throws -> QuizDocument
 }
 
 protocol DemoWriterRole {
