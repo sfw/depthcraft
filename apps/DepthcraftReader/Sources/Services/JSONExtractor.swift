@@ -149,6 +149,15 @@ struct JSONExtractor {
         for (index, char) in text.enumerated() {
             let stringIndex = text.index(text.startIndex, offsetBy: index)
             
+            // Reset string state on newline (JSON strings can't contain unescaped newlines)
+            // This prevents malformed/incomplete JSON from breaking state tracking
+            if char == "\n" || char == "\r" {
+                if inString && !escapeNext {
+                    inString = false
+                }
+                escapeNext = false
+            }
+            
             // Track string boundaries to avoid counting brackets inside strings
             if char == "\"" && !escapeNext {
                 inString.toggle()

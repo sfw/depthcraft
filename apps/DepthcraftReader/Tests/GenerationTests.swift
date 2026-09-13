@@ -2055,7 +2055,7 @@ final class JSONExtractionTests: XCTestCase {
         XCTAssertTrue(validation.isValid)
     }
     
-    func testExtractMultipleCandidatesFirstInvalid() {
+    func testExtractMultipleCandidatesFirstInvalid() throws {
         // Multiple JSON objects - first is broken, second is valid
         let input = """
         Here's some text and an incomplete JSON:
@@ -2067,11 +2067,10 @@ final class JSONExtractionTests: XCTestCase {
         And some trailing text.
         """
         
-        let extracted = JSONExtractor.extractJSON(from: input)
-        XCTAssertNotNil(extracted, "Should extract the valid JSON candidate")
-        XCTAssertTrue(extracted!.contains("\"schemaVersion\""), "Should extract the second valid JSON")
+        let extracted = try XCTUnwrap(JSONExtractor.extractJSON(from: input), "Should extract the valid JSON candidate")
+        XCTAssertTrue(extracted.contains("\"schemaVersion\""), "Should extract the second valid JSON")
         
-        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        let validation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
         XCTAssertTrue(validation.isValid)
     }
     
