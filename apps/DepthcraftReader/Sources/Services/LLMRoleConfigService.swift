@@ -1,12 +1,12 @@
 import Foundation
 
 /// Generation roles that can be configured
+/// Note: Packager is not included as it's local-only (no LLM)
 enum GenerationRole: String, CaseIterable, Identifiable {
     case planner
     case lessons
     case quizzes
     case demos
-    case packager
     case explain
     case discuss
     
@@ -18,7 +18,6 @@ enum GenerationRole: String, CaseIterable, Identifiable {
         case .lessons: return "Lessons"
         case .quizzes: return "Quizzes"
         case .demos: return "Demos"
-        case .packager: return "Packager"
         case .explain: return "Explain"
         case .discuss: return "Discuss"
         }

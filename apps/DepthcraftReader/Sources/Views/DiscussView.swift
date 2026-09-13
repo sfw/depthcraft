@@ -131,8 +131,8 @@ struct DiscussView: View {
             // Build conversation context
             let conversationContext = buildConversationContext()
             
-            // Get response from LLM
-            guard let config = try configService.getAvailableConfig() else {
+            // Get response from LLM (use Discuss role config)
+            guard let config = try configService.getDiscussConfig() else {
                 throw GlossServiceError.noAPIKey
             }
             
