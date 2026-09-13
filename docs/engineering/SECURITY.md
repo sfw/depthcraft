@@ -42,7 +42,7 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
 4. **Fallback safety**: Markdown fallback WebView has JavaScript **disabled**
 
 ### P1: Package Trust & Schema Validation (PR #27)
-1. **Schema validation**: All package JSON validated against `schema/0.1.0/*.schema.json` before load
+1. **Schema validation**: All package JSON validated via hand-rolled Swift validators (`SchemaValidator`) aligned with `schema/0.1.0/*.schema.json` shapes before load
    - `manifest.json`: schema version `0.1.0`, required fields non-empty, `contentVersion ≥ 1`
    - `curriculum.json`: units/lessons non-empty, no duplicate IDs, cross-references valid
    - `quiz.json`: items non-empty, MC has ≥2 choices + valid `correctId`, cloze has ≥1 answer
@@ -52,8 +52,8 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
    - Safe ID pattern: `^[a-z0-9][a-z0-9-]*$` (lowercase alphanumeric + hyphens)
    - Rejects: `../`, absolute paths (`/`), schemes (`://`), whitespace padding
    - Applied to: unit IDs, lesson IDs, demo IDs, asset paths in loaders
-3. **Content version monotonic**: Cannot load older `contentVersion` over newer (explicit error)
-4. **Upgrade confirmation**: Version bumps require user approval (modal dialog, no silent swap)
+3. **Content version monotonic** (CourseStore): Cannot load older `contentVersion` over newer (explicit error)
+4. **Upgrade confirmation** (UX): Version bumps require user approval (modal dialog, no silent swap)
 
 ### P1: Content Injection / XSS Protection (PR #27)
 1. **Markdown → HTML XSS-safe**:
@@ -61,9 +61,9 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
    - Inline formatting (`**bold**`, `*italic*`, `` `code` ``) wraps escaped text
    - Code blocks escape line content before wrapping in `<pre><code>`
    - Demo ID placeholders HTML-escaped before insertion (defense in depth)
-2. **Lesson WebView**: JavaScript **disabled** (`allowsContentJavaScript = false`)
+2. **Lesson WebView**: JavaScript **enabled** (`allowsContentJavaScript = true`) for tap-to-explain and highlighter features; XSS protection relies on HTML escaping (point 1 above)
 3. **Quiz content**: Rendered with SwiftUI `Text()` views (inherently XSS-safe, no HTML interpretation)
-4. **Demo fallback**: Uses safe `renderDemoFallback()` (no lesson eyebrow, JS disabled)
+4. **Demo fallback**: Uses safe `renderDemoFallback()` markdown WebView (no lesson eyebrow, JS disabled)
 
 ## What We Don't Guarantee
 

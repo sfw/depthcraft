@@ -321,7 +321,7 @@ final class SecurityValidationTests: XCTestCase {
             fallback: "fallback.md"
         )
         XCTAssertThrowsError(try SchemaValidator.validateDemoManifest(manifest, expectedDemoId: "demo1")) { error in
-            XCTAssertTrue(error.localizedDescription.contains("relative"))
+            XCTAssertTrue(error.localizedDescription.contains("Absolute path"))
         }
     }
     

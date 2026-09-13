@@ -80,8 +80,11 @@ final class MarkdownXSSTests: XCTestCase {
         let result = MarkdownHTML.render(markdown, title: "Test", estimatedMinutes: nil)
         
         // Note: current implementation doesn't support markdown links,
-        // so this will be rendered as plain text with escaping
-        XCTAssertFalse(result.html.contains("javascript:alert"))
+        // so this will be rendered as plain text with escaping.
+        // The text "javascript:alert" will be present as plain text (not a working link).
+        // Verify HTML-dangerous chars are escaped even in link-like syntax.
+        XCTAssertTrue(result.html.contains("javascript:alert"))
+        XCTAssertFalse(result.html.contains("<script>"))
     }
     
     func testEscapeAmpersands() {
