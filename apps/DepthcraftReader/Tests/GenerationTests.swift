@@ -2353,6 +2353,122 @@ final class JSONExtractionTests: XCTestCase {
     }
 }
 
+// MARK: - Complexity Analyzer Error Handling Tests
+
+final class ComplexityAnalyzerErrorTests: XCTestCase {
+    
+    func testComplexityAnalyzerDetectsTruncation() async throws {
+        // Simulate a truncated JSON response from the complexity analyzer
+        let truncatedResponse = """
+        {
+          "anchors": [
+            {
+              "term": "harness",
+              "kind": "concept",
+              "gloss": "A design pattern for
+        """
+        
+        let mockClient = MockComplexityLLMClient(response: truncatedResponse)
+        let analyzer = ComplexityAnalyzerService(
+            client: mockClient,
+            temperature: nil,
+            depthLevel: .standard
+        )
+        
+        do {
+            _ = try await analyzer.analyzeComplexity(
+                markdown: "# Test\n\nThis is a test lesson about the harness pattern.",
+                lessonTitle: "Test Lesson",
+                lessonId: "l01-test"
+            )
+            XCTFail("Should have thrown an error for truncated JSON")
+        } catch let error as GenerationError {
+            if case .invalidResponse(let message) = error {
+                XCTAssertTrue(message.contains("Complexity:"), "Error should be stage-named with 'Complexity:'")
+                XCTAssertTrue(message.contains("truncated"), "Error should mention truncation")
+            } else {
+                XCTFail("Expected invalidResponse error")
+            }
+        }
+    }
+    
+    func testComplexityAnalyzerReportsStageNamedErrors() async throws {
+        // Simulate an invalid JSON response (not truncated, just malformed)
+        let invalidResponse = """
+        This is not JSON at all, just some text.
+        """
+        
+        let mockClient = MockComplexityLLMClient(response: invalidResponse)
+        let analyzer = ComplexityAnalyzerService(
+            client: mockClient,
+            temperature: nil,
+            depthLevel: .standard
+        )
+        
+        do {
+            _ = try await analyzer.analyzeComplexity(
+                markdown: "# Test\n\nTest content.",
+                lessonTitle: "Test Lesson",
+                lessonId: "l01-test"
+            )
+            XCTFail("Should have thrown an error for invalid JSON")
+        } catch let error as GenerationError {
+            if case .invalidResponse(let message) = error {
+                XCTAssertTrue(message.contains("Complexity:"), "Error should be stage-named with 'Complexity:'")
+            } else {
+                XCTFail("Expected invalidResponse error")
+            }
+        }
+    }
+    
+    func testComplexityAnalyzerHandlesValidResponse() async throws {
+        // Valid JSON response
+        let validResponse = """
+        {
+          "anchors": [
+            {
+              "term": "harness",
+              "kind": "concept",
+              "gloss": "A design pattern for managing complexity."
+            }
+          ]
+        }
+        """
+        
+        let mockClient = MockComplexityLLMClient(response: validResponse)
+        let analyzer = ComplexityAnalyzerService(
+            client: mockClient,
+            temperature: nil,
+            depthLevel: .standard
+        )
+        
+        let anchors = try await analyzer.analyzeComplexity(
+            markdown: "# Test\n\nThis lesson explains the harness pattern.",
+            lessonTitle: "Test Lesson",
+            lessonId: "l01-test"
+        )
+        
+        XCTAssertEqual(anchors.count, 1)
+        XCTAssertEqual(anchors[0].term, "harness")
+        XCTAssertEqual(anchors[0].kind, "concept")
+        XCTAssertEqual(anchors[0].gloss, "A design pattern for managing complexity.")
+    }
+}
+
+// MARK: - Mock LLM Client for Complexity Analyzer Tests
+
+class MockComplexityLLMClient: LLMClient {
+    let response: String
+    
+    init(response: String) {
+        self.response = response
+    }
+    
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int) async throws -> String {
+        return response
+    }
+}
+
 // MARK: - Planner Configuration Tests
 
 final class PlannerConfigurationTests: XCTestCase {

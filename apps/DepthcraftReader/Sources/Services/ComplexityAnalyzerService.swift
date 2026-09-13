@@ -55,17 +55,20 @@ class ComplexityAnalyzerService {
         Identify up to \(maxAnchors) terms that need explanation. Return JSON with anchors array.
         """
         
-        let response = try await client.complete(
-            systemPrompt: systemPrompt,
-            userPrompt: userPrompt,
-            temperature: temperature,
-            maxTokens: 2048
-        )
-        
-        guard let anchors = try? parseComplexityResponse(response, lessonId: lessonId) else {
-            return []
+        let response: String
+        do {
+            response = try await client.complete(
+                systemPrompt: systemPrompt,
+                userPrompt: userPrompt,
+                temperature: temperature,
+                maxTokens: 2048
+            )
+        } catch let error as LLMClientError {
+            // Wrap LLM client errors with stage name for UI
+            throw GenerationError.invalidResponse("Complexity: \(error.localizedDescription)")
         }
         
+        let anchors = try parseComplexityResponse(response, lessonId: lessonId)
         return Array(anchors.prefix(maxAnchors))
     }
     
@@ -80,10 +83,32 @@ class ComplexityAnalyzerService {
     }
     
     private func parseComplexityResponse(_ response: String, lessonId: String) throws -> [LessonMeta.Anchor] {
-        guard let jsonString = JSONExtractor.extractJSON(from: response),
-              let jsonData = jsonString.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(ComplexityResponse.self, from: jsonData) else {
-            throw GenerationError.invalidResponse("Complexity Analyzer returned invalid JSON: Could not parse complexity analysis response. Response snippet: \(response.prefix(200))...")
+        // Check for truncated JSON first
+        if let truncationDiagnostic = JSONExtractor.detectTruncation(response) {
+            throw GenerationError.invalidResponse("Complexity: \(truncationDiagnostic). The response was likely cut off due to output length limits. Try again or use a model with higher output capacity. Response start: \(response.prefix(150))...")
+        }
+        
+        // Extract JSON with robust extraction
+        guard let jsonString = JSONExtractor.extractJSON(from: response) else {
+            throw GenerationError.invalidResponse("Complexity: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
+        }
+        
+        // Validate JSON structure before decoding
+        let structureValidation = JSONExtractor.validateJSONStructure(jsonString, expectedTopLevelType: .object)
+        guard structureValidation.isValid else {
+            throw GenerationError.invalidResponse("Complexity: Invalid JSON structure - \(structureValidation.errorMessage ?? "unknown error"). Extracted JSON start: \(jsonString.prefix(200))...")
+        }
+        
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw GenerationError.invalidResponse("Complexity: JSON encoding failed - Could not encode extracted JSON as UTF-8")
+        }
+        
+        // Decode with detailed error
+        let parsed: ComplexityResponse
+        do {
+            parsed = try JSONDecoder().decode(ComplexityResponse.self, from: jsonData)
+        } catch {
+            throw GenerationError.invalidResponse("Complexity: JSON decode failed - \(error.localizedDescription). JSON snippet: \(jsonString.prefix(300))...")
         }
         
         return parsed.anchors.enumerated().map { index, item in
