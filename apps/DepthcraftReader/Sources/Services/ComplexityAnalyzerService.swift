@@ -4,11 +4,15 @@ class ComplexityAnalyzerService {
     private let client: LLMClient
     private let temperature: Double?
     private let depthLevel: DepthLevel
+    private let provider: LLMProvider
+    private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel) {
+    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
         self.depthLevel = depthLevel
+        self.provider = provider
+        self.model = model
     }
     
     func analyzeComplexity(markdown: String, lessonTitle: String, lessonId: String) async throws -> [LessonMeta.Anchor] {
@@ -55,13 +59,15 @@ class ComplexityAnalyzerService {
         Identify up to \(maxAnchors) terms that need explanation. Return JSON with anchors array.
         """
         
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
         let response: String
         do {
             response = try await client.complete(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
-                maxTokens: 2048
+                maxTokens: maxTokens
             )
         } catch let error as LLMClientError {
             // Wrap LLM client errors with stage name for UI

@@ -4,11 +4,15 @@ class DemoWriterService: DemoWriterRole {
     private let client: LLMClient
     private let temperature: Double?
     private let depthLevel: DepthLevel
+    private let provider: LLMProvider
+    private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel) {
+    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
         self.depthLevel = depthLevel
+        self.provider = provider
+        self.model = model
     }
     
     func writeDemos(lessonMarkdown: String, lesson: CurriculumLesson, unit: CurriculumUnit) async throws -> DemoWriterOutput? {
@@ -104,11 +108,13 @@ class DemoWriterService: DemoWriterRole {
         Remember: Output ONLY the JSON object.
         """
         
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
         let response = try await client.complete(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
             temperature: temperature,
-            maxTokens: 8192
+            maxTokens: maxTokens
         )
         
         return try decodeDemoResponse(response, lessonId: lesson.id)

@@ -1184,7 +1184,13 @@ final class LessonMetaExtractionTests: XCTestCase {
         A warning section.
         """
         
-        let writer = LessonWriterService(client: MockLLMClient())
+        let writer = LessonWriterService(
+            client: MockLLMClient(),
+            temperature: nil,
+            depthLevel: .standard,
+            provider: .anthropic,
+            model: "test-model"
+        )
         let meta = writer.extractMeta(from: markdown, lessonId: "test-lesson")
         
         XCTAssertEqual(meta.schemaVersion, "0.1.0")
@@ -2473,9 +2479,14 @@ class MockComplexityLLMClient: LLMClient {
 
 final class PlannerConfigurationTests: XCTestCase {
     
-    func testPlannerUsesHigherMaxTokens() async throws {
+    func testPlannerUsesModelMaxTokens() async throws {
         let mockClient = TrackingLLMClient()
-        let planner = PlannerService(client: mockClient, temperature: nil)
+        let planner = PlannerService(
+            client: mockClient,
+            temperature: nil,
+            provider: .anthropic,
+            model: "claude-3-5-sonnet-20241022"
+        )
         
         do {
             _ = try await planner.plan(
@@ -2489,11 +2500,16 @@ final class PlannerConfigurationTests: XCTestCase {
             // We just want to verify maxTokens was set correctly
         }
         
-        XCTAssertEqual(mockClient.lastMaxTokens, 8192, "Planner should use 8192 max_tokens for large curricula")
+        XCTAssertEqual(mockClient.lastMaxTokens, 8192, "Planner should use model's max output tokens (Claude 3.5: 8192)")
     }
     
     func testDepthLevelGuidanceIncludesSoftBands() {
-        let planner = PlannerService(client: TrackingLLMClient(), temperature: nil)
+        let planner = PlannerService(
+            client: TrackingLLMClient(),
+            temperature: nil,
+            provider: .anthropic,
+            model: "test-model"
+        )
         
         // We can't directly access the guidance strings, but we can verify
         // the depth levels exist and are properly defined
