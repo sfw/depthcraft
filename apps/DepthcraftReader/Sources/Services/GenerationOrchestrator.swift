@@ -246,8 +246,8 @@ class GenerationOrchestrator: ObservableObject {
             let remainingDemos = lessonsToGenerate.filter { demos[$0.id] == nil }
             let alreadyCompletedDemos = lessonsToGenerate.count - remainingDemos.count
             
-            // Course-level density cap: Brief allows max 1 demo for whole course
-            let courseLevelDemoCap = request.depthLevel == .brief ? 1 : Int.max
+            // Course-level density cap: earn-it (no course-wide limit; soft per-lesson cap=8 in DemoWriter)
+            let courseLevelDemoCap = Int.max
             var courseDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
             
             for (index, lesson) in remainingDemos.enumerated() {
@@ -259,7 +259,7 @@ class GenerationOrchestrator: ObservableObject {
                     throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
                 }
                 
-                progress.currentItem = request.depthLevel == .brief ? "Checking: \(lesson.title) (≤1)" : "Checking: \(lesson.title)"
+                progress.currentItem = "Checking: \(lesson.title)"
                 progress.completedItems = alreadyCompletedDemos + index
                 
                 // Check course-level cap before calling writeDemos
