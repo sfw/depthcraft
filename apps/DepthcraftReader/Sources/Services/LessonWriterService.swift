@@ -79,13 +79,14 @@ class LessonWriterService: LessonWriterRole {
         }
         
         let curriculumOutline = curriculum.units.map { u in
-            let lessonList = u.lessonIds.prefix(3).map { "l\(String($0.dropFirst(1).prefix(2)))…" }.joined(separator: ", ")
-            let more = u.lessonIds.count > 3 ? ", …" : ""
-            return "u\(String(u.id.dropFirst(1).prefix(2))) \(u.title) → \(lessonList)\(more)"
-        }.joined(separator: "\n")
+            let lessons = u.lessonIds.compactMap { curriculum.lessons[$0] }
+            let lessonList = lessons.prefix(3).map { "\($0.id) \($0.title)" }.joined(separator: "; ")
+            let more = lessons.count > 3 ? "; [\(lessons.count - 3) more]" : ""
+            return "\(u.id) \(u.title):\n  \(lessonList)\(more)"
+        }.joined(separator: "\n\n")
         
         let siblingLessons = unit.lessonIds.compactMap { curriculum.lessons[$0] }
-        let siblingList = siblingLessons.map { "  l\(String($0.id.dropFirst(1).prefix(2))) \($0.title)" }.joined(separator: "\n")
+        let siblingList = siblingLessons.map { "  \($0.id) \($0.title)" }.joined(separator: "\n")
         
         let userPrompt = """
         Course topic: \(topic)
