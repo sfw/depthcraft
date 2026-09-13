@@ -18,6 +18,30 @@ enum SchemaValidatorError: LocalizedError {
             return "Schema violation in \(name): \(details)"
         }
     }
+    
+    /// P2 FIELD TRIAL: User-friendly error messages for package validation failures
+    /// Technical details are preserved in errorDescription for debugging
+    var userFriendlyDescription: String {
+        switch self {
+        case .invalidSchema:
+            return "This package file is damaged or incompatible. Please regenerate the course or contact support."
+        case .pathTraversal:
+            return "This package contains invalid file paths. Please regenerate the course."
+        case .invalidId:
+            return "This package contains invalid identifiers. Please regenerate the course."
+        case .schemaViolation(_, let details):
+            // Provide context-aware friendly messages based on violation details
+            if details.contains("schema version") {
+                return "This package was created with an incompatible version. Please regenerate the course with the latest version."
+            } else if details.contains("packageId") || details.contains("title") || details.contains("topic") {
+                return "This package is missing required information. Please regenerate the course."
+            } else if details.contains("lessonIds") || details.contains("unitIds") {
+                return "This package has structural errors. Please regenerate the course."
+            } else {
+                return "This package format is invalid. Please regenerate the course."
+            }
+        }
+    }
 }
 
 /// Validates package files against schemas and security constraints

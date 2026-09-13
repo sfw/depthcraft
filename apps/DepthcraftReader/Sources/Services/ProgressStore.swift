@@ -1,5 +1,11 @@
 import Foundation
 
+/// P2 PRIVACY: Progress is device-local only. Never syncs, exports, or includes API keys.
+/// - Storage: UserDefaults with key pattern "depthcraft.progress.{packageId}"
+/// - Data: DeviceProgress structure (lesson completions, unit progress, timestamps)
+/// - NO API keys: Progress data contains ONLY completion tracking
+/// - NO export: No iCloud, no network, no export paths exist in v0.1
+
 /// Device-local progress keyed by packageId. Package progress.json is never authoritative after first open.
 final class ProgressStore {
     private let defaults: UserDefaults
