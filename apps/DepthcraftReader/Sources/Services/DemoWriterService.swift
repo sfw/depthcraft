@@ -2,10 +2,10 @@ import Foundation
 
 class DemoWriterService: DemoWriterRole {
     private let client: LLMClient
-    private let temperature: Double
+    private let temperature: Double?
     private let depthLevel: DepthLevel
     
-    init(client: LLMClient, temperature: Double = 0.7, depthLevel: DepthLevel) {
+    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel) {
         self.client = client
         self.temperature = temperature
         self.depthLevel = depthLevel

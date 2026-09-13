@@ -207,8 +207,11 @@ class APIKeyStore: ObservableObject {
     /// Get global temperature setting
     /// Returns nil if unset (provider default); otherwise returns value in range 0.0-2.0
     func getGlobalTemperature() -> Double? {
-        let value = UserDefaults.standard.object(forKey: globalTemperatureKey) as? Double
-        return value
+        // Use object(forKey:) to ensure proper numeric round-trip
+        guard let number = UserDefaults.standard.object(forKey: globalTemperatureKey) as? NSNumber else {
+            return nil
+        }
+        return number.doubleValue
     }
     
     /// Set global temperature
