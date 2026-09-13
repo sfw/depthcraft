@@ -796,10 +796,31 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                         if (range) {
                             const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
                             if (wordRange) {
-                                applyPaintHighlight(wordRange);
                                 const text = wordRange.toString().trim();
                                 if (text.length > 0 && text.length <= 200) {
-                                    window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                                    // Generate a unique ID for this highlight
+                                    const highlightId = 'hl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                                    
+                                    // Wrap the range in a span with the highlight ID
+                                    try {
+                                        const span = document.createElement('span');
+                                        span.className = 'saved-highlight';
+                                        span.setAttribute('data-highlight-id', highlightId);
+                                        wordRange.surroundContents(span);
+                                        
+                                        // Clear CSS Highlight API after wrapping
+                                        if (CSS.highlights) {
+                                            CSS.highlights.clear();
+                                        }
+                                        
+                                        // Send save message to native
+                                        window.webkit.messageHandlers.paintSelection.postMessage({ 
+                                            text: text,
+                                            highlightId: highlightId
+                                        });
+                                    } catch(e) {
+                                        console.warn('Failed to wrap double-tap highlight:', e);
+                                    }
                                 }
                             }
                         }
