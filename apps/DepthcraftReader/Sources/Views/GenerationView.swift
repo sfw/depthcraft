@@ -419,12 +419,12 @@ struct GenerationView: View {
             let plannerConfig = try roleConfig.getLLMConfig(for: .planner)
             
             // Lesson/quiz/demo configs will be set later during continueGeneration
-            // For now, use empty placeholders
+            // For now, use empty placeholders (temperature uses global setting, not hardcoded)
             let dummyConfig = LLMConfiguration(
                 provider: roleConfig.globalProvider,
                 model: roleConfig.globalModel,
                 apiKey: "",
-                temperature: 0.7
+                temperature: keyStore.getGlobalTemperature()
             )
             
             let request = GenerationRequest(
