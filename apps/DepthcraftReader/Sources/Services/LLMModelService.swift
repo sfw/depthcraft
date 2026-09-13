@@ -2,7 +2,7 @@ import Foundation
 
 /// Service for fetching available models from LLM providers
 @MainActor
-class LLMModelService {
+class LLMModelService: ObservableObject {
     private let apiKeyStore: APIKeyStore
     
     // Cache models for 1 hour

@@ -367,22 +367,6 @@ struct GenerationView: View {
         }
     }
     
-    
-    private var canStartPlanning: Bool {
-        // Check if any providers configured
-        guard hasAnyProviderConfigured else {
-            return false
-        }
-        
-        // Check if planner role has valid config
-        do {
-            let _ = try roleConfig.getLLMConfig(for: .planner)
-            return true
-        } catch {
-            return false
-        }
-    }
-    
     private var costShapeCue: String {
         // Cost cue is mainly driven by depth, with knowledge providing slight nudges
         let baseDescriptor: String
