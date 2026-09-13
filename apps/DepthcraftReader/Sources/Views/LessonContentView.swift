@@ -301,7 +301,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         
         // Disable system text interaction (we own selection via paint/double-tap/baked)
         if #available(iOS 14.5, *) {
-            config.defaultWebpagePreferences.isTextInteractionEnabled = false
+            config.preferences.isTextInteractionEnabled = false
         }
         
         // Add message handlers
