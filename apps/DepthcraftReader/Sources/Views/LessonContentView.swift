@@ -160,7 +160,6 @@ struct LessonContentView: View {
     private func handleRemove(action: HighlightAction) {
         store.removeHighlight(highlightId: action.highlightId)
     }
-}
     
     private var inlineLayout: some View {
         let sections = splitHTMLAtDemoPlaceholders(html: renderResult.html, demos: renderResult.demos)
