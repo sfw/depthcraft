@@ -59,7 +59,8 @@ class ComplexityAnalyzerService {
         Identify up to \(maxAnchors) terms that need explanation. Return JSON with anchors array.
         """
         
-        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        // Use depth-scaled max tokens (Exhaustive needs full model capacity)
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model, scaledBy: depthLevel)
         
         let response: String
         do {

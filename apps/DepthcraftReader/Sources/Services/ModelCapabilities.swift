@@ -18,6 +18,27 @@ struct ModelCapabilities {
         }
     }
     
+    /// Get depth-scaled output tokens (soft scaling: Brief uses less, Exhaustive uses full model max)
+    /// This is optional - services can choose to scale by depth or use full model max always
+    static func maxOutputTokens(provider: LLMProvider, model: String, scaledBy depth: DepthLevel) -> Int {
+        let modelMax = maxOutputTokens(provider: provider, model: model)
+        
+        // Scale down for Brief/Standard to be more economical
+        // Deep/Thorough/Exhaustive use full model capacity
+        switch depth {
+        case .brief:
+            return max(8192, modelMax / 2)  // 50% of model max, floor 8K
+        case .standard:
+            return max(16384, (modelMax * 3) / 4)  // 75% of model max, floor 16K
+        case .deep:
+            return modelMax  // Full model max
+        case .thorough:
+            return modelMax  // Full model max
+        case .exhaustive:
+            return modelMax  // Full model max (critical for large outputs)
+        }
+    }
+    
     // MARK: - Anthropic
     
     private static func anthropicMaxOutput(model: String) -> Int {

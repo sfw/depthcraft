@@ -119,6 +119,7 @@ class PlannerService: PlannerRole {
         
         // Use model's max output capacity to avoid artificial truncation.
         // Models may still have internal limits that cause truncation.
+        // Planner doesn't scale by depth - always use full model max for curriculum planning
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let response = try await client.complete(
