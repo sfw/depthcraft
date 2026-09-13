@@ -21,9 +21,9 @@ struct CourseHomeView: View {
                             }
                         }
                         
-                        // Colophon: lesson count · offline · BYOK
+                        // Colophon: lesson count · BYOK
                         let totalLessons = course.curriculum.lessons.count
-                        Text("\(totalLessons) lessons · offline · BYOK")
+                        Text("\(totalLessons) lessons · BYOK")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                         
