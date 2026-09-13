@@ -3,17 +3,65 @@ import Foundation
 class QuizWriterService: QuizWriterRole {
     private let client: LLMClient
     private let temperature: Double?
+    private let topic: String
+    private let knowledgeLevel: KnowledgeLevel
+    private let depthLevel: DepthLevel
     private let provider: LLMProvider
     private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, provider: LLMProvider, model: String) {
+    init(client: LLMClient, temperature: Double? = nil, topic: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
+        self.topic = topic
+        self.knowledgeLevel = knowledgeLevel
+        self.depthLevel = depthLevel
         self.provider = provider
         self.model = model
     }
     
-    func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson) async throws -> QuizDocument {
+    func writeQuiz(lessonMarkdown: String, lesson: CurriculumLesson, unit: CurriculumUnit) async throws -> QuizDocument {
+        let itemCount: String
+        switch depthLevel {
+        case .brief:
+            itemCount = "2"
+        case .standard:
+            itemCount = "2-3"
+        case .deep:
+            itemCount = "3-4"
+        case .thorough:
+            itemCount = "4-5"
+        case .exhaustive:
+            itemCount = "5-7"
+        }
+        
+        let knowledgeGuidance: String
+        switch knowledgeLevel {
+        case .new:
+            knowledgeGuidance = "NEW to this topic (foundational concepts, basic terminology)"
+        case .some:
+            knowledgeGuidance = "SOME knowledge (key foundations, moderate pace)"
+        case .working:
+            knowledgeGuidance = "WORKING knowledge (skip basics, intermediate concepts)"
+        case .strong:
+            knowledgeGuidance = "STRONG knowledge (compress foundations, advanced concepts)"
+        case .expert:
+            knowledgeGuidance = "EXPERT (deep familiarity, cutting-edge topics)"
+        }
+        
+        let depthGuidance: String
+        switch depthLevel {
+        case .brief:
+            depthGuidance = "Brief (essentials only)"
+        case .standard:
+            depthGuidance = "Standard (balanced coverage)"
+        case .deep:
+            depthGuidance = "Deep (comprehensive with examples)"
+        case .thorough:
+            depthGuidance = "Thorough (detailed exploration)"
+        case .exhaustive:
+            depthGuidance = "Exhaustive (deep dive, all angles)"
+        }
+        
         let systemPrompt = """
         You are a quiz writer for the Depthcraft learning platform. Create engaging, fair quiz questions based on the lesson content.
         
@@ -55,24 +103,32 @@ class QuizWriterService: QuizWriterRole {
         }
         
         Requirements:
-        - Create 2-3 questions total
+        - Create \(itemCount) questions total
         - Mix of mc (multiple choice) and cloze (fill-in-blank)
         - MC: 3-4 choices, one correct (use "choices" field, not "options")
         - Cloze: single word or short phrase answers (2-3 words max, use "answers" field)
         - All cloze answers will be graded with Unicode casefold + trim
         - Include helpful "explain" for each question (optional but recommended)
         - Questions should test understanding, not just recall
+        - Calibrate difficulty to learner's knowledge level
         
         Output ONLY the raw JSON object. No markdown, no fences, no explanatory text before or after.
         """
         
         let userPrompt = """
-        Create a quiz for this lesson.
+        Course topic: \(topic)
+        Unit: \(unit.title)
+        Lesson: \(lesson.title)
+        
+        Learner knowledge level: \(knowledgeGuidance)
+        Depth level: \(depthGuidance)
         
         Lesson content:
         \(lessonMarkdown)
         
         Use lessonId: \(lesson.id)
+        
+        Create \(itemCount) questions calibrated to the learner's knowledge level.
         
         Remember: Output ONLY the JSON object with no additional text or formatting.
         """

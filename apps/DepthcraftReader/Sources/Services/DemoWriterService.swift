@@ -3,38 +3,66 @@ import Foundation
 class DemoWriterService: DemoWriterRole {
     private let client: LLMClient
     private let temperature: Double?
+    private let topic: String
+    private let knowledgeLevel: KnowledgeLevel
     private let depthLevel: DepthLevel
     private let provider: LLMProvider
     private let model: String
     
-    init(client: LLMClient, temperature: Double? = nil, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
+    init(client: LLMClient, temperature: Double? = nil, topic: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
+        self.topic = topic
+        self.knowledgeLevel = knowledgeLevel
         self.depthLevel = depthLevel
         self.provider = provider
         self.model = model
     }
     
     func writeDemos(lessonMarkdown: String, lesson: CurriculumLesson, unit: CurriculumUnit) async throws -> DemoWriterOutput? {
+        let knowledgeGuidance: String
+        switch knowledgeLevel {
+        case .new:
+            knowledgeGuidance = "NEW to this topic (foundational concepts, basic terminology)"
+        case .some:
+            knowledgeGuidance = "SOME knowledge (key foundations, moderate pace)"
+        case .working:
+            knowledgeGuidance = "WORKING knowledge (skip basics, intermediate concepts)"
+        case .strong:
+            knowledgeGuidance = "STRONG knowledge (compress foundations, advanced concepts)"
+        case .expert:
+            knowledgeGuidance = "EXPERT (deep familiarity, cutting-edge topics)"
+        }
+        
+        let depthGuidance: String
+        switch depthLevel {
+        case .brief:
+            depthGuidance = "Brief (essentials only)"
+        case .standard:
+            depthGuidance = "Standard (balanced coverage)"
+        case .deep:
+            depthGuidance = "Deep (comprehensive with examples)"
+        case .thorough:
+            depthGuidance = "Thorough (detailed exploration)"
+        case .exhaustive:
+            depthGuidance = "Exhaustive (deep dive, all angles)"
+        }
+        
         let systemPrompt = """
         You are a demo writer for the Depthcraft learning platform. You create OPTIONAL interactive demos that show-not-tell when it meaningfully aids understanding.
         
         CRITICAL RULES:
         - Demos are OPTIONAL. Return empty JSON array if lesson doesn't warrant one
         - NEVER emit filler demos. Zero demos is better than a weak demo
-        - Kit allowlist: ONLY "three-v0" (bundled Three.js). NO other libraries
+        - Earn-it density — not scarcity. Soft per-lesson safety cap: 8 demos
+        - Prefer playable interactive loops (learner acts; try/fail/retry) over passive vignettes
+        - Kit allowlist: ONLY "three-v0" (bundled Three.js r170). NO other libraries
         - ALWAYS emit fallback.md for every demo
         - NO external URLs (http/https) anywhere in demo files
         - NO mid-flight fetch/XHR in JavaScript
         - Entry HTML must use ES modules from kit only
         - Demos are shown inline at :::demo::: directive position
-        
-        DENSITY RULES:
-        - Brief depth: 0-1 demos per COURSE max
-        - Standard depth: sparse (most lessons have zero)
-        - Deep/Thorough/Exhaustive: selective shown-not-told only
-        
-        Current depth level: \(depthLevel.displayName)
+        - Platform: iPadOS/iOS touch-first (no hover-only interactions; large hit targets)
         
         WHEN TO EMIT A DEMO:
         - Spatial/visual concepts hard to describe in text (3D transforms, coordinate systems)
@@ -46,6 +74,13 @@ class DemoWriterService: DemoWriterRole {
         - Demo would be decorative only
         - Requires external libraries not in kit
         - Static diagram suffices
+        
+        THREE-V0 KIT CARD (AUTHORITATIVE):
+        - Three.js version: r170
+        - Available import: 'kit:three-v0/three.module.min.js' (exports entire THREE namespace)
+        - What Reader injects: Full Three.js r170 module with core objects (Scene, Camera, WebGLRenderer, geometries, materials, lights, loaders)
+        - What is NOT available: No CDN access, no fetch calls, no external addons, no OrbitControls or other helpers not in core Three.js
+        - If needed API is missing from core Three.js r170: return no demo (empty array)
         
         OUTPUT FORMAT (JSON only, no markdown fences):
         {
@@ -66,7 +101,7 @@ class DemoWriterService: DemoWriterRole {
           ]
         }
         
-        - demos: array (EMPTY if no demo warranted)
+        - demos: array (EMPTY if no demo warranted; 0–N demos)
         - demoId: unique kebab-case within lesson
         - title: concise demo purpose
         - kit: MUST be "three-v0"
@@ -85,6 +120,7 @@ class DemoWriterService: DemoWriterRole {
         - If kit import fails, body must remain blank so Reader fallback triggers automatically
         - NO CDN URLs, NO external fetch calls
         - Self-contained scene in HTML or split into assets
+        - Touch-first: large hit targets, no hover-only
         
         FALLBACK REQUIREMENTS:
         - Brief markdown explaining what demo shows
@@ -95,15 +131,17 @@ class DemoWriterService: DemoWriterRole {
         """
         
         let userPrompt = """
-        Review this lesson and decide if an interactive demo is warranted.
-        
-        Lesson: \(lesson.title)
+        Course topic: \(topic)
         Unit: \(unit.title)
+        Lesson: \(lesson.title)
+        
+        Learner knowledge level: \(knowledgeGuidance)
+        Depth level: \(depthGuidance)
         
         Content:
         \(lessonMarkdown)
         
-        If demo warranted: emit ONE demo with complete HTML/JS. If not: return {"demos": []}
+        Review this lesson and decide if interactive demos are warranted. Emit 0–N demos (up to 8 per lesson). Prefer playable interactive loops.
         
         Remember: Output ONLY the JSON object.
         """

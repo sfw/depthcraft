@@ -156,6 +156,9 @@ class GenerationOrchestrator: ObservableObject {
             let lessonWriter = LessonWriterService(
                 client: lessonClient,
                 temperature: request.lessonWriterConfig.temperature,
+                topic: request.topic,
+                locale: request.locale,
+                knowledgeLevel: request.knowledgeLevel,
                 depthLevel: request.depthLevel,
                 provider: request.lessonWriterConfig.provider,
                 model: request.lessonWriterConfig.model
@@ -191,6 +194,9 @@ class GenerationOrchestrator: ObservableObject {
             let quizWriter = QuizWriterService(
                 client: quizClient,
                 temperature: request.quizWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
                 provider: request.quizWriterConfig.provider,
                 model: request.quizWriterConfig.model
             )
@@ -204,12 +210,17 @@ class GenerationOrchestrator: ObservableObject {
                     throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
                 }
                 
+                guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
+                    throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
+                }
+                
                 progress.currentItem = "Quiz for: \(lesson.title)"
                 progress.completedItems = alreadyCompletedQuizzes + index
                 
                 let quiz = try await quizWriter.writeQuiz(
                     lessonMarkdown: markdown,
-                    lesson: lesson
+                    lesson: lesson,
+                    unit: unit
                 )
                 
                 quizzes[lesson.id] = quiz
@@ -224,6 +235,8 @@ class GenerationOrchestrator: ObservableObject {
             let demoWriter = DemoWriterService(
                 client: demoClient,
                 temperature: request.demoWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
                 depthLevel: request.depthLevel,
                 provider: request.demoWriterConfig.provider,
                 model: request.demoWriterConfig.model
