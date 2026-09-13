@@ -11,6 +11,7 @@ struct LessonContentView: View {
     @State private var explainSheet: ExplainSheet?
     @State private var highlightAction: HighlightAction?
     @State private var showHighlightActions = false
+    @State private var highlightToRemove: String?
     @EnvironmentObject private var networkMonitor: NetworkMonitor
     @EnvironmentObject private var store: CourseStore
     @StateObject private var apiKeyStore = APIKeyStore()
@@ -47,6 +48,7 @@ struct LessonContentView: View {
                     isOnline: networkMonitor.isOnline,
                     glossService: glossService,
                     highlights: savedHighlights,
+                    highlightToRemove: $highlightToRemove,
                     onHighlightSaved: { highlight in
                         store.addHighlight(highlight)
                     },
@@ -159,6 +161,12 @@ struct LessonContentView: View {
     
     private func handleRemove(action: HighlightAction) {
         store.removeHighlight(highlightId: action.highlightId)
+        highlightToRemove = action.highlightId
+        
+        // Reset after a brief delay to allow WebView to process
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            highlightToRemove = nil
+        }
     }
     
     private var inlineLayout: some View {
@@ -174,6 +182,7 @@ struct LessonContentView: View {
             isOnline: networkMonitor.isOnline,
             glossService: glossService,
             highlights: savedHighlights,
+            highlightToRemove: $highlightToRemove,
             onHighlightSaved: { highlight in
                 store.addHighlight(highlight)
             },
@@ -278,6 +287,7 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     let isOnline: Bool
     let glossService: GlossService
     let highlights: [HighlightNote]
+    @Binding var highlightToRemove: String?
     let onHighlightSaved: (HighlightNote) -> Void
     let onHighlightAction: (HighlightAction) -> Void
     @Binding var explainSheet: ExplainSheet?
@@ -294,6 +304,7 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
             isOnline: isOnline,
             glossService: glossService,
             highlights: highlights,
+            highlightToRemove: $highlightToRemove,
             onHighlightSaved: onHighlightSaved,
             onHighlightAction: onHighlightAction,
             explainSheet: $explainSheet,
@@ -304,6 +315,11 @@ struct InlineContentScrollView: UIViewControllerRepresentable {
     func updateUIViewController(_ viewController: InlineContentViewController, context: Context) {
         viewController.isOnline = isOnline
         viewController.updateDelegatesOnlineState()
+        
+        // Handle highlight removal
+        if let removeId = highlightToRemove {
+            viewController.removeHighlightVisual(highlightId: removeId)
+        }
     }
 }
 
@@ -317,6 +333,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     var isOnline: Bool
     let glossService: GlossService
     let highlights: [HighlightNote]
+    var highlightToRemove: Binding<String?>
     let onHighlightSaved: (HighlightNote) -> Void
     let onHighlightAction: (HighlightAction) -> Void
     var explainSheet: Binding<ExplainSheet?>
@@ -325,7 +342,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
     private var scrollView: UIScrollView!
     private var stackView: UIStackView!
     
-    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, highlights: [HighlightNote], onHighlightSaved: @escaping (HighlightNote) -> Void, onHighlightAction: @escaping (HighlightAction) -> Void, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
+    init(sections: [ContentSection], course: LoadedCourse, unitId: String, lessonId: String, explainAnchors: [LessonMeta.Anchor], lessonContext: ExplainSheet.LessonContext, isOnline: Bool, glossService: GlossService, highlights: [HighlightNote], highlightToRemove: Binding<String?>, onHighlightSaved: @escaping (HighlightNote) -> Void, onHighlightAction: @escaping (HighlightAction) -> Void, explainSheet: Binding<ExplainSheet?>, onScrolledToEnd: @escaping () -> Void) {
         self.sections = sections
         self.course = course
         self.unitId = unitId
@@ -335,6 +352,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         self.isOnline = isOnline
         self.glossService = glossService
         self.highlights = highlights
+        self.highlightToRemove = highlightToRemove
         self.onHighlightSaved = onHighlightSaved
         self.onHighlightAction = onHighlightAction
         self.explainSheet = explainSheet
@@ -412,6 +430,19 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // Update tap handler
                 if let tapHandler = objc_getAssociatedObject(webView, "tapHandler") as? ExplainTapHandler {
                     tapHandler.isOnline = isOnline
+                }
+            }
+        }
+    }
+    
+    func removeHighlightVisual(highlightId: String) {
+        // Remove from all WebViews in the stack
+        for view in stackView.arrangedSubviews {
+            if let webView = view as? WKWebView {
+                webView.evaluateJavaScript("window.removeSavedHighlight('\(highlightId)')") { _, error in
+                    if let error = error {
+                        print("Failed to remove highlight visual: \(error)")
+                    }
                 }
             }
         }

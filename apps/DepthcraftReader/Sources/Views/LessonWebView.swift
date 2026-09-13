@@ -34,6 +34,7 @@ struct LessonWebView: UIViewRepresentable {
     let isOnline: Bool
     let glossService: GlossService
     let highlights: [HighlightNote]
+    @Binding var highlightToRemove: String?
     let onHighlightSaved: (HighlightNote) -> Void
     let onHighlightAction: (HighlightAction) -> Void
     let onScrolledToEnd: () -> Void
@@ -475,6 +476,7 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.isOnline = isOnline
         context.coordinator.glossService = glossService
         context.coordinator.highlights = highlights
+        context.coordinator.highlightToRemove = _highlightToRemove
         context.coordinator.onHighlightSaved = onHighlightSaved
         context.coordinator.onHighlightAction = onHighlightAction
         
@@ -493,8 +495,14 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.isOnline = isOnline
         context.coordinator.glossService = glossService
         context.coordinator.highlights = highlights
+        context.coordinator.highlightToRemove = _highlightToRemove
         context.coordinator.onHighlightSaved = onHighlightSaved
         context.coordinator.onHighlightAction = onHighlightAction
+        
+        // Handle highlight removal
+        if let removeId = highlightToRemove {
+            context.coordinator.removeHighlightVisual(highlightId: removeId)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -508,6 +516,7 @@ struct LessonWebView: UIViewRepresentable {
         var isOnline: Bool = false
         var glossService: GlossService?
         var highlights: [HighlightNote] = []
+        var highlightToRemove: Binding<String?>?
         var onHighlightSaved: ((HighlightNote) -> Void)?
         var onHighlightAction: ((HighlightAction) -> Void)?
         private var hasNotifiedEnd = false
@@ -570,6 +579,14 @@ struct LessonWebView: UIViewRepresentable {
             )
             
             onHighlightSaved?(highlight)
+        }
+        
+        func removeHighlightVisual(highlightId: String) {
+            webView?.evaluateJavaScript("window.removeSavedHighlight('\(highlightId)')") { _, error in
+                if let error = error {
+                    print("Failed to remove highlight visual: \(error)")
+                }
+            }
         }
         
         private func clearPaint() {
