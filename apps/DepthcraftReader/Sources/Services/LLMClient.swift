@@ -281,12 +281,36 @@ class OpenAIClient: LLMClient {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = firstChoice["message"] as? [String: Any] else {
             throw LLMClientError.invalidJSON
         }
         
-        return content
+        // Extract finish_reason for diagnostics
+        let finishReason = firstChoice["finish_reason"] as? String
+        
+        // Handle content as String OR array of content parts (reasoning models)
+        if let contentString = message["content"] as? String {
+            return contentString
+        } else if let contentArray = message["content"] as? [[String: Any]] {
+            // Extract text from content parts (ignore reasoning blocks)
+            var textParts: [String] = []
+            for part in contentArray {
+                if let type = part["type"] as? String, type == "text",
+                   let text = part["text"] as? String {
+                    textParts.append(text)
+                }
+            }
+            guard !textParts.isEmpty else {
+                throw LLMClientError.invalidJSON
+            }
+            return textParts.joined(separator: "\n\n")
+        } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
+            // Content is null or missing - check finish_reason for context
+            let reason = finishReason ?? "unknown"
+            throw LLMClientError.apiError("OpenAI returned null content (finish_reason: \(reason)). This usually indicates the model was cut off or hit a content filter.")
+        } else {
+            throw LLMClientError.invalidJSON
+        }
     }
 }
 
@@ -365,12 +389,36 @@ class OpenRouterClient: LLMClient {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = firstChoice["message"] as? [String: Any] else {
             throw LLMClientError.invalidJSON
         }
         
-        return content
+        // Extract finish_reason for diagnostics
+        let finishReason = firstChoice["finish_reason"] as? String
+        
+        // Handle content as String OR array of content parts (reasoning models)
+        if let contentString = message["content"] as? String {
+            return contentString
+        } else if let contentArray = message["content"] as? [[String: Any]] {
+            // Extract text from content parts (ignore reasoning blocks)
+            var textParts: [String] = []
+            for part in contentArray {
+                if let type = part["type"] as? String, type == "text",
+                   let text = part["text"] as? String {
+                    textParts.append(text)
+                }
+            }
+            guard !textParts.isEmpty else {
+                throw LLMClientError.invalidJSON
+            }
+            return textParts.joined(separator: "\n\n")
+        } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
+            // Content is null or missing - check finish_reason for context
+            let reason = finishReason ?? "unknown"
+            throw LLMClientError.apiError("OpenRouter returned null content (finish_reason: \(reason)). This usually indicates the model was cut off or hit a content filter.")
+        } else {
+            throw LLMClientError.invalidJSON
+        }
     }
 }
 
@@ -456,12 +504,36 @@ class CustomOpenAIClient: LLMClient {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
-              let message = firstChoice["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = firstChoice["message"] as? [String: Any] else {
             throw LLMClientError.invalidJSON
         }
         
-        return content
+        // Extract finish_reason for diagnostics
+        let finishReason = firstChoice["finish_reason"] as? String
+        
+        // Handle content as String OR array of content parts (reasoning models)
+        if let contentString = message["content"] as? String {
+            return contentString
+        } else if let contentArray = message["content"] as? [[String: Any]] {
+            // Extract text from content parts (ignore reasoning blocks)
+            var textParts: [String] = []
+            for part in contentArray {
+                if let type = part["type"] as? String, type == "text",
+                   let text = part["text"] as? String {
+                    textParts.append(text)
+                }
+            }
+            guard !textParts.isEmpty else {
+                throw LLMClientError.invalidJSON
+            }
+            return textParts.joined(separator: "\n\n")
+        } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
+            // Content is null or missing - check finish_reason for context
+            let reason = finishReason ?? "unknown"
+            throw LLMClientError.apiError("Custom endpoint returned null content (finish_reason: \(reason)). This usually indicates the model was cut off or hit a content filter.")
+        } else {
+            throw LLMClientError.invalidJSON
+        }
     }
 }
 

@@ -46,7 +46,7 @@ class LessonWriterService: LessonWriterRole {
         
         let complexityAnalyzer = ComplexityAnalyzerService(
             client: client,
-            temperature: 0.5,
+            temperature: temperature,
             depthLevel: depthLevel
         )
         
