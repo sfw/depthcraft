@@ -1,5 +1,11 @@
 import Foundation
 
+/// P2 PRIVACY: Notes are device-local only. Never syncs, exports, or includes API keys.
+/// - Storage: UserDefaults with key pattern "depthcraft.notes.{packageId}"
+/// - Data: CourseNotes structure (user highlights with optional gloss text)
+/// - NO API keys: Notes data contains ONLY user highlights + cached explanations
+/// - NO export: No iCloud, no network, no export paths exist in v0.1
+
 /// Device-local notes storage keyed by packageId
 final class NotesStore {
     private let defaults: UserDefaults

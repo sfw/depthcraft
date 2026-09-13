@@ -1,5 +1,11 @@
 import SwiftUI
 
+// MARK: - Quiz Flow
+/// P2 PRIVACY: Quiz grading is 100% offline. No network calls during quiz study path.
+/// - Quiz data: Loaded from local package files (PackageLoader)
+/// - Grading: Local computation only (QuizGrading.gradeMC / gradeCloze)
+/// - Progress tracking: Device-local only (ProgressStore → UserDefaults)
+
 struct QuizFlowView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.dismiss) private var dismiss

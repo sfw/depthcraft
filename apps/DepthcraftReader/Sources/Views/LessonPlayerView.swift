@@ -1,5 +1,11 @@
 import SwiftUI
 
+// MARK: - Lesson Player
+/// P2 PRIVACY: Lesson rendering is 100% offline. No network calls during study path.
+/// - Lesson markdown/HTML: Loaded from local package files (PackageLoader)
+/// - Progress tracking: Device-local only (ProgressStore → UserDefaults)
+/// - Online features (Explain/Discuss) are explicitly gated by isOnline + hasAPIKey checks
+
 struct LessonPlayerView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.navigationPath) private var environmentNavigationPath

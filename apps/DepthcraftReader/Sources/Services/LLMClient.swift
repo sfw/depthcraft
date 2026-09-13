@@ -22,16 +22,68 @@ enum LLMClientError: LocalizedError {
         case .invalidResponse:
             return "Invalid response from API"
         case .apiError(let message):
-            return "API error: \(message)"
+            // P2 SECURITY: Sanitize error message to prevent leaking sensitive data
+            return "API error: \(Self.sanitizeErrorMessage(message))"
         case .rateLimitError(let provider, let status, let message):
             if let message = message {
-                return "\(provider) rate limit or quota exceeded (HTTP \(status)): \(message)\n\nPlease check your API quota and try again later, or switch providers."
+                return "\(provider) rate limit or quota exceeded (HTTP \(status)): \(Self.sanitizeErrorMessage(message))\n\nPlease check your API quota and try again later, or switch providers."
             } else {
                 return "\(provider) rate limit or quota exceeded (HTTP \(status)). Please check your API quota and try again later, or switch providers."
             }
         case .invalidJSON:
             return "Invalid JSON response"
         }
+    }
+    
+    /// Sanitize error messages to prevent leaking sensitive information
+    /// - Removes Authorization headers
+    /// - Removes API keys (sk-*, Bearer tokens)
+    /// - Removes full request/response bodies
+    private static func sanitizeErrorMessage(_ message: String) -> String {
+        var sanitized = message
+        
+        // Remove Authorization headers (case-insensitive)
+        let authPatterns = [
+            "Authorization: Bearer [^\\s]+",
+            "Authorization: [^\\s]+",
+            "x-api-key: [^\\s]+",
+            "Bearer [a-zA-Z0-9_\\-\\.]+",
+        ]
+        
+        for pattern in authPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+                sanitized = regex.stringByReplacingMatches(
+                    in: sanitized,
+                    range: NSRange(sanitized.startIndex..., in: sanitized),
+                    withTemplate: "[REDACTED]"
+                )
+            }
+        }
+        
+        // Remove API keys (sk-* pattern, common for OpenAI/Anthropic)
+        if let keyRegex = try? NSRegularExpression(pattern: "sk-[a-zA-Z0-9]{20,}", options: []) {
+            sanitized = keyRegex.stringByReplacingMatches(
+                in: sanitized,
+                range: NSRange(sanitized.startIndex..., in: sanitized),
+                withTemplate: "[REDACTED_KEY]"
+            )
+        }
+        
+        // Remove generic bearer tokens (alphanumeric + common token chars)
+        if let tokenRegex = try? NSRegularExpression(pattern: "[a-zA-Z0-9_\\-\\.]{40,}", options: []) {
+            sanitized = tokenRegex.stringByReplacingMatches(
+                in: sanitized,
+                range: NSRange(sanitized.startIndex..., in: sanitized),
+                withTemplate: "[REDACTED_TOKEN]"
+            )
+        }
+        
+        // Truncate very long messages (potential request/response dumps)
+        if sanitized.count > 500 {
+            sanitized = String(sanitized.prefix(500)) + "... [message truncated]"
+        }
+        
+        return sanitized
     }
 }
 

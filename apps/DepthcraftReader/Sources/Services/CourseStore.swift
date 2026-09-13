@@ -116,7 +116,12 @@ final class CourseStore: ObservableObject {
             #if DEBUG
             print("❌ Failed to load package: \(error)")
             #endif
-            errorMessage = error.localizedDescription
+            // P2 SECURITY: Use user-friendly error messages for package validation failures
+            if let validationError = error as? SchemaValidatorError {
+                errorMessage = validationError.userFriendlyDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
     

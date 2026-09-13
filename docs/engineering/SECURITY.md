@@ -65,11 +65,26 @@ Depthcraft Reader is a **field-trial iPad app** for offline course consumption w
 3. **Quiz content**: Rendered with SwiftUI `Text()` views (inherently XSS-safe, no HTML interpretation)
 4. **Demo fallback**: Uses safe `renderDemoFallback()` markdown WebView (no lesson eyebrow, JS disabled)
 
+### P2: Privacy & Offline Posture (PR #28)
+1. **Study path is offline-first**:
+   - Lesson/Quiz/Demo/Notes rendering: 100% local (no accidental network calls)
+   - Progress tracking: Device-local only (`UserDefaults` by `packageId`)
+   - Notes/highlights: Device-local only (`UserDefaults` by `packageId`)
+   - **Online features explicitly gated**: Explain/Discuss/Generate require user opt-in + connectivity check
+   - **No analytics/telemetry**: Zero network usage during offline study path (Airplane Mode safe)
+2. **Progress store integrity**:
+   - API keys **never** stored in progress or notes data structures
+   - No export, sync, or iCloud paths exist (v0.1 field trial scope)
+   - Progress/notes data contains **only** completion tracking + user highlights
+3. **Error message sanitization**:
+   - LLM errors sanitized: no raw `Authorization` headers, API keys, or provider request bodies in UI
+   - Package validation errors: User-friendly messages (no internal paths or schema dumps)
+   - Key material (`sk-*`, Bearer tokens) redacted from all error messages
+
 ## What We Don't Guarantee
 
-### Deferred to P2 (Post-Field Trial)
+### Deferred to Future (Post-Field Trial)
 - **User package import UI**: Size limits, MIME type checks, signature verification (v0.1 is bundled-only)
-- **Telemetry / Analytics**: Audit for PII leakage, user consent (v0.1 has no telemetry)
 - **iCloud / Sync**: Encrypted progress data, sync conflict handling (v0.1 is device-local)
 - **Accounts / Auth**: Secure token storage, OAuth flows (v0.1 has no server)
 - **Rate limiting**: Abuse detection, cost controls (BYOK = user's API provider limits)
@@ -107,6 +122,16 @@ Before accepting P1-related PRs, verify:
 - [ ] **Content version downgrade**: Attempt to load older version over newer → Should reject with error
 - [ ] **Upgrade dialog**: Load newer version of same package → Should show confirmation modal
 
+### P2 Verification (Privacy & Offline)
+Before accepting P2-related PRs, verify:
+
+- [ ] **Airplane mode study**: Enable Airplane Mode → Navigate lesson/quiz/demo/notes → No errors, no network toasts
+- [ ] **Progress stays local**: Study lessons → Check `UserDefaults` → Progress at `depthcraft.progress.{packageId}` → No API keys in data
+- [ ] **Notes stay local**: Highlight text → Check `UserDefaults` → Notes at `depthcraft.notes.{packageId}` → No API keys in data
+- [ ] **Bad key error UX**: Explain with invalid key → Error message is human-readable, no raw request body or `Authorization` header
+- [ ] **Package load error UX**: Import malformed package → Error message is user-friendly (not raw schema dump)
+- [ ] **Sanitized LLM errors**: Trigger API error → Check error message → No `sk-*` keys, no `Bearer` tokens, no long request dumps
+
 ## Reporting Security Issues
 
 Field-trial version → Report via GitHub to Lab Partner / Scott:
@@ -143,6 +168,14 @@ Before public release, test:
    - Demo manifest with mismatched `demoId`
 
 ## Changelog
+
+### 2026-09-13 — P2 Privacy & Offline Hardening (PR #28)
+- ✅ **Offline study path verification**: Audited all study path components (lesson/quiz/demo/notes) — confirmed zero accidental network calls
+- ✅ **Progress store audit**: Verified API keys never stored in `ProgressStore` or `NotesStore` (device-local completion data only)
+- ✅ **Error message sanitization**: Added `LLMClientError.sanitizeErrorMessage()` to redact Authorization headers, API keys, and sensitive tokens
+- ✅ **User-friendly validation errors**: Added `SchemaValidatorError.userFriendlyDescription` for package load failures
+- ✅ **Code documentation**: Added P2 privacy comments to `LessonPlayerView`, `QuizFlowView`, `ProgressStore`, `NotesStore`
+- ✅ Updated SECURITY.md with P2 guarantees and dogfood checklist
 
 ### 2026-09-12 — P1 Security Hardening (PR #27)
 - ✅ Added `SchemaValidator.swift` for manifest/curriculum/quiz/demo validation
