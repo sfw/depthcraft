@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsStubView: View {
     @StateObject private var keyStore = APIKeyStore()
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
     @State private var showingKeyEntry: LLMProvider?
     @State private var showingCustomConfig = false
     @State private var keyInput = ""
@@ -35,7 +36,7 @@ struct SettingsStubView: View {
             Section("About") {
                 LabeledContent("Reader", value: "0.1.0")
                 LabeledContent("Schema", value: "0.1.0")
-                LabeledContent("Mode", value: "Airplane / offline")
+                LabeledContent("Mode", value: networkMonitor.isOnline ? "Online" : "Offline")
             }
         }
         .navigationTitle("Settings")
