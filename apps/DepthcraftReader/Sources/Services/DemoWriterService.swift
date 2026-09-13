@@ -108,8 +108,8 @@ class DemoWriterService: DemoWriterRole {
         Remember: Output ONLY the JSON object.
         """
         
-        // Use depth-scaled max tokens (Exhaustive needs full model capacity)
-        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model, scaledBy: depthLevel)
+        // Use full model max - no artificial caps
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let response = try await client.complete(
             systemPrompt: systemPrompt,

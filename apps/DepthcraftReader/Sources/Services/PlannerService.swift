@@ -117,9 +117,7 @@ class PlannerService: PlannerRole {
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """
         
-        // Use model's max output capacity to avoid artificial truncation.
-        // Models may still have internal limits that cause truncation.
-        // Planner doesn't scale by depth - always use full model max for curriculum planning
+        // Use full model max to avoid artificial truncation
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let response = try await client.complete(

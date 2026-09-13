@@ -77,6 +77,7 @@ class QuizWriterService: QuizWriterRole {
         Remember: Output ONLY the JSON object with no additional text or formatting.
         """
         
+        // Use full model max - no artificial caps
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let response = try await client.complete(

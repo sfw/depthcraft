@@ -39,8 +39,8 @@ class LessonWriterService: LessonWriterRole {
         Output ONLY the markdown content.
         """
         
-        // Use depth-scaled max tokens (Exhaustive needs full model capacity)
-        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model, scaledBy: depthLevel)
+        // Use full model max - no artificial caps
+        let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let markdown: String
         do {
