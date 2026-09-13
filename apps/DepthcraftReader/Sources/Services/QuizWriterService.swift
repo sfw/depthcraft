@@ -2,9 +2,9 @@ import Foundation
 
 class QuizWriterService: QuizWriterRole {
     private let client: LLMClient
-    private let temperature: Double
+    private let temperature: Double?
     
-    init(client: LLMClient, temperature: Double = 0.7) {
+    init(client: LLMClient, temperature: Double? = nil) {
         self.client = client
         self.temperature = temperature
     }

@@ -8,6 +8,8 @@ struct GenerateSettingsView: View {
     
     @State private var modelPickerTarget: ModelPickerTarget?
     @State private var roleCustomModelPicker: RoleCustomModelPicker?
+    @State private var globalTemperature: Double?
+    @State private var showTemperatureControl = false
     
     init() {
         let store = APIKeyStore()
@@ -42,6 +44,10 @@ struct GenerateSettingsView: View {
             rolesSection
         }
         .navigationTitle("Generate")
+        .onAppear {
+            globalTemperature = apiKeyStore.getGlobalTemperature()
+            showTemperatureControl = globalTemperature != nil
+        }
         .sheet(item: $modelPickerTarget) { target in
             modelPickerSheet(for: target)
         }
@@ -87,10 +93,59 @@ struct GenerateSettingsView: View {
                     }
                 }
             }
+            
+            // Temperature control
+            if showTemperatureControl {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Temperature")
+                        Spacer()
+                        Text(String(format: "%.1f", globalTemperature ?? 1.0))
+                            .foregroundStyle(.secondary)
+                        Button {
+                            withAnimation {
+                                globalTemperature = nil
+                                apiKeyStore.setGlobalTemperature(nil)
+                                showTemperatureControl = false
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    Slider(value: Binding(
+                        get: { globalTemperature ?? 1.0 },
+                        set: { newValue in
+                            globalTemperature = newValue
+                            apiKeyStore.setGlobalTemperature(newValue)
+                        }
+                    ), in: 0.0...2.0, step: 0.1)
+                    .tint(.teal)
+                }
+            } else {
+                Button {
+                    withAnimation {
+                        globalTemperature = 1.0
+                        apiKeyStore.setGlobalTemperature(1.0)
+                        showTemperatureControl = true
+                    }
+                } label: {
+                    HStack {
+                        Text("Temperature")
+                        Spacer()
+                        Text("Provider default")
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "plus.circle")
+                            .foregroundStyle(.teal)
+                    }
+                }
+            }
         } header: {
             Text("Global Model")
         } footer: {
-            Text("The default model for all generation roles. API keys are configured in Settings. Per-role customization below.")
+            Text("The default model for all generation roles. API keys are configured in Settings. Per-role customization below.\n\nTemperature controls randomness (0 = focused, 2 = creative). When unset, uses the provider's default (typically 1.0).")
                 .font(.caption)
         }
     }

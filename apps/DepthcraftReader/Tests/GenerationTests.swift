@@ -1422,7 +1422,7 @@ final class ExplainUnderlineInjectionTests: XCTestCase {
 }
 
 class MockLLMClient: LLMClient {
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
         return "Mock response"
     }
 }
@@ -2359,7 +2359,7 @@ final class PlannerConfigurationTests: XCTestCase {
     
     func testPlannerUsesHigherMaxTokens() async throws {
         let mockClient = TrackingLLMClient()
-        let planner = PlannerService(client: mockClient, temperature: 0.7)
+        let planner = PlannerService(client: mockClient, temperature: nil)
         
         do {
             _ = try await planner.plan(
@@ -2377,7 +2377,7 @@ final class PlannerConfigurationTests: XCTestCase {
     }
     
     func testDepthLevelGuidanceIncludesSoftBands() {
-        let planner = PlannerService(client: TrackingLLMClient(), temperature: 0.7)
+        let planner = PlannerService(client: TrackingLLMClient(), temperature: nil)
         
         // We can't directly access the guidance strings, but we can verify
         // the depth levels exist and are properly defined
@@ -2392,7 +2392,7 @@ final class PlannerConfigurationTests: XCTestCase {
 class TrackingLLMClient: LLMClient {
     var lastMaxTokens: Int = 0
     
-    func complete(systemPrompt: String, userPrompt: String, temperature: Double, maxTokens: Int = 4096) async throws -> String {
+    func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
         lastMaxTokens = maxTokens
         return "{\"invalid\": \"json\"}"
     }
