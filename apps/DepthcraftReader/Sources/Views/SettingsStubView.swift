@@ -10,6 +10,14 @@ struct SettingsStubView: View {
     
     var body: some View {
         List {
+            Section("Generate") {
+                NavigationLink {
+                    GenerateSettingsView()
+                } label: {
+                    Label("Models", systemImage: "cpu")
+                }
+            }
+            
             Section {
                 Text("Configure API keys for course generation. Keys are stored securely in the device Keychain and never leave your device.")
                     .font(.subheadline)
