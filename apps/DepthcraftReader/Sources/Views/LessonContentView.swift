@@ -344,6 +344,23 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 `;
                 document.body.appendChild(capsule);
                 
+                // Suppress system text selection during paint gesture
+                function suppressSystemSelection() {
+                    // Clear any existing selection
+                    const selection = window.getSelection();
+                    if (selection) {
+                        selection.removeAllRanges();
+                    }
+                    // Add user-select: none to body
+                    document.body.style.webkitUserSelect = 'none';
+                    document.body.style.userSelect = 'none';
+                }
+                
+                function restoreSystemSelection() {
+                    document.body.style.webkitUserSelect = '';
+                    document.body.style.userSelect = '';
+                }
+                
                 // Add CSS for highlight API
                 const style = document.createElement('style');
                 style.textContent = `
@@ -483,6 +500,11 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     if (!range) return;
                     
                     isSelecting = true;
+                    
+                    // Suppress system blue selection immediately
+                    suppressSystemSelection();
+                    
+                    // Show capsule
                     capsule.style.display = 'block';
                     
                     const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
@@ -498,6 +520,9 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 
                 window.updatePaintSelection = function(x, y) {
                     if (!isSelecting || !paintStartAnchor) return;
+                    
+                    // Keep suppressing system selection during drag
+                    suppressSystemSelection();
                     
                     const currentRange = document.caretRangeFromPoint(x, y);
                     if (!currentRange) return;
@@ -523,6 +548,9 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     isSelecting = false;
                     capsule.style.display = 'none';
                     
+                    // Restore system selection after gesture
+                    restoreSystemSelection();
+                    
                     if (currentPaintRange) {
                         const text = currentPaintRange.toString().trim();
                         if (text.length > 0 && text.length <= 200) {
@@ -534,6 +562,10 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 window.clearPaintSelection = function() {
                     isSelecting = false;
                     capsule.style.display = 'none';
+                    
+                    // Restore system selection
+                    restoreSystemSelection();
+                    
                     clearPaint();
                 };
                 
