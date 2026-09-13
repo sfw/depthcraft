@@ -148,8 +148,8 @@ struct LessonWebView: UIViewRepresentable {
                 function getWordBoundaryRange(node, offset) {
                     if (node.nodeType !== Node.TEXT_NODE) return null;
                     
-                    const text = node.textContent;
-                    const wordPattern = /\b[\w']+\b/g;
+                const text = node.textContent;
+                const wordPattern = /\\b[\\w']+\\b/g;
                     let match;
                     
                     while ((match = wordPattern.exec(text)) !== null) {
