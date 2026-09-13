@@ -751,6 +751,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
         var lessonContext: ExplainSheet.LessonContext
         weak var webView: WKWebView?
         private var offlineToastWorkItem: DispatchWorkItem?
+        private var disabledGestureRecognizers: [UIGestureRecognizer] = []
         
         init(isOnline: Bool, glossService: GlossService, explainSheet: Binding<ExplainSheet?>, lessonContext: ExplainSheet.LessonContext) {
             self.isOnline = isOnline
@@ -798,6 +799,9 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             
             switch gesture.state {
             case .began:
+                // Disable WKWebView's native text selection gestures
+                disableNativeTextSelection(in: webView)
+                
                 // Haptic feedback
                 let feedback = UIImpactFeedbackGenerator(style: .medium)
                 feedback.impactOccurred()
@@ -813,6 +817,9 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // End paint selection and trigger explain
                 webView.evaluateJavaScript("window.endPaintSelection()") { _, _ in }
                 
+                // Re-enable WKWebView's native text selection
+                restoreNativeTextSelection()
+                
                 // Check if we need to show offline toast
                 if !isOnline || !glossService.hasAPIKey() {
                     showOfflineToast()
@@ -823,9 +830,34 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // Clear paint
                 clearPaint()
                 
+                // Re-enable WKWebView's native text selection
+                restoreNativeTextSelection()
+                
             default:
                 break
             }
+        }
+        
+        private func disableNativeTextSelection(in webView: WKWebView) {
+            // Find and disable WKWebView's gesture recognizers that handle text selection
+            for gestureRecognizer in webView.gestureRecognizers ?? [] {
+                // Disable UILongPressGestureRecognizers and UITapGestureRecognizers owned by WKWebView
+                // (but not our own long-press gesture)
+                if gestureRecognizer !== webView.gestureRecognizers?.first(where: { $0 is UILongPressGestureRecognizer && $0.delegate is HTMLWebViewDelegate }) {
+                    if gestureRecognizer.isEnabled {
+                        gestureRecognizer.isEnabled = false
+                        disabledGestureRecognizers.append(gestureRecognizer)
+                    }
+                }
+            }
+        }
+        
+        private func restoreNativeTextSelection() {
+            // Re-enable previously disabled gesture recognizers
+            for gestureRecognizer in disabledGestureRecognizers {
+                gestureRecognizer.isEnabled = true
+            }
+            disabledGestureRecognizers.removeAll()
         }
         
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
