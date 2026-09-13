@@ -113,7 +113,9 @@ class PlannerService: PlannerRole {
         Output ONLY the JSON curriculum, no markdown fences or explanatory text.
         """
         
-        // Use higher max_tokens (8192) for planner to accommodate large Exhaustive curricula
+        // Use higher max_tokens (8192) for planner to accommodate large Exhaustive curricula.
+        // Note: Some models (e.g., tencent/hy4-preview via OpenRouter) may have lower
+        // effective output limits and can still truncate despite this setting.
         let response = try await client.complete(
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
@@ -121,15 +123,24 @@ class PlannerService: PlannerRole {
             maxTokens: 8192
         )
         
+        // Check for truncated JSON first
+        if let truncationDiagnostic = JSONExtractor.detectTruncation(response) {
+            throw GenerationError.invalidResponse("Planner: \(truncationDiagnostic). The response was likely cut off due to output length limits. Try again or use a model with higher output capacity. Response start: \(response.prefix(150))...")
+        }
+        
         // Use robust JSON extraction (same approach as QuizWriter)
         guard let extracted = JSONExtractor.extractJSON(from: response) else {
-            throw GenerationError.invalidResponse("Planner returned invalid JSON: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
+            // Check extracted portion for truncation too
+            if let truncationDiagnostic = JSONExtractor.detectTruncation(response) {
+                throw GenerationError.invalidResponse("Planner: \(truncationDiagnostic). The response was likely cut off. Try again or use a model with higher output capacity.")
+            }
+            throw GenerationError.invalidResponse("Planner: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
         }
         
         // Validate JSON structure before decoding
         let structureValidation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
         guard structureValidation.isValid else {
-            throw GenerationError.invalidResponse("Planner returned invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
+            throw GenerationError.invalidResponse("Planner: Invalid JSON structure - \(structureValidation.errorMessage ?? "unknown error"). Extracted JSON start: \(extracted.prefix(200))...")
         }
         
         guard let data = extracted.data(using: .utf8) else {

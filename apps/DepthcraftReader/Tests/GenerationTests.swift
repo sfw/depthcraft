@@ -2223,6 +2223,134 @@ final class JSONExtractionTests: XCTestCase {
         let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
         XCTAssertTrue(validation.isValid)
     }
+    
+    func testDetectTruncatedJSONMissingCloseBraces() {
+        // JSON with unclosed braces (truncated)
+        let truncatedInput = """
+        {
+          "schemaVersion": "0.1.0",
+          "status": "draft",
+          "units": [
+            {
+              "id": "u01-foundations",
+              "title": "Foundations"
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(truncatedInput)
+        XCTAssertNotNil(diagnostic, "Should detect truncation")
+        XCTAssertTrue(diagnostic!.contains("truncated"), "Diagnostic should mention truncation")
+        XCTAssertTrue(diagnostic!.contains("unclosed"), "Diagnostic should mention unclosed structures")
+    }
+    
+    func testDetectTruncatedJSONMissingCloseBrackets() {
+        // JSON with unclosed array brackets
+        let truncatedInput = """
+        {
+          "items": [
+            {"id": "1", "name": "First"},
+            {"id": "2", "name": "Second"
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(truncatedInput)
+        XCTAssertNotNil(diagnostic, "Should detect truncation")
+        XCTAssertTrue(diagnostic!.contains("truncated"), "Diagnostic should mention truncation")
+    }
+    
+    func testDetectTruncatedJSONMultipleUnclosed() {
+        // JSON with both unclosed braces and brackets
+        let truncatedInput = """
+        {
+          "data": {
+            "items": [
+              {"value": "test"
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(truncatedInput)
+        XCTAssertNotNil(diagnostic, "Should detect truncation")
+        XCTAssertTrue(diagnostic!.contains("brace"), "Should mention unclosed braces")
+        XCTAssertTrue(diagnostic!.contains("bracket"), "Should mention unclosed brackets")
+    }
+    
+    func testDetectTruncationForCompleteJSON() {
+        // Complete valid JSON should not be detected as truncated
+        let completeInput = """
+        {
+          "schemaVersion": "0.1.0",
+          "status": "draft",
+          "units": [],
+          "lessons": {}
+        }
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(completeInput)
+        XCTAssertNil(diagnostic, "Complete JSON should not be detected as truncated")
+    }
+    
+    func testDetectTruncationForNonJSON() {
+        // Non-JSON text should not trigger truncation detection
+        let nonJSON = "This is just plain text without any JSON structure."
+        
+        let diagnostic = JSONExtractor.detectTruncation(nonJSON)
+        XCTAssertNil(diagnostic, "Non-JSON text should not trigger truncation detection")
+    }
+    
+    func testDetectTruncatedCurriculumExample() {
+        // Real-world example: truncated curriculum JSON (simulating Scott's bug)
+        let truncatedCurriculum = """
+        {
+          "schemaVersion": "0.1.0",
+          "status": "draft",
+          "units": [
+            {
+              "id": "u01-foundations",
+              "title": "Foundations of AI",
+              "order": 1,
+              "lessonIds": ["l01-intro", "l02-concepts"]
+            },
+            {
+              "id": "u02-practical",
+              "title": "Practical Applications",
+              "order": 2,
+              "lessonIds": ["l03-tools"
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(truncatedCurriculum)
+        XCTAssertNotNil(diagnostic, "Should detect truncated curriculum")
+        XCTAssertTrue(diagnostic!.contains("truncated"), "Should mention truncation")
+        
+        // Verify extraction fails for truncated JSON
+        let extracted = JSONExtractor.extractJSON(from: truncatedCurriculum)
+        XCTAssertNil(extracted, "Should not extract truncated JSON")
+    }
+    
+    func testDetectTruncatedWithOneMissingBrace() {
+        // JSON missing exactly one closing brace
+        let input = """
+        {
+          "key": "value",
+          "nested": {
+            "inner": "data"
+          }
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(input)
+        XCTAssertNotNil(diagnostic, "Should detect single missing brace")
+        XCTAssertTrue(diagnostic!.contains("1 unclosed brace"), "Should report 1 unclosed brace")
+    }
+    
+    func testDetectTruncatedArrayOnly() {
+        // Array with missing closing bracket
+        let input = """
+        [
+          {"id": 1},
+          {"id": 2},
+          {"id": 3
+        """
+        
+        let diagnostic = JSONExtractor.detectTruncation(input)
+        XCTAssertNotNil(diagnostic, "Should detect truncated array")
+        XCTAssertTrue(diagnostic!.contains("unclosed"), "Should mention unclosed structures")
+    }
 }
 
 // MARK: - Planner Configuration Tests

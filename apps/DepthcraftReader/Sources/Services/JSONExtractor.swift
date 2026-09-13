@@ -121,6 +121,45 @@ struct JSONExtractor {
         return openBraces == closeBraces && openBrackets == closeBrackets
     }
     
+    /// Detect if JSON appears truncated (incomplete)
+    /// Returns a diagnostic string if truncated, nil otherwise
+    static func detectTruncation(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+        
+        // Check if it starts like JSON
+        guard trimmed.first == "{" || trimmed.first == "[" else {
+            return nil
+        }
+        
+        // Count brackets
+        let openBraces = trimmed.filter { $0 == "{" }.count
+        let closeBraces = trimmed.filter { $0 == "}" }.count
+        let openBrackets = trimmed.filter { $0 == "[" }.count
+        let closeBrackets = trimmed.filter { $0 == "]" }.count
+        
+        // Detect unclosed structures
+        if openBraces > closeBraces || openBrackets > closeBrackets {
+            let missingBraces = openBraces - closeBraces
+            let missingBrackets = openBrackets - closeBrackets
+            
+            var parts: [String] = []
+            if missingBraces > 0 {
+                parts.append("\(missingBraces) unclosed brace\(missingBraces > 1 ? "s" : "")")
+            }
+            if missingBrackets > 0 {
+                parts.append("\(missingBrackets) unclosed bracket\(missingBrackets > 1 ? "s" : "")")
+            }
+            
+            return "JSON appears truncated: \(parts.joined(separator: ", "))"
+        }
+        
+        return nil
+    }
+    
     /// Validate that a candidate string actually parses as JSON
     private static func validatesParseable(_ text: String) -> Bool {
         guard let data = text.data(using: .utf8) else {
