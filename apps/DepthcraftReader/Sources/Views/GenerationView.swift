@@ -3,6 +3,7 @@ import SwiftUI
 struct GenerationView: View {
     @StateObject private var orchestrator: GenerationOrchestrator
     @StateObject private var keyStore = APIKeyStore()
+    @StateObject private var roleConfig: LLMRoleConfigService
     @EnvironmentObject private var courseStore: CourseStore
     @Environment(\.dismiss) private var dismiss
     
@@ -14,25 +15,6 @@ struct GenerationView: View {
     @State private var knowledgeLevel: KnowledgeLevel = .some
     @State private var depthLevel: DepthLevel = .standard
     
-    @State private var plannerProvider: LLMProvider = .anthropic
-    @State private var plannerModel = "claude-sonnet-5"
-    @State private var plannerTemperature = 0.7
-    
-    @State private var lessonProvider: LLMProvider = .anthropic
-    @State private var lessonModel = "claude-sonnet-5"
-    @State private var lessonTemperature = 0.7
-    
-    @State private var quizProvider: LLMProvider = .anthropic
-    @State private var quizModel = "claude-sonnet-5"
-    @State private var quizTemperature = 0.7
-    
-    @State private var demoProvider: LLMProvider = .anthropic
-    @State private var demoModel = "claude-sonnet-5"
-    @State private var demoTemperature = 0.7
-    
-    @State private var customBaseURL = ""
-    @State private var customModel = ""
-    
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var showingOpenPackage = false
@@ -43,6 +25,7 @@ struct GenerationView: View {
         let store = APIKeyStore()
         _keyStore = StateObject(wrappedValue: store)
         _orchestrator = StateObject(wrappedValue: GenerationOrchestrator(keyStore: store))
+        _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store))
     }
     
     var body: some View {
@@ -86,152 +69,32 @@ struct GenerationView: View {
             Text("The generated course has been loaded. Tap OK to return to the course home.")
         }
         .onAppear {
-            // Load custom endpoint config from keyStore
-            customBaseURL = keyStore.customBaseURL
-            customModel = keyStore.customModel
-            
-            // Load stored model selections
-            loadStoredModels()
-            
             // If extending, pre-populate from existing course and default to Brief
             if let course = extendFromCourse {
                 topic = course.manifest.topic
                 locale = course.manifest.locale
                 depthLevel = .brief
             }
-            
-            // Auto-switch to first available provider if needed
-            ensureValidProviderSelections()
         }
-        .onChange(of: keyStore.hasAnthropicKey) { _, _ in ensureValidProviderSelections() }
-        .onChange(of: keyStore.hasOpenAIKey) { _, _ in ensureValidProviderSelections() }
-        .onChange(of: keyStore.hasOpenRouterKey) { _, _ in ensureValidProviderSelections() }
-        .onChange(of: keyStore.hasCustomKey) { _, _ in ensureValidProviderSelections() }
-        .onChange(of: keyStore.customBaseURL) { _, _ in ensureValidProviderSelections() }
-        .onChange(of: keyStore.customModel) { _, _ in ensureValidProviderSelections() }
-        // Persist model selections when changed
-        .onChange(of: plannerModel) { _, newValue in
-            keyStore.setModel(newValue, for: plannerProvider)
-        }
-        .onChange(of: lessonModel) { _, newValue in
-            keyStore.setModel(newValue, for: lessonProvider)
-        }
-        .onChange(of: quizModel) { _, newValue in
-            keyStore.setModel(newValue, for: quizProvider)
-        }
-        .onChange(of: demoModel) { _, newValue in
-            keyStore.setModel(newValue, for: demoProvider)
-        }
-    }
-    
-    private var availableProviders: [LLMProvider] {
-        var providers: [LLMProvider] = []
-        
-        if keyStore.hasAnthropicKey {
-            providers.append(.anthropic)
-        }
-        if keyStore.hasOpenAIKey {
-            providers.append(.openai)
-        }
-        if keyStore.hasOpenRouterKey {
-            providers.append(.openrouter)
-        }
-        // Custom requires key + base URL + model
-        if keyStore.hasCustomKey && !keyStore.customBaseURL.isEmpty && !keyStore.customModel.isEmpty {
-            providers.append(.custom)
-        }
-        
-        return providers
     }
     
     private var hasAnyProviderConfigured: Bool {
-        !availableProviders.isEmpty
+        keyStore.hasAnthropicKey || keyStore.hasOpenAIKey || 
+        keyStore.hasOpenRouterKey || keyStore.hasCustomKey
     }
     
-    private func ensureValidProviderSelections() {
-        guard hasAnyProviderConfigured else { return }
-        
-        let available = availableProviders
-        
-        // Auto-switch invalid selections to first available (prefer Anthropic)
-        let preferredDefault = available.contains(.anthropic) ? .anthropic : available.first!
-        
-        if !available.contains(plannerProvider) {
-            let oldProvider = plannerProvider
-            plannerProvider = preferredDefault
-            // Reset model to new provider's default when switching
-            if oldProvider != plannerProvider {
-                plannerModel = defaultModel(for: plannerProvider)
-            }
-        }
-        if !available.contains(lessonProvider) {
-            let oldProvider = lessonProvider
-            lessonProvider = preferredDefault
-            if oldProvider != lessonProvider {
-                lessonModel = defaultModel(for: lessonProvider)
-            }
-        }
-        if !available.contains(quizProvider) {
-            let oldProvider = quizProvider
-            quizProvider = preferredDefault
-            if oldProvider != quizProvider {
-                quizModel = defaultModel(for: quizProvider)
-            }
-        }
-        if !available.contains(demoProvider) {
-            let oldProvider = demoProvider
-            demoProvider = preferredDefault
-            if oldProvider != demoProvider {
-                demoModel = defaultModel(for: demoProvider)
-            }
-        }
-    }
-    
-    private func defaultModel(for provider: LLMProvider) -> String {
-        switch provider {
-        case .anthropic:
-            return "claude-sonnet-5"
-        case .openai:
-            return "gpt-4o"
-        case .openrouter:
-            return "anthropic/claude-sonnet-5"
-        case .custom:
-            return keyStore.customModel
-        }
-    }
-    
-    private func loadStoredModels() {
-        // Load stored models for each provider, falling back to defaults and persisting them
-        let plannerDefault = defaultModel(for: plannerProvider)
-        if let stored = keyStore.getModel(for: plannerProvider), !stored.isEmpty {
-            plannerModel = stored
-        } else {
-            plannerModel = plannerDefault
-            keyStore.setModel(plannerDefault, for: plannerProvider)
+    private var canStartPlanning: Bool {
+        // Check if any providers configured
+        guard hasAnyProviderConfigured else {
+            return false
         }
         
-        let lessonDefault = defaultModel(for: lessonProvider)
-        if let stored = keyStore.getModel(for: lessonProvider), !stored.isEmpty {
-            lessonModel = stored
-        } else {
-            lessonModel = lessonDefault
-            keyStore.setModel(lessonDefault, for: lessonProvider)
-        }
-        
-        let quizDefault = defaultModel(for: quizProvider)
-        if let stored = keyStore.getModel(for: quizProvider), !stored.isEmpty {
-            quizModel = stored
-        } else {
-            quizModel = quizDefault
-            keyStore.setModel(quizDefault, for: quizProvider)
-        }
-        
-        let demoDefault = defaultModel(for: demoProvider)
-        if let stored = keyStore.getModel(for: demoProvider), !stored.isEmpty {
-            demoModel = stored
-        } else {
-            demoModel = demoDefault
-            keyStore.setModel(demoDefault, for: demoProvider)
+        // Check if planner role has valid config
+        do {
+            let _ = try roleConfig.getLLMConfig(for: .planner)
+            return true
+        } catch {
+            return false
         }
     }
     
@@ -261,7 +124,7 @@ struct GenerationView: View {
                     Text("Open Settings to configure an API key")
                         .foregroundStyle(.red)
                 } else if !canStartPlanning {
-                    Text("Open Settings to configure \(plannerProvider.displayName) key")
+                    Text("Open Settings → Generate to configure models")
                         .foregroundStyle(.red)
                 }
             }
@@ -316,82 +179,12 @@ struct GenerationView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .center)
                         }
-                        
-                        DisclosureGroup {
-                            VStack(spacing: 0) {
-                                modelsSectionContent
-                            }
-                        } label: {
-                            Text("Models")
-                        }
                     }
                     .padding(.vertical, 8)
                 } label: {
                     Text("Advanced")
                 }
             }
-        }
-    }
-    
-    private var modelsSectionContent: some View {
-        Group {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Planner")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-                
-                roleConfiguration(
-                    provider: $plannerProvider,
-                    model: $plannerModel,
-                    temperature: $plannerTemperature
-                )
-            }
-            .padding(.bottom, 16)
-            
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Lesson Writer")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                roleConfiguration(
-                    provider: $lessonProvider,
-                    model: $lessonModel,
-                    temperature: $lessonTemperature
-                )
-            }
-            .padding(.bottom, 16)
-            
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Quiz Writer")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                roleConfiguration(
-                    provider: $quizProvider,
-                    model: $quizModel,
-                    temperature: $quizTemperature
-                )
-            }
-            .padding(.bottom, 16)
-            
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Demo Writer")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text("Creates optional interactive demos when meaningful.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                roleConfiguration(
-                    provider: $demoProvider,
-                    model: $demoModel,
-                    temperature: $demoTemperature
-                )
-            }
-            .padding(.bottom, 8)
         }
     }
     
@@ -574,47 +367,6 @@ struct GenerationView: View {
         }
     }
     
-    private func roleConfiguration(provider: Binding<LLMProvider>, model: Binding<String>, temperature: Binding<Double>) -> some View {
-        Group {
-            Picker("Provider", selection: provider) {
-                ForEach(availableProviders, id: \.self) { p in
-                    Text(p.displayName).tag(p)
-                }
-            }
-            .onChange(of: provider.wrappedValue) { oldValue, newValue in
-                // Reset model to provider's default when switching providers
-                if oldValue != newValue {
-                    model.wrappedValue = defaultModel(for: newValue)
-                }
-            }
-            
-            if provider.wrappedValue == .custom {
-                TextField("Base URL", text: $customBaseURL)
-                    .textContentType(.URL)
-                    .autocapitalization(.none)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                
-                TextField("Model", text: $customModel)
-                    .autocapitalization(.none)
-                    .autocorrectionDisabled()
-            } else {
-                TextField("Model", text: model)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-            
-            HStack {
-                Text("Temperature")
-                Spacer()
-                Text(String(format: "%.1f", temperature.wrappedValue))
-                    .foregroundStyle(.secondary)
-            }
-            
-            Slider(value: temperature, in: 0.0...2.0, step: 0.1)
-                .tint(.teal)
-        }
-    }
     
     private var canStartPlanning: Bool {
         // Check if any providers configured
@@ -622,17 +374,13 @@ struct GenerationView: View {
             return false
         }
         
-        // Check for API key
-        guard let key = try? keyStore.getKey(for: plannerProvider), key != nil else {
+        // Check if planner role has valid config
+        do {
+            let _ = try roleConfig.getLLMConfig(for: .planner)
+            return true
+        } catch {
             return false
         }
-        
-        // If custom provider, also need base URL and model
-        if plannerProvider == .custom {
-            return !customBaseURL.isEmpty && !customModel.isEmpty
-        }
-        
-        return true
     }
     
     private var costShapeCue: String {
@@ -671,85 +419,37 @@ struct GenerationView: View {
     }
     
     private var canContinueGeneration: Bool {
-        // Check if lesson, quiz, and demo providers have keys
-        guard let lessonKey = try? keyStore.getKey(for: lessonProvider), lessonKey != nil else {
+        // Check if all role configs are valid
+        do {
+            let _ = try roleConfig.getLLMConfig(for: .lessons)
+            let _ = try roleConfig.getLLMConfig(for: .quizzes)
+            let _ = try roleConfig.getLLMConfig(for: .demos)
+            return true
+        } catch {
             return false
         }
-        guard let quizKey = try? keyStore.getKey(for: quizProvider), quizKey != nil else {
-            return false
-        }
-        guard let demoKey = try? keyStore.getKey(for: demoProvider), demoKey != nil else {
-            return false
-        }
-        
-        // If custom providers, also need base URL and model
-        if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-            return false
-        }
-        if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-            return false
-        }
-        if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-            return false
-        }
-        
-        return true
     }
     
     private func startPlanning() {
         do {
-            let plannerKey = try keyStore.getKey(for: plannerProvider)
-            guard let plannerKey else {
-                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
-                showingError = true
-                return
-            }
+            let plannerConfig = try roleConfig.getLLMConfig(for: .planner, temperature: 0.7)
             
-            // Validate custom endpoint config
-            if plannerProvider == .custom {
-                guard !customBaseURL.isEmpty else {
-                    errorMessage = "Custom endpoint needs a base URL. Check Settings to configure"
-                    showingError = true
-                    return
-                }
-                guard !customModel.isEmpty else {
-                    errorMessage = "Custom endpoint needs a model name. Check Settings to configure"
-                    showingError = true
-                    return
-                }
-            }
-            
-            let effectiveModel = plannerProvider == .custom ? customModel : plannerModel
-            let effectiveBaseURL = plannerProvider == .custom ? customBaseURL : nil
+            // Lesson/quiz/demo configs will be set later during continueGeneration
+            // For now, use empty placeholders
+            let dummyConfig = LLMConfiguration(
+                provider: roleConfig.globalProvider,
+                model: roleConfig.globalModel,
+                apiKey: "",
+                temperature: 0.7
+            )
             
             let request = GenerationRequest(
                 topic: topic,
                 locale: locale,
-                plannerConfig: LLMConfiguration(
-                    provider: plannerProvider,
-                    model: effectiveModel,
-                    apiKey: plannerKey,
-                    temperature: plannerTemperature,
-                    customBaseURL: effectiveBaseURL
-                ),
-                lessonWriterConfig: LLMConfiguration(
-                    provider: lessonProvider,
-                    model: lessonModel,
-                    apiKey: "",
-                    temperature: lessonTemperature
-                ),
-                quizWriterConfig: LLMConfiguration(
-                    provider: quizProvider,
-                    model: quizModel,
-                    apiKey: "",
-                    temperature: quizTemperature
-                ),
-                demoWriterConfig: LLMConfiguration(
-                    provider: demoProvider,
-                    model: demoModel,
-                    apiKey: "",
-                    temperature: demoTemperature
-                ),
+                plannerConfig: plannerConfig,
+                lessonWriterConfig: dummyConfig,
+                quizWriterConfig: dummyConfig,
+                demoWriterConfig: dummyConfig,
                 generateUnitIds: nil,
                 knowledgeLevel: knowledgeLevel,
                 depthLevel: depthLevel,
@@ -769,106 +469,25 @@ struct GenerationView: View {
     
     private func continueGeneration(selectedUnitIds: Set<String>) {
         do {
-            // Validate all required keys present
+            // Validate all required configs present
             guard canContinueGeneration else {
-                errorMessage = "Some API keys are missing. Open Settings to add them"
+                errorMessage = "Some API keys or models are missing. Open Settings → Generate to configure"
                 showingError = true
                 return
             }
             
-            let lessonKey = try keyStore.getKey(for: lessonProvider)
-            guard let lessonKey else {
-                errorMessage = "Add your \(lessonProvider.displayName) API key in Settings to continue"
-                showingError = true
-                return
-            }
-            
-            let quizKey = try keyStore.getKey(for: quizProvider)
-            guard let quizKey else {
-                errorMessage = "Add your \(quizProvider.displayName) API key in Settings to continue"
-                showingError = true
-                return
-            }
-            
-            let demoKey = try keyStore.getKey(for: demoProvider)
-            guard let demoKey else {
-                errorMessage = "Add your \(demoProvider.displayName) API key in Settings to continue"
-                showingError = true
-                return
-            }
-            
-            let plannerKey = try keyStore.getKey(for: plannerProvider)
-            guard let plannerKey else {
-                errorMessage = "Add your \(plannerProvider.displayName) API key in Settings to continue"
-                showingError = true
-                return
-            }
-            
-            // Validate custom endpoints if used
-            if lessonProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint needs configuration. Check Settings"
-                showingError = true
-                return
-            }
-            if quizProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint needs configuration. Check Settings"
-                showingError = true
-                return
-            }
-            if demoProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint needs configuration. Check Settings"
-                showingError = true
-                return
-            }
-            if plannerProvider == .custom && (customBaseURL.isEmpty || customModel.isEmpty) {
-                errorMessage = "Custom endpoint needs configuration. Check Settings"
-                showingError = true
-                return
-            }
-            
-            let plannerEffectiveModel = plannerProvider == .custom ? customModel : plannerModel
-            let plannerEffectiveBaseURL = plannerProvider == .custom ? customBaseURL : nil
-            
-            let lessonEffectiveModel = lessonProvider == .custom ? customModel : lessonModel
-            let lessonEffectiveBaseURL = lessonProvider == .custom ? customBaseURL : nil
-            
-            let quizEffectiveModel = quizProvider == .custom ? customModel : quizModel
-            let quizEffectiveBaseURL = quizProvider == .custom ? customBaseURL : nil
-            
-            let demoEffectiveModel = demoProvider == .custom ? customModel : demoModel
-            let demoEffectiveBaseURL = demoProvider == .custom ? customBaseURL : nil
+            let plannerConfig = try roleConfig.getLLMConfig(for: .planner, temperature: 0.7)
+            let lessonConfig = try roleConfig.getLLMConfig(for: .lessons, temperature: 0.7)
+            let quizConfig = try roleConfig.getLLMConfig(for: .quizzes, temperature: 0.7)
+            let demoConfig = try roleConfig.getLLMConfig(for: .demos, temperature: 0.7)
             
             let request = GenerationRequest(
                 topic: topic,
                 locale: locale,
-                plannerConfig: LLMConfiguration(
-                    provider: plannerProvider,
-                    model: plannerEffectiveModel,
-                    apiKey: plannerKey,
-                    temperature: plannerTemperature,
-                    customBaseURL: plannerEffectiveBaseURL
-                ),
-                lessonWriterConfig: LLMConfiguration(
-                    provider: lessonProvider,
-                    model: lessonEffectiveModel,
-                    apiKey: lessonKey,
-                    temperature: lessonTemperature,
-                    customBaseURL: lessonEffectiveBaseURL
-                ),
-                quizWriterConfig: LLMConfiguration(
-                    provider: quizProvider,
-                    model: quizEffectiveModel,
-                    apiKey: quizKey,
-                    temperature: quizTemperature,
-                    customBaseURL: quizEffectiveBaseURL
-                ),
-                demoWriterConfig: LLMConfiguration(
-                    provider: demoProvider,
-                    model: demoEffectiveModel,
-                    apiKey: demoKey,
-                    temperature: demoTemperature,
-                    customBaseURL: demoEffectiveBaseURL
-                ),
+                plannerConfig: plannerConfig,
+                lessonWriterConfig: lessonConfig,
+                quizWriterConfig: quizConfig,
+                demoWriterConfig: demoConfig,
                 generateUnitIds: selectedUnitIds.isEmpty ? nil : Array(selectedUnitIds),
                 knowledgeLevel: knowledgeLevel,
                 depthLevel: depthLevel,
