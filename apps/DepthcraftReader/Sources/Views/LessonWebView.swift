@@ -15,12 +15,27 @@ struct ExplainSheet: Identifiable {
     }
 }
 
+struct HighlightAction: Identifiable {
+    let id = UUID()
+    let highlightId: String
+    let text: String
+    
+    enum ActionType {
+        case explain
+        case discuss
+        case remove
+    }
+}
+
 struct LessonWebView: UIViewRepresentable {
     let html: String
     let explainAnchors: [LessonMeta.Anchor]
     let lessonContext: ExplainSheet.LessonContext
     let isOnline: Bool
     let glossService: GlossService
+    let highlights: [HighlightNote]
+    let onHighlightSaved: (HighlightNote) -> Void
+    let onHighlightAction: (HighlightAction) -> Void
     let onScrolledToEnd: () -> Void
     @Binding var explainSheet: ExplainSheet?
 
@@ -40,6 +55,7 @@ struct LessonWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "explainTap")
         contentController.add(context.coordinator, name: "paintSelection")
         contentController.add(context.coordinator, name: "clearPaint")
+        contentController.add(context.coordinator, name: "highlightTap")
         
         // Inject paint selection script
         let paintScript = WKUserScript(
@@ -54,7 +70,7 @@ struct LessonWebView: UIViewRepresentable {
                 // Create floating capsule
                 const capsule = document.createElement('div');
                 capsule.id = 'explain-capsule';
-                capsule.textContent = 'Release to explain';
+                capsule.textContent = 'Release to highlight';
                 capsule.style.cssText = `
                     position: fixed;
                     top: 50%;
@@ -97,8 +113,16 @@ struct LessonWebView: UIViewRepresentable {
                         background-color: rgba(20, 184, 166, 0.3);
                         border-radius: 2px;
                     }
+                    .saved-highlight {
+                        background-color: rgba(20, 184, 166, 0.3);
+                        border-radius: 2px;
+                        cursor: pointer;
+                    }
                 `;
                 document.head.appendChild(style);
+                
+                // Store saved highlights
+                let savedHighlights = [];
                 
                 // Apply teal ink highlight using CSS Highlight API (no DOM mutation)
                 function applyPaintHighlight(range) {
@@ -203,13 +227,27 @@ struct LessonWebView: UIViewRepresentable {
                     return range;
                 }
                 
-                // Handle baked explain terms
+                // Handle baked explain terms and saved highlights
                 document.addEventListener('click', function(e) {
-                    const target = e.target.closest('.explain-term');
-                    if (target) {
+                    // Check for saved highlight tap
+                    const highlightTarget = e.target.closest('.saved-highlight');
+                    if (highlightTarget) {
                         e.preventDefault();
-                        const anchorId = target.getAttribute('data-anchor-id');
-                        const term = target.textContent;
+                        const highlightId = highlightTarget.getAttribute('data-highlight-id');
+                        const text = highlightTarget.textContent;
+                        window.webkit.messageHandlers.highlightTap.postMessage({
+                            highlightId: highlightId,
+                            text: text
+                        });
+                        return;
+                    }
+                    
+                    // Check for baked explain terms
+                    const explainTarget = e.target.closest('.explain-term');
+                    if (explainTarget) {
+                        e.preventDefault();
+                        const anchorId = explainTarget.getAttribute('data-anchor-id');
+                        const term = explainTarget.textContent;
                         window.webkit.messageHandlers.explainTap.postMessage({
                             anchorId: anchorId,
                             term: term
@@ -283,7 +321,29 @@ struct LessonWebView: UIViewRepresentable {
                     if (currentPaintRange) {
                         const text = currentPaintRange.toString().trim();
                         if (text.length > 0 && text.length <= 200) {
-                            window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                            // Generate a unique ID for this highlight
+                            const highlightId = 'hl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                            
+                            // Wrap the range in a span with the highlight ID
+                            try {
+                                const span = document.createElement('span');
+                                span.className = 'saved-highlight';
+                                span.setAttribute('data-highlight-id', highlightId);
+                                currentPaintRange.surroundContents(span);
+                                
+                                // Clear CSS Highlight API after wrapping
+                                if (CSS.highlights) {
+                                    CSS.highlights.clear();
+                                }
+                                
+                                // Send save message to native
+                                window.webkit.messageHandlers.paintSelection.postMessage({ 
+                                    text: text,
+                                    highlightId: highlightId
+                                });
+                            } catch(e) {
+                                console.warn('Failed to wrap highlight:', e);
+                            }
                         }
                     }
                 };
@@ -333,6 +393,62 @@ struct LessonWebView: UIViewRepresentable {
                         lastTapY = touch.clientY;
                     }
                 }, { passive: false });
+                
+                // Restore saved highlights
+                window.restoreSavedHighlights = function(highlightsJson) {
+                    try {
+                        savedHighlights = JSON.parse(highlightsJson);
+                        
+                        // Find and wrap text nodes matching saved highlights
+                        for (const highlight of savedHighlights) {
+                            const walker = document.createTreeWalker(
+                                document.body,
+                                NodeFilter.SHOW_TEXT,
+                                null,
+                                false
+                            );
+                            
+                            let node;
+                            while (node = walker.nextNode()) {
+                                const text = node.textContent;
+                                const index = text.indexOf(highlight.text);
+                                if (index !== -1 && !node.parentElement.classList.contains('saved-highlight')) {
+                                    try {
+                                        const range = document.createRange();
+                                        range.setStart(node, index);
+                                        range.setEnd(node, index + highlight.text.length);
+                                        
+                                        const span = document.createElement('span');
+                                        span.className = 'saved-highlight';
+                                        span.setAttribute('data-highlight-id', highlight.id);
+                                        range.surroundContents(span);
+                                        
+                                        break; // Only wrap first occurrence
+                                    } catch(e) {
+                                        console.warn('Failed to restore highlight:', e);
+                                    }
+                                }
+                            }
+                        }
+                    } catch(e) {
+                        console.error('Failed to parse highlights:', e);
+                    }
+                };
+                
+                // Remove a saved highlight
+                window.removeSavedHighlight = function(highlightId) {
+                    const spans = document.querySelectorAll('.saved-highlight[data-highlight-id="' + highlightId + '"]');
+                    spans.forEach(span => {
+                        const parent = span.parentNode;
+                        if (parent) {
+                            while (span.firstChild) {
+                                parent.insertBefore(span.firstChild, span);
+                            }
+                            parent.removeChild(span);
+                            parent.normalize();
+                        }
+                    });
+                };
             })();
             """,
             injectionTime: .atDocumentEnd,
@@ -358,6 +474,9 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.lessonContext = lessonContext
         context.coordinator.isOnline = isOnline
         context.coordinator.glossService = glossService
+        context.coordinator.highlights = highlights
+        context.coordinator.onHighlightSaved = onHighlightSaved
+        context.coordinator.onHighlightAction = onHighlightAction
         
         return webView
     }
@@ -373,6 +492,9 @@ struct LessonWebView: UIViewRepresentable {
         context.coordinator.lessonContext = lessonContext
         context.coordinator.isOnline = isOnline
         context.coordinator.glossService = glossService
+        context.coordinator.highlights = highlights
+        context.coordinator.onHighlightSaved = onHighlightSaved
+        context.coordinator.onHighlightAction = onHighlightAction
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -385,6 +507,9 @@ struct LessonWebView: UIViewRepresentable {
         var lessonContext: ExplainSheet.LessonContext?
         var isOnline: Bool = false
         var glossService: GlossService?
+        var highlights: [HighlightNote] = []
+        var onHighlightSaved: ((HighlightNote) -> Void)?
+        var onHighlightAction: ((HighlightAction) -> Void)?
         private var hasNotifiedEnd = false
         weak var webView: WKWebView?
         private var offlineToastWorkItem: DispatchWorkItem?
@@ -434,39 +559,17 @@ struct LessonWebView: UIViewRepresentable {
             return false
         }
         
-        private func explainText(_ text: String) {
-            guard let glossService = glossService,
-                  let lessonContext = lessonContext else {
-                return
-            }
+        private func saveHighlight(text: String, highlightId: String) {
+            guard let lessonContext = lessonContext else { return }
             
-            // Check online + BYOK
-            guard isOnline, glossService.hasAPIKey() else {
-                showOfflineToast()
-                clearPaint()
-                return
-            }
+            let highlight = HighlightNote(
+                id: highlightId,
+                lessonId: lessonContext.lessonId,
+                unitId: lessonContext.unitId,
+                text: text
+            )
             
-            Task { @MainActor in
-                do {
-                    let contextString = "\(lessonContext.courseTitle) — \(lessonContext.lessonTitle)"
-                    let gloss = try await glossService.generateGloss(for: text, lessonContext: contextString)
-                    
-                    self.explainSheet?.wrappedValue = ExplainSheet(
-                        term: text,
-                        gloss: gloss,
-                        lessonContext: lessonContext
-                    )
-                    self.clearPaint()
-                } catch {
-                    self.explainSheet?.wrappedValue = ExplainSheet(
-                        term: text,
-                        gloss: "**Error generating explanation:** \(error.localizedDescription)",
-                        lessonContext: lessonContext
-                    )
-                    self.clearPaint()
-                }
-            }
+            onHighlightSaved?(highlight)
         }
         
         private func clearPaint() {
@@ -542,14 +645,26 @@ struct LessonWebView: UIViewRepresentable {
                     self.clearPaint()
                 }
             } else if message.name == "paintSelection" {
-                // Paint selection completed (long-press or double-tap)
+                // Paint selection completed - save highlight
                 guard let body = message.body as? [String: String],
+                      let text = body["text"],
+                      let highlightId = body["highlightId"] else {
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self.saveHighlight(text: text, highlightId: highlightId)
+                }
+            } else if message.name == "highlightTap" {
+                // Saved highlight tapped - show action sheet
+                guard let body = message.body as? [String: String],
+                      let highlightId = body["highlightId"],
                       let text = body["text"] else {
                     return
                 }
                 
                 DispatchQueue.main.async {
-                    self.explainText(text)
+                    self.onHighlightAction?(HighlightAction(highlightId: highlightId, text: text))
                 }
             } else if message.name == "clearPaint" {
                 // Clear paint (tap outside)
@@ -559,6 +674,37 @@ struct LessonWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             checkIfAtEnd(webView.scrollView)
+            restoreSavedHighlights()
+        }
+        
+        private func restoreSavedHighlights() {
+            guard !highlights.isEmpty, let webView = webView else { return }
+            
+            let highlightsJson = highlights.map { highlight in
+                """
+                {"id": "\(highlight.id)", "text": \(escapeJSON(highlight.text))}
+                """
+            }.joined(separator: ", ")
+            
+            let json = "[\(highlightsJson)]"
+            webView.evaluateJavaScript("window.restoreSavedHighlights('\(escapeJavaScript(json))')") { _, error in
+                if let error = error {
+                    print("Failed to restore highlights: \(error)")
+                }
+            }
+        }
+        
+        private func escapeJSON(_ text: String) -> String {
+            let encoded = try? JSONEncoder().encode(text)
+            return String(data: encoded ?? Data(), encoding: .utf8) ?? "\"\""
+        }
+        
+        private func escapeJavaScript(_ text: String) -> String {
+            text.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
