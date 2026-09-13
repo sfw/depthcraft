@@ -317,9 +317,262 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
             source: """
             (function() {
                 // Teal ink paint selection system
-                let paintStartAnchor = null;  // Stable start position (survives DOM mutations)
-                let paintedRange = null;      // Current painted range (for extraction)
+                let paintStartAnchor = null;  // Stable start position (no DOM mutation during gesture)
+                let currentPaintRange = null; // Current range being painted
+                let paintHighlight = null;    // CSS Highlight API highlight
                 let isSelecting = false;
+                
+                // Create floating capsule
+                const capsule = document.createElement('div');
+                capsule.id = 'explain-capsule';
+                capsule.textContent = 'Release to explain';
+                capsule.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(20, 184, 166, 0.95);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    pointer-events: none;
+                    z-index: 10000;
+                    display: none;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                `;
+                document.body.appendChild(capsule);
+                
+                // Add CSS for highlight API
+                const style = document.createElement('style');
+                style.textContent = `
+                    ::highlight(teal-ink-paint) {
+                        background-color: rgba(20, 184, 166, 0.3);
+                        border-radius: 2px;
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                // Apply teal ink highlight using CSS Highlight API (no DOM mutation)
+                function applyPaintHighlight(range) {
+                    if (!range) return;
+                    
+                    currentPaintRange = range.cloneRange();
+                    
+                    // Use CSS Highlight API (no DOM mutation during gesture)
+                    if (CSS.highlights) {
+                        paintHighlight = new Highlight(currentPaintRange);
+                        CSS.highlights.set('teal-ink-paint', paintHighlight);
+                    } else {
+                        // Fallback for older browsers: use inline span (only during gesture)
+                        clearSpanHighlights();
+                        const span = document.createElement('span');
+                        span.className = 'teal-ink-paint-fallback';
+                        span.style.cssText = `
+                            background-color: rgba(20, 184, 166, 0.3);
+                            border-radius: 2px;
+                            padding: 2px 0;
+                        `;
+                        try {
+                            const fallbackRange = range.cloneRange();
+                            fallbackRange.surroundContents(span);
+                        } catch(e) {
+                            // Ignore fallback errors
+                        }
+                    }
+                }
+                
+                function clearSpanHighlights() {
+                    // Only clear span fallback highlights (not final wrapped span)
+                    const painted = document.querySelectorAll('.teal-ink-paint-fallback');
+                    painted.forEach(span => {
+                        const parent = span.parentNode;
+                        if (parent) {
+                            while (span.firstChild) {
+                                parent.insertBefore(span.firstChild, span);
+                            }
+                            parent.removeChild(span);
+                        }
+                    });
+                }
+                
+                function clearPaint() {
+                    // Clear CSS Highlight API
+                    if (CSS.highlights) {
+                        CSS.highlights.clear();
+                    }
+                    // Clear fallback spans
+                    clearSpanHighlights();
+                    // Clear any final wrapped spans from previous gestures
+                    const finalSpans = document.querySelectorAll('.teal-ink-paint');
+                    finalSpans.forEach(span => {
+                        const parent = span.parentNode;
+                        if (parent) {
+                            while (span.firstChild) {
+                                parent.insertBefore(span.firstChild, span);
+                            }
+                            parent.removeChild(span);
+                            parent.normalize();
+                        }
+                    });
+                    currentPaintRange = null;
+                    paintStartAnchor = null;
+                    paintHighlight = null;
+                }
+                
+                function getWordBoundaryRange(node, offset) {
+                    if (node.nodeType !== Node.TEXT_NODE) return null;
+                    
+                    const text = node.textContent;
+                    const wordPattern = /\b[\w']+\b/g;
+                    let match;
+                    
+                    while ((match = wordPattern.exec(text)) !== null) {
+                        if (offset >= match.index && offset <= match.index + match[0].length) {
+                            const range = document.createRange();
+                            range.setStart(node, match.index);
+                            range.setEnd(node, match.index + match[0].length);
+                            return range;
+                        }
+                    }
+                    return null;
+                }
+                
+                function expandToWordBoundaries(startNode, startOffset, endNode, endOffset) {
+                    const range = document.createRange();
+                    
+                    // Find word boundaries
+                    let startRange = getWordBoundaryRange(startNode, startOffset);
+                    let endRange = getWordBoundaryRange(endNode, endOffset);
+                    
+                    if (startRange && endRange) {
+                        range.setStart(startRange.startContainer, startRange.startOffset);
+                        range.setEnd(endRange.endContainer, endRange.endOffset);
+                    } else {
+                        range.setStart(startNode, startOffset);
+                        range.setEnd(endNode, endOffset);
+                    }
+                    
+                    return range;
+                }
+                
+                // Handle baked explain terms
+                document.addEventListener('click', function(e) {
+                    const target = e.target.closest('.explain-term');
+                    if (target) {
+                        e.preventDefault();
+                        const anchorId = target.getAttribute('data-anchor-id');
+                        const term = target.textContent;
+                        window.webkit.messageHandlers.explainTap.postMessage({
+                            anchorId: anchorId,
+                            term: term
+                        });
+                    } else {
+                        // Tap outside - clear paint
+                        window.webkit.messageHandlers.clearPaint.postMessage({});
+                    }
+                });
+                
+                // Expose functions for native gesture handling
+                window.startPaintSelection = function(x, y) {
+                    const point = document.elementFromPoint(x, y);
+                    if (!point) return;
+                    
+                    const range = document.caretRangeFromPoint(x, y);
+                    if (!range) return;
+                    
+                    isSelecting = true;
+                    capsule.style.display = 'block';
+                    
+                    const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
+                    if (wordRange) {
+                        // Store stable start position (no DOM mutation yet, so node stays valid)
+                        paintStartAnchor = {
+                            node: wordRange.startContainer,
+                            offset: wordRange.startOffset
+                        };
+                        applyPaintHighlight(wordRange);
+                    }
+                };
+                
+                window.updatePaintSelection = function(x, y) {
+                    if (!isSelecting || !paintStartAnchor) return;
+                    
+                    const currentRange = document.caretRangeFromPoint(x, y);
+                    if (!currentRange) return;
+                    
+                    // No DOM mutation during gesture, so nodes stay valid
+                    try {
+                        // Create fresh range from stable start to current end (word boundaries)
+                        const expandedRange = expandToWordBoundaries(
+                            paintStartAnchor.node,
+                            paintStartAnchor.offset,
+                            currentRange.startContainer,
+                            currentRange.startOffset
+                        );
+                        
+                        // Update highlight (no DOM mutation via CSS Highlight API)
+                        applyPaintHighlight(expandedRange);
+                    } catch(e) {
+                        console.warn('Paint update failed:', e);
+                    }
+                };
+                
+                window.endPaintSelection = function() {
+                    isSelecting = false;
+                    capsule.style.display = 'none';
+                    
+                    if (currentPaintRange) {
+                        const text = currentPaintRange.toString().trim();
+                        if (text.length > 0 && text.length <= 200) {
+                            window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                        }
+                    }
+                };
+                
+                window.clearPaintSelection = function() {
+                    isSelecting = false;
+                    capsule.style.display = 'none';
+                    clearPaint();
+                };
+                
+                // Double-tap detection
+                let lastTapTime = 0;
+                let lastTapX = 0;
+                let lastTapY = 0;
+                
+                document.addEventListener('touchstart', function(e) {
+                    const now = Date.now();
+                    const touch = e.touches[0];
+                    
+                    if (now - lastTapTime < 300 && 
+                        Math.abs(touch.clientX - lastTapX) < 20 &&
+                        Math.abs(touch.clientY - lastTapY) < 20) {
+                        
+                        // Double-tap detected
+                        e.preventDefault();
+                        
+                        const range = document.caretRangeFromPoint(touch.clientX, touch.clientY);
+                        if (range) {
+                            const wordRange = getWordBoundaryRange(range.startContainer, range.startOffset);
+                            if (wordRange) {
+                                applyPaintHighlight(wordRange);
+                                const text = wordRange.toString().trim();
+                                if (text.length > 0 && text.length <= 200) {
+                                    window.webkit.messageHandlers.paintSelection.postMessage({ text: text });
+                                }
+                            }
+                        }
+                        
+                        lastTapTime = 0;
+                    } else {
+                        lastTapTime = now;
+                        lastTapX = touch.clientX;
+                        lastTapY = touch.clientY;
+                    }
+                }, { passive: false });
+            })();
                 
                 // Create floating capsule
                 const capsule = document.createElement('div');
