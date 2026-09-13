@@ -83,7 +83,7 @@ class ComplexityAnalyzerService {
         guard let jsonString = JSONExtractor.extractJSON(from: response),
               let jsonData = jsonString.data(using: .utf8),
               let parsed = try? JSONDecoder().decode(ComplexityResponse.self, from: jsonData) else {
-            throw GenerationError.invalidResponse("Could not parse complexity analysis JSON")
+            throw GenerationError.invalidResponse("Complexity Analyzer returned invalid JSON: Could not parse complexity analysis response. Response snippet: \(response.prefix(200))...")
         }
         
         return parsed.anchors.enumerated().map { index, item in

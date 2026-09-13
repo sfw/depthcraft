@@ -123,24 +123,24 @@ class PlannerService: PlannerRole {
         
         // Use robust JSON extraction (same approach as QuizWriter)
         guard let extracted = JSONExtractor.extractJSON(from: response) else {
-            throw GenerationError.invalidResponse("Could not extract valid JSON from response. Response: \(response.prefix(200))...")
+            throw GenerationError.invalidResponse("Planner returned invalid JSON: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
         }
         
         // Validate JSON structure before decoding
         let structureValidation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
         guard structureValidation.isValid else {
-            throw GenerationError.invalidResponse("Invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
+            throw GenerationError.invalidResponse("Planner returned invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
         }
         
         guard let data = extracted.data(using: .utf8) else {
-            throw GenerationError.invalidResponse("Could not encode extracted JSON as UTF-8")
+            throw GenerationError.invalidResponse("Planner JSON encoding failed: Could not encode extracted JSON as UTF-8")
         }
         
         do {
             let curriculum = try JSONDecoder().decode(Curriculum.self, from: data)
             return curriculum
         } catch {
-            throw GenerationError.invalidResponse("Invalid curriculum JSON: \(error.localizedDescription). JSON snippet: \(extracted.prefix(300))...")
+            throw GenerationError.invalidResponse("Planner JSON decode failed: \(error.localizedDescription). JSON snippet: \(extracted.prefix(300))...")
         }
     }
 }

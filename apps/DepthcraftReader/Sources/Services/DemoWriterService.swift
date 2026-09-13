@@ -116,16 +116,16 @@ class DemoWriterService: DemoWriterRole {
     
     private func decodeDemoResponse(_ response: String, lessonId: String) throws -> DemoWriterOutput? {
         guard let extracted = JSONExtractor.extractJSON(from: response) else {
-            throw GenerationError.invalidResponse("Could not extract valid JSON from demo writer response")
+            throw GenerationError.invalidResponse("Demo Writer returned invalid JSON: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
         }
         
         let structureValidation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
         guard structureValidation.isValid else {
-            throw GenerationError.invalidResponse("Invalid JSON structure: \(structureValidation.errorMessage ?? "unknown")")
+            throw GenerationError.invalidResponse("Demo Writer returned invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
         }
         
         guard let data = extracted.data(using: .utf8) else {
-            throw GenerationError.invalidResponse("Could not encode extracted JSON as UTF-8")
+            throw GenerationError.invalidResponse("Demo Writer JSON encoding failed: Could not encode extracted JSON as UTF-8")
         }
         
         do {

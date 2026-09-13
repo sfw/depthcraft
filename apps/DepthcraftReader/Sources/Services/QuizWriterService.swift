@@ -88,23 +88,23 @@ class QuizWriterService: QuizWriterRole {
     private func decodeQuizResponse(_ response: String, expectedLessonId: String) throws -> QuizDocument {
         // Attempt 1: Try to extract JSON using robust extractor
         guard let extracted = JSONExtractor.extractJSON(from: response) else {
-            throw GenerationError.invalidResponse("Could not extract valid JSON from response. Response: \(response.prefix(200))...")
+            throw GenerationError.invalidResponse("Quiz Writer returned invalid JSON: Could not extract valid JSON from response. Response snippet: \(response.prefix(200))...")
         }
         
         // Validate JSON structure before decoding
         let structureValidation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
         guard structureValidation.isValid else {
-            throw GenerationError.invalidResponse("Invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
+            throw GenerationError.invalidResponse("Quiz Writer returned invalid JSON structure: \(structureValidation.errorMessage ?? "unknown"). Extracted: \(extracted.prefix(200))...")
         }
         
         // Pre-decode validation: check for required fields
         if let validationError = validateQuizJSONFields(extracted) {
-            throw GenerationError.invalidResponse("Missing or invalid required fields: \(validationError). JSON: \(extracted.prefix(300))...")
+            throw GenerationError.invalidResponse("Quiz Writer JSON missing required fields: \(validationError). JSON: \(extracted.prefix(300))...")
         }
         
         // Attempt to decode
         guard let data = extracted.data(using: .utf8) else {
-            throw GenerationError.invalidResponse("Could not encode extracted JSON as UTF-8")
+            throw GenerationError.invalidResponse("Quiz Writer JSON encoding failed: Could not encode extracted JSON as UTF-8")
         }
         
         do {

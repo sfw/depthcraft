@@ -8,7 +8,8 @@ struct JSONExtractor {
     /// Tries multiple strategies to find valid JSON:
     /// 1. Clean obvious markdown fences and try the whole content
     /// 2. Find JSON boundaries (first '{' or '[' to last '}' or ']')
-    /// 3. Try to find JSON objects/arrays within the text
+    /// 3. Try multiple JSON candidates if response contains several objects
+    /// 4. Try the original trimmed content as-is
     static func extractJSON(from response: String) -> String? {
         let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -16,21 +17,30 @@ struct JSONExtractor {
         
         // Strategy 1: Clean markdown fences and try the whole content
         if let cleaned = cleanMarkdownFences(trimmed) {
-            if isLikelyValidJSON(cleaned) {
+            if isLikelyValidJSON(cleaned) && validatesParseable(cleaned) {
                 return cleaned
             }
         }
         
         // Strategy 2: Find JSON boundaries (first open to last close bracket)
         if let extracted = extractByBoundaries(trimmed) {
-            if isLikelyValidJSON(extracted) {
+            if isLikelyValidJSON(extracted) && validatesParseable(extracted) {
                 return extracted
             }
         }
         
         // Strategy 3: Try the original trimmed content as-is
-        if isLikelyValidJSON(trimmed) {
+        if isLikelyValidJSON(trimmed) && validatesParseable(trimmed) {
             return trimmed
+        }
+        
+        // Strategy 4: Extract multiple JSON candidates and try each
+        if let candidates = extractMultipleCandidates(trimmed) {
+            for candidate in candidates {
+                if isLikelyValidJSON(candidate) && validatesParseable(candidate) {
+                    return candidate
+                }
+            }
         }
         
         return nil
@@ -109,6 +119,81 @@ struct JSONExtractor {
         let closeBrackets = trimmed.filter { $0 == "]" }.count
         
         return openBraces == closeBraces && openBrackets == closeBrackets
+    }
+    
+    /// Validate that a candidate string actually parses as JSON
+    private static func validatesParseable(_ text: String) -> Bool {
+        guard let data = text.data(using: .utf8) else {
+            return false
+        }
+        
+        do {
+            _ = try JSONSerialization.jsonObject(with: data, options: [])
+            return true
+        } catch {
+            return false
+        }
+    }
+    
+    /// Extract multiple JSON candidates from text that may contain several JSON objects
+    /// Returns candidates in order of likelihood (largest/outermost first)
+    private static func extractMultipleCandidates(_ text: String) -> [String]? {
+        var candidates: [String] = []
+        
+        // Find all potential JSON object/array boundaries
+        var depth = 0
+        var startIndex: String.Index?
+        var inString = false
+        var escapeNext = false
+        
+        for (index, char) in text.enumerated() {
+            let stringIndex = text.index(text.startIndex, offsetBy: index)
+            
+            // Reset string state on newline (JSON strings can't contain unescaped newlines)
+            // If we're in a string at a newline, the JSON is malformed — abandon it
+            if char == "\n" || char == "\r" {
+                if inString && !escapeNext {
+                    // Malformed JSON with unclosed string - abandon this candidate
+                    inString = false
+                    depth = 0
+                    startIndex = nil
+                }
+                escapeNext = false
+            }
+            
+            // Track string boundaries to avoid counting brackets inside strings
+            if char == "\"" && !escapeNext {
+                inString.toggle()
+            }
+            
+            if char == "\\" && !escapeNext {
+                escapeNext = true
+                continue
+            } else {
+                escapeNext = false
+            }
+            
+            if inString {
+                continue
+            }
+            
+            // Track bracket depth
+            if char == "{" || char == "[" {
+                if depth == 0 {
+                    startIndex = stringIndex
+                }
+                depth += 1
+            } else if char == "}" || char == "]" {
+                depth -= 1
+                if depth == 0, let start = startIndex {
+                    let candidate = String(text[start...stringIndex])
+                    candidates.append(candidate)
+                    startIndex = nil
+                }
+            }
+        }
+        
+        return candidates.isEmpty ? nil : candidates
     }
     
     /// Try to decode and validate JSON structure, returning a diagnostic message if invalid

@@ -2034,6 +2034,195 @@ final class JSONExtractionTests: XCTestCase {
         let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
         XCTAssertTrue(validation.isValid)
     }
+    
+    func testExtractMultipleCandidatesFirstValid() {
+        // Multiple JSON objects - first one is valid
+        let input = """
+        Some intro text.
+        
+        {"valid": "first", "data": "here"}
+        
+        More text between.
+        
+        {"another": "object"}
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertTrue(extracted!.contains("\"valid\""))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractMultipleCandidatesFirstInvalid() throws {
+        // Multiple JSON objects - first is broken, second is valid
+        let input = """
+        Here's some text and an incomplete JSON:
+        {"broken": "missing closing
+        
+        But here's a valid one:
+        {"schemaVersion": "0.1.0", "lessonId": "test", "items": []}
+        
+        And some trailing text.
+        """
+        
+        let extracted = try XCTUnwrap(JSONExtractor.extractJSON(from: input), "Should extract the valid JSON candidate")
+        XCTAssertTrue(extracted.contains("\"schemaVersion\""), "Should extract the second valid JSON")
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractProseWrappedJSON() {
+        // LLM returns prose, then JSON, then more prose (common pattern)
+        let input = """
+        I'll create a quiz for this lesson. Here's the JSON output:
+        
+        {
+          "schemaVersion": "0.1.0",
+          "lessonId": "test-lesson",
+          "items": [
+            {
+              "id": "q1",
+              "type": "mc",
+              "prompt": "Test question?",
+              "choices": [
+                {"id": "a", "text": "Answer A"},
+                {"id": "b", "text": "Answer B"}
+              ],
+              "correctId": "a",
+              "explain": "Explanation here"
+            }
+          ]
+        }
+        
+        Let me know if you need any changes to the quiz!
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertFalse(extracted!.contains("I'll create"), "Should not include leading prose")
+        XCTAssertFalse(extracted!.contains("Let me know"), "Should not include trailing prose")
+        XCTAssertTrue(extracted!.contains("\"schemaVersion\""), "Should contain JSON content")
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractJSONWithInterleavedText() {
+        // Text, JSON, text pattern
+        let input = """
+        Based on the lesson, here's the curriculum:
+        
+        {
+          "schemaVersion": "0.1.0",
+          "status": "draft",
+          "units": [],
+          "lessons": {}
+        }
+        
+        This curriculum covers the main topics.
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertTrue(extracted!.contains("\"schemaVersion\""))
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractFencedJSONWithProseWrapper() {
+        // Fenced JSON with prose before and after (Scott's reported bug scenario)
+        let input = """
+        Here's the curriculum plan in JSON format:
+        
+        ```json
+        {
+          "schemaVersion": "0.1.0",
+          "status": "draft",
+          "units": [
+            {
+              "id": "u01-foundations",
+              "title": "Foundations",
+              "order": 1,
+              "lessonIds": ["l01-intro"]
+            }
+          ],
+          "lessons": {
+            "l01-intro": {
+              "id": "l01-intro",
+              "unitId": "u01-foundations",
+              "title": "Introduction",
+              "order": 1,
+              "status": "draft",
+              "estimatedMinutes": 10
+            }
+          }
+        }
+        ```
+        
+        This plan covers the essential topics for the course.
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted, "Should extract JSON from fenced block with prose wrapper")
+        XCTAssertFalse(extracted!.contains("```"), "Should remove markdown fences")
+        XCTAssertFalse(extracted!.contains("Here's the curriculum"), "Should not include leading prose")
+        XCTAssertFalse(extracted!.contains("This plan covers"), "Should not include trailing prose")
+        XCTAssertTrue(extracted!.contains("\"schemaVersion\""), "Should contain JSON content")
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+        
+        // Verify it can decode to Curriculum
+        guard let data = extracted!.data(using: .utf8) else {
+            XCTFail("Could not encode as UTF-8")
+            return
+        }
+        
+        XCTAssertNoThrow(try JSONDecoder().decode(Curriculum.self, from: data))
+    }
+    
+    func testExtractHandlesStringEscapesInCandidates() {
+        // JSON with escaped quotes inside strings (shouldn't confuse bracket counting)
+        let input = """
+        Some text here.
+        
+        {
+          "prompt": "What is the \\"correct\\" answer?",
+          "explain": "The answer is \\"yes\\" because...",
+          "data": "Value with \\n newline"
+        }
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        XCTAssertTrue(extracted!.contains("\\\"correct\\\""), "Should preserve escaped quotes")
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
+    
+    func testExtractIgnoresBracketsInStrings() {
+        // JSON with brackets inside string values (shouldn't confuse extraction)
+        let input = """
+        Here's some data:
+        
+        {
+          "code": "const obj = {key: 'value'};",
+          "array": "[1, 2, 3]",
+          "nested": "outer {inner {deep}}"
+        }
+        """
+        
+        let extracted = JSONExtractor.extractJSON(from: input)
+        XCTAssertNotNil(extracted)
+        
+        let validation = JSONExtractor.validateJSONStructure(extracted!, expectedTopLevelType: .object)
+        XCTAssertTrue(validation.isValid)
+    }
 }
 
 // MARK: - Planner Configuration Tests
