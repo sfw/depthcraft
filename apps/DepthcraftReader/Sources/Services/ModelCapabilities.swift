@@ -24,21 +24,19 @@ struct ModelCapabilities {
     private static func anthropicMaxOutput(model: String) -> Int {
         let normalized = model.lowercased()
         
-        // Claude 3.5 and newer (Sonnet, Opus, Haiku variants)
-        // Anthropic max_tokens is 8192 for most Claude 3+ models (not total context, just output)
-        if normalized.contains("claude-3") || 
-           normalized.contains("claude-4") ||
-           normalized.contains("claude-5") {
+        // Claude 3.x series - KNOWN hard max of 8192
+        if normalized.contains("claude-3") {
             return 8192
         }
         
-        // Legacy Claude 2 models
+        // Legacy Claude 2 models - KNOWN hard max of 4096
         if normalized.contains("claude-2") {
             return 4096
         }
         
-        // Fallback for unknown Anthropic models
-        return 8192
+        // High fallback for unknown/newer Claude (4, 5, etc.)
+        // Never invent a low "known" max for models we're unsure about
+        return 32768
     }
     
     // MARK: - OpenAI
