@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @EnvironmentObject private var store: CourseStore
+    @Environment(\.navigationPath) private var navigationPath
     @State private var packages: [LibraryPackageMetadata] = []
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
@@ -90,8 +91,8 @@ struct LibraryView: View {
                             .foregroundStyle(.secondary)
                         
                         HStack(spacing: 12) {
-                            NavigationLink {
-                                GenerationView()
+                            Button {
+                                navigationPath.wrappedValue.append(.generation(extendFromPackageURL: nil))
                             } label: {
                                 Label("Generate", systemImage: "sparkles")
                                     .font(.subheadline)
