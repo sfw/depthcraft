@@ -687,11 +687,6 @@ class GenerationOrchestrator: ObservableObject {
                 progress.phase = .packaging
                 progress.currentItem = "Packaging course"
                 progress.completedItems = actualTotalLessons
-            } else {
-                // All lessons succeeded - normal happy path
-                progress.phase = .packaging
-                progress.currentItem = "Packaging course"
-                progress.completedItems = actualTotalLessons
                 
                 // Slice curriculum to only selected units before packaging
                 // Product lock: built package = only what learner can study (no draft stubs)
@@ -1135,8 +1130,10 @@ class GenerationOrchestrator: ObservableObject {
     /// Update per-lesson stage in progress dictionary
     private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
         await MainActor.run {
-            // Only update if we're still in a generation phase (not failed/cancelled)
-            if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .writingDemos {
+            // Only update if we're in an active phase where lessonProgress is valid
+            // Allow updates during generation (.writingLessons/Quizzes/Demos) and after partial completion (.completed with failures)
+            let allowedPhases: Set<GenerationPhase> = [.writingLessons, .writingQuizzes, .writingDemos, .completed]
+            if allowedPhases.contains(progress.phase) {
                 if var lessonProgress = progress.lessonProgress[lessonId] {
                     lessonProgress.stage = stage
                     lessonProgress.error = error
