@@ -3,6 +3,7 @@ import SwiftUI
 /// Settings section for configuring global LLM and per-role overrides
 struct GenerateSettingsView: View {
     @StateObject private var apiKeyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @StateObject private var roleConfig: LLMRoleConfigService
     @StateObject private var modelService: LLMModelService
     
@@ -13,9 +14,11 @@ struct GenerateSettingsView: View {
     
     init() {
         let store = APIKeyStore()
+        let customStore = CustomEndpointsStore()
         _apiKeyStore = StateObject(wrappedValue: store)
-        _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store))
-        _modelService = StateObject(wrappedValue: LLMModelService(apiKeyStore: store))
+        _customEndpointsStore = StateObject(wrappedValue: customStore)
+        _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store, customEndpointsStore: customStore))
+        _modelService = StateObject(wrappedValue: LLMModelService(apiKeyStore: store, customEndpointsStore: customStore))
     }
     
     enum ModelPickerTarget: Identifiable {
@@ -32,10 +35,17 @@ struct GenerateSettingsView: View {
     
     struct RoleCustomModelPicker: Identifiable {
         let role: GenerationRole
-        let provider: LLMProvider
+        let selection: ProviderSelection
         let currentModel: String
         
-        var id: String { "\(role.rawValue)-\(provider.rawValue)" }
+        var id: String {
+            switch selection {
+            case .fixed(let provider):
+                return "\(role.rawValue)-\(provider.rawValue)"
+            case .customEndpoint(let endpointId):
+                return "\(role.rawValue)-\(endpointId.uuidString)"
+            }
+        }
     }
     
     var body: some View {
@@ -47,16 +57,19 @@ struct GenerateSettingsView: View {
         .onAppear {
             globalTemperature = apiKeyStore.getGlobalTemperature()
             showTemperatureControl = globalTemperature != nil
+            // Perform migration on first appearance
+            customEndpointsStore.migrateLegacyCustomEndpoint(from: apiKeyStore)
         }
         .sheet(item: $modelPickerTarget) { target in
             modelPickerSheet(for: target)
         }
         .sheet(item: $roleCustomModelPicker) { picker in
-            ModelPickerView(
-                provider: picker.provider,
-                currentModel: picker.currentModel
+            ProviderAwareModelPickerView(
+                selection: picker.selection,
+                currentModel: picker.currentModel,
+                customEndpointsStore: customEndpointsStore
             ) { selectedModel in
-                roleConfig.setRoleOverride(for: picker.role, provider: picker.provider, model: selectedModel)
+                roleConfig.setRoleOverride(for: picker.role, selection: picker.selection, model: selectedModel)
             }
         }
     }
@@ -64,16 +77,18 @@ struct GenerateSettingsView: View {
     private var globalSection: some View {
         Section {
             // Provider picker
-            Picker("Provider", selection: $roleConfig.globalProvider) {
-                ForEach(availableProviders, id: \.self) { provider in
-                    Text(provider.displayName).tag(provider)
+            Picker("Provider", selection: Binding(
+                get: { roleConfig.globalSelection },
+                set: { newSelection in
+                    if newSelection != roleConfig.globalSelection {
+                        // Switch to default model for new provider
+                        let defaultModel = defaultModel(for: newSelection)
+                        roleConfig.setGlobalConfig(selection: newSelection, model: defaultModel)
+                    }
                 }
-            }
-            .onChange(of: roleConfig.globalProvider) { oldValue, newValue in
-                if oldValue != newValue {
-                    // Switch to default model for new provider
-                    let defaultModel = defaultModel(for: newValue)
-                    roleConfig.setGlobalConfig(provider: newValue, model: defaultModel)
+            )) {
+                ForEach(availableSelections, id: \.self) { selection in
+                    Text(displayName(for: selection)).tag(selection)
                 }
             }
             
@@ -174,7 +189,7 @@ struct GenerateSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if let override = roleConfig.getRoleOverride(for: role) {
-                    Text("\(override.provider.displayName): \(override.model)")
+                    Text("\(displayName(for: override.selection)): \(override.model)")
                         .font(.caption)
                         .foregroundStyle(.teal)
                 }
@@ -209,11 +224,12 @@ struct GenerateSettingsView: View {
     private func modelPickerSheet(for target: ModelPickerTarget) -> some View {
         switch target {
         case .global:
-            ModelPickerView(
-                provider: roleConfig.globalProvider,
-                currentModel: roleConfig.globalModel
+            ProviderAwareModelPickerView(
+                selection: roleConfig.globalSelection,
+                currentModel: roleConfig.globalModel,
+                customEndpointsStore: customEndpointsStore
             ) { selectedModel in
-                roleConfig.setGlobalConfig(provider: roleConfig.globalProvider, model: selectedModel)
+                roleConfig.setGlobalConfig(selection: roleConfig.globalSelection, model: selectedModel)
             }
             
         case .role(let role):
@@ -233,7 +249,7 @@ struct GenerateSettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Follow global")
                                     .foregroundStyle(.primary)
-                                Text("\(roleConfig.globalProvider.displayName): \(roleConfig.globalModel)")
+                                Text("\(displayName(for: roleConfig.globalSelection)): \(roleConfig.globalModel)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -254,17 +270,17 @@ struct GenerateSettingsView: View {
                     // Provider picker for custom
                     if !roleConfig.isFollowingGlobal(role: role) {
                         let override = roleConfig.getRoleOverride(for: role)
-                        let currentProvider = override?.provider ?? roleConfig.globalProvider
+                        let currentSelection = override?.selection ?? roleConfig.globalSelection
                         
                         Picker("Provider", selection: Binding(
-                            get: { currentProvider },
-                            set: { newProvider in
-                                let defaultModel = self.defaultModel(for: newProvider)
-                                roleConfig.setRoleOverride(for: role, provider: newProvider, model: defaultModel)
+                            get: { currentSelection },
+                            set: { newSelection in
+                                let defaultModel = self.defaultModel(for: newSelection)
+                                roleConfig.setRoleOverride(for: role, selection: newSelection, model: defaultModel)
                             }
                         )) {
-                            ForEach(availableProviders, id: \.self) { provider in
-                                Text(provider.displayName).tag(provider)
+                            ForEach(availableSelections, id: \.self) { selection in
+                                Text(displayName(for: selection)).tag(selection)
                             }
                         }
                     }
@@ -272,7 +288,7 @@ struct GenerateSettingsView: View {
                     Button {
                         // Get current config for the role
                         let override = roleConfig.getRoleOverride(for: role)
-                        let currentProvider = override?.provider ?? roleConfig.globalProvider
+                        let currentSelection = override?.selection ?? roleConfig.globalSelection
                         let currentModel = override?.model ?? roleConfig.globalModel
                         
                         // Dismiss this sheet and show model picker
@@ -280,7 +296,7 @@ struct GenerateSettingsView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             roleCustomModelPicker = RoleCustomModelPicker(
                                 role: role,
-                                provider: currentProvider,
+                                selection: currentSelection,
                                 currentModel: currentModel
                             )
                         }
@@ -298,7 +314,7 @@ struct GenerateSettingsView: View {
                     Text("Custom")
                 } footer: {
                     if let override = roleConfig.getRoleOverride(for: role) {
-                        Text("Currently: \(override.provider.displayName) / \(override.model)")
+                        Text("Currently: \(displayName(for: override.selection)) / \(override.model)")
                             .font(.caption)
                     }
                 }
@@ -315,35 +331,60 @@ struct GenerateSettingsView: View {
         }
     }
     
-    private var availableProviders: [LLMProvider] {
-        var providers: [LLMProvider] = []
+    private var availableSelections: [ProviderSelection] {
+        var selections: [ProviderSelection] = []
         
         if apiKeyStore.hasAnthropicKey {
-            providers.append(.anthropic)
+            selections.append(.fixed(.anthropic))
         }
         if apiKeyStore.hasOpenAIKey {
-            providers.append(.openai)
+            selections.append(.fixed(.openai))
         }
         if apiKeyStore.hasOpenRouterKey {
-            providers.append(.openrouter)
-        }
-        if apiKeyStore.hasCustomKey && !apiKeyStore.customBaseURL.isEmpty {
-            providers.append(.custom)
+            selections.append(.fixed(.openrouter))
         }
         
-        return providers
+        // Add custom endpoints with keys
+        for endpoint in customEndpointsStore.endpoints {
+            if customEndpointsStore.hasKey(for: endpoint) {
+                selections.append(.customEndpoint(endpoint.id))
+            }
+        }
+        
+        return selections
     }
     
-    private func defaultModel(for provider: LLMProvider) -> String {
-        switch provider {
-        case .anthropic:
-            return "claude-sonnet-5"
-        case .openai:
-            return "gpt-4o"
-        case .openrouter:
-            return "anthropic/claude-sonnet-5"
-        case .custom:
-            return apiKeyStore.customModel
+    private func displayName(for selection: ProviderSelection) -> String {
+        switch selection {
+        case .fixed(let provider):
+            return provider.displayName
+        case .customEndpoint(let endpointId):
+            if let endpoint = customEndpointsStore.getEndpoint(id: endpointId) {
+                return endpoint.displayName
+            }
+            return "Custom Endpoint"
+        }
+    }
+    
+    private func defaultModel(for selection: ProviderSelection) -> String {
+        switch selection {
+        case .fixed(let provider):
+            switch provider {
+            case .anthropic:
+                return "claude-sonnet-5"
+            case .openai:
+                return "gpt-4o"
+            case .openrouter:
+                return "anthropic/claude-sonnet-5"
+            case .custom:
+                return apiKeyStore.customModel
+            }
+        case .customEndpoint(let endpointId):
+            if let endpoint = customEndpointsStore.getEndpoint(id: endpointId),
+               let defaultModel = endpoint.defaultModel {
+                return defaultModel
+            }
+            return ""
         }
     }
 }
