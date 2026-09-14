@@ -57,7 +57,8 @@ struct RootView: View {
             }
             
             // Background generation status banner
-            if isGenerationActive {
+            // Hide banner when on Generate page itself (no duplicate chrome)
+            if isGenerationActive && !isOnGeneratePage {
                 GenerationStatusBanner(orchestrator: orchestrator, navigationPath: $navigationPath)
                     .padding(.top, 50)
             }
@@ -84,6 +85,15 @@ struct RootView: View {
         default:
             return false
         }
+    }
+    
+    private var isOnGeneratePage: Bool {
+        navigationPath.contains(where: { destination in
+            if case .generation = destination {
+                return true
+            }
+            return false
+        })
     }
 }
 
