@@ -4,73 +4,66 @@ struct RootView: View {
     @EnvironmentObject private var store: CourseStore
     @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @State private var navigationPath: [NavigationDestination] = []
-    @State private var showGenerationView = false
     @State private var showingLibrary = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            NavigationStack(path: $navigationPath) {
-                Group {
-                    if store.isLoading && store.course == nil {
-                        ProgressView("Opening course…")
-                    } else if showingLibrary && store.availablePackages.count >= 2 {
-                        LibraryView(onSelectCourse: {
-                            showingLibrary = false
-                        })
-                    } else {
-                        CourseHomeView()
-                            .toolbar {
-                                if store.availablePackages.count >= 2 {
-                                    ToolbarItem(placement: .topBarTrailing) {
-                                        Button("Library") {
-                                            showingLibrary = true
-                                        }
+        NavigationStack(path: $navigationPath) {
+            Group {
+                if store.isLoading && store.course == nil {
+                    ProgressView("Opening course…")
+                } else if showingLibrary && store.availablePackages.count >= 2 {
+                    LibraryView(onSelectCourse: {
+                        showingLibrary = false
+                    })
+                } else {
+                    CourseHomeView()
+                        .toolbar {
+                            if store.availablePackages.count >= 2 {
+                                ToolbarItem(placement: .topBarTrailing) {
+                                    Button("Library") {
+                                        showingLibrary = true
                                     }
                                 }
                             }
+                        }
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: NavigationDestination.self) { destination in
+                switch destination {
+                case .unit(let unitId):
+                    UnitView(unitId: unitId)
+                case .lesson(let unitId, let lessonId):
+                    LessonPlayerView(unitId: unitId, lessonId: lessonId, navigationPath: $navigationPath)
+                case .generation(let extendFromPackageURL):
+                    if let packageURL = extendFromPackageURL,
+                       let course = loadCourseForExtend(from: packageURL) {
+                        GenerationView(extendFromCourse: course)
+                    } else {
+                        GenerationView()
                     }
                 }
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: NavigationDestination.self) { destination in
-                    switch destination {
-                    case .unit(let unitId):
-                        UnitView(unitId: unitId)
-                    case .lesson(let unitId, let lessonId):
-                        LessonPlayerView(unitId: unitId, lessonId: lessonId, navigationPath: $navigationPath)
-                    }
-                }
             }
-            .environment(\.navigationPath, $navigationPath)
-            .onAppear {
-                if store.availablePackages.count >= 2 && store.course == nil {
-                    showingLibrary = true
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Banner pushes content down when visible (no overlay)
+                // Hide banner when on Generate page itself (no duplicate chrome)
+                if isGenerationActive && !isOnGeneratePage {
+                    GenerationStatusBanner(orchestrator: orchestrator, navigationPath: $navigationPath)
                 }
-            }
-            .onChange(of: store.availablePackages.count) { oldCount, newCount in
-                if newCount >= 2 && store.course == nil {
-                    showingLibrary = true
-                } else if newCount < 2 {
-                    showingLibrary = false
-                }
-            }
-            
-            // Background generation status banner
-            if isGenerationActive {
-                GenerationStatusBanner(orchestrator: orchestrator, showGenerationView: $showGenerationView)
-                    .padding(.top, 50)
             }
         }
-        .sheet(isPresented: $showGenerationView) {
-            NavigationStack {
-                GenerationView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") {
-                                showGenerationView = false
-                            }
-                        }
-                    }
+        .environment(\.navigationPath, $navigationPath)
+        .onAppear {
+            if store.availablePackages.count >= 2 && store.course == nil {
+                showingLibrary = true
+            }
+        }
+        .onChange(of: store.availablePackages.count) { oldCount, newCount in
+            if newCount >= 2 && store.course == nil {
+                showingLibrary = true
+            } else if newCount < 2 {
+                showingLibrary = false
             }
         }
         .alert("Course Updated", isPresented: $store.showUpgradeDialog) {
@@ -96,16 +89,44 @@ struct RootView: View {
             return false
         }
     }
+    
+    private var isOnGeneratePage: Bool {
+        navigationPath.contains(where: { destination in
+            if case .generation = destination {
+                return true
+            }
+            return false
+        })
+    }
+    
+    private func loadCourseForExtend(from packageURL: URL) -> LoadedCourse? {
+        // Load the course synchronously for extend
+        // This is the same course already loaded in store, just need to pass it
+        if let currentCourse = store.course, currentCourse.rootURL == packageURL {
+            return currentCourse
+        }
+        return nil
+    }
 }
 
 /// Banner shown at top of screen when generation is active
 struct GenerationStatusBanner: View {
     @ObservedObject var orchestrator: GenerationOrchestrator
-    @Binding var showGenerationView: Bool
+    @Binding var navigationPath: [NavigationDestination]
     
     var body: some View {
         Button {
-            showGenerationView = true
+            // Don't append if already on Generate page
+            let alreadyOnGeneratePage = navigationPath.contains(where: { destination in
+                if case .generation = destination {
+                    return true
+                }
+                return false
+            })
+            
+            if !alreadyOnGeneratePage {
+                navigationPath.append(.generation(extendFromPackageURL: nil))
+            }
         } label: {
             HStack(spacing: 12) {
                 ProgressView()
@@ -145,6 +166,5 @@ struct GenerationStatusBanner: View {
             )
         }
         .buttonStyle(.plain)
-        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
     }
 }

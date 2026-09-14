@@ -10,7 +10,6 @@ struct CourseHomeView: View {
     @Environment(\.navigationPath) private var navigationPath
     @State private var shareSheetItem: ShareItem?
     @State private var showingImporter = false
-    @State private var showingExtendCourse = false
     @State private var exportError: String?
     @State private var showingExportError = false
     @State private var importError: ImportValidatorError?
@@ -74,7 +73,9 @@ struct CourseHomeView: View {
                         // Course actions: twin light grey pills (Extend + Export)
                         HStack(spacing: 12) {
                             Button {
-                                showingExtendCourse = true
+                                if let course = store.course {
+                                    navigationPath.wrappedValue.append(.generation(extendFromPackageURL: course.rootURL))
+                                }
                             } label: {
                                 Label("Extend Course", systemImage: "plus.circle")
                                     .font(.subheadline)
@@ -90,11 +91,6 @@ struct CourseHomeView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.regular)
-                        }
-                        .navigationDestination(isPresented: $showingExtendCourse) {
-                            if let course = store.course {
-                                GenerationView(extendFromCourse: course)
-                            }
                         }
                     }
                     .padding(.vertical, 8)
@@ -259,8 +255,8 @@ struct CourseHomeView: View {
                     }
                     
                     HStack(spacing: 12) {
-                        NavigationLink {
-                            GenerationView()
+                        Button {
+                            navigationPath.wrappedValue.append(.generation(extendFromPackageURL: nil))
                         } label: {
                             Text("Generate")
                         }
