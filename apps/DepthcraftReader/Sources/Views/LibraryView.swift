@@ -253,50 +253,43 @@ struct CourseShelfCover: View {
     let isMostRecent: Bool
     
     var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = width / 0.75
-            
-            HStack(spacing: 0) {
-                if isMostRecent {
-                    Rectangle()
-                        .fill(Color(hex: "#0D9488"))
-                        .frame(width: 3)
-                }
-                
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        WordBoundaryText(
-                            text: package.title,
-                            size: 19,
-                            weight: .medium,
-                            design: .serif,
-                            color: Color(hex: "#1C1917").opacity(0.92),
-                            lineSpacing: 4,
-                            tracking: 0.3,
-                            maxLines: 3,
-                            maxWidth: width - (isMostRecent ? 3 : 0) - 36
-                        )
-                        
-                        Text(packageMeta)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
-                    }
-                    .padding(.top, 18)
-                    .padding(.horizontal, 18)
-                    
-                    Spacer(minLength: 0)
-                }
+        HStack(spacing: 0) {
+            if isMostRecent {
+                Rectangle()
+                    .fill(Color(hex: "#0D9488"))
+                    .frame(width: 3)
             }
-            .frame(width: width, height: height)
-            .background(Color(hex: "#F5F0E6"))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 12) {
+                    WordBoundaryText(
+                        text: package.title,
+                        size: 19,
+                        weight: .medium,
+                        design: .serif,
+                        color: Color(hex: "#1C1917").opacity(0.92),
+                        lineSpacing: 4,
+                        tracking: 0.3,
+                        maxLines: 3,
+                        maxWidth: 224
+                    )
+                    
+                    Text(packageMeta)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 18)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+            }
         }
-        .aspectRatio(0.75, contentMode: .fit)
+        .background(Color(hex: "#F5F0E6"))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     
     private var packageMeta: String {
