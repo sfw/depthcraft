@@ -3,6 +3,7 @@ import SwiftUI
 struct CourseHomeView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.navigationPath) private var navigationPath
+    @State private var showingMore = false
 
     var body: some View {
         List {
@@ -148,17 +149,6 @@ struct CourseHomeView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
-                // More section (collapsed secondary actions)
-                Section {
-                    NavigationLink {
-                        MoreMenuView()
-                    } label: {
-                        Text("More")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             } else if store.course == nil && !store.isLoading {
                 // Editorial empty state with Generate CTA
                 ContentUnavailableView {
@@ -178,6 +168,29 @@ struct CourseHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .toolbar {
+            if store.course != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingMore = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingMore) {
+            NavigationStack {
+                MoreMenuView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") {
+                                showingMore = false
+                            }
+                        }
+                    }
+            }
+        }
     }
     
     private func timeAgo(from isoString: String) -> String {
