@@ -344,7 +344,7 @@ struct GenerationView: View {
             Image(systemName: "circle")
                 .foregroundStyle(.tertiary)
                 .font(.caption)
-        case .writing, .complexity, .quiz, .demo:
+        case .writing, .quiz, .demo:
             ProgressView()
                 .controlSize(.mini)
         case .done:
@@ -375,8 +375,6 @@ struct GenerationView: View {
             return Color.gray.opacity(0.2)
         case .writing, .quiz, .demo:
             return Color.teal.opacity(0.2)
-        case .complexity:
-            return Color.blue.opacity(0.2)
         case .done:
             return Color.green.opacity(0.2)
         case .failed:
@@ -390,8 +388,6 @@ struct GenerationView: View {
             return .secondary
         case .writing, .quiz, .demo:
             return .teal
-        case .complexity:
-            return .blue
         case .done:
             return .green
         case .failed:

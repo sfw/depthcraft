@@ -152,7 +152,6 @@ enum GenerationPhase: String, CaseIterable {
 enum LessonStage: String, Equatable, Codable {
     case queued
     case writing
-    case complexity
     case quiz
     case demo
     case done
@@ -162,7 +161,6 @@ enum LessonStage: String, Equatable, Codable {
         switch self {
         case .queued: return "Queued"
         case .writing: return "Writing"
-        case .complexity: return "Complexity"
         case .quiz: return "Quiz"
         case .demo: return "Demo"
         case .done: return "Done"
@@ -172,7 +170,7 @@ enum LessonStage: String, Equatable, Codable {
     
     var isInProgress: Bool {
         switch self {
-        case .writing, .complexity, .quiz, .demo:
+        case .writing, .quiz, .demo:
             return true
         default:
             return false

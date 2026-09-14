@@ -186,20 +186,19 @@ class GenerationOrchestrator: ObservableObject {
         
         // Initialize per-lesson progress tracking
         var lessonProgressDict: [String: LessonGenerationProgress] = [:]
+        var initialCompletedCount = 0
+        
         for lesson in lessonsToGenerate {
             let existingLesson = partialLessons[lesson.id]
             let existingQuiz = partialQuizzes[lesson.id]
             let existingDemo = partialDemos[lesson.id]
             
+            // Only fully complete lessons (all 3 stages done) are marked .done
+            // Incomplete lessons start as .queued until a worker claims them
             let stage: LessonStage
             if existingLesson != nil && existingQuiz != nil && existingDemo != nil {
                 stage = .done
-            } else if existingDemo != nil {
-                stage = .demo
-            } else if existingQuiz != nil {
-                stage = .quiz
-            } else if existingLesson != nil {
-                stage = .writing
+                initialCompletedCount += 1
             } else {
                 stage = .queued
             }
@@ -215,7 +214,7 @@ class GenerationOrchestrator: ObservableObject {
         progress = GenerationProgress(
             phase: .writingLessons,
             currentItem: "Writing lessons",
-            completedItems: 0,
+            completedItems: initialCompletedCount,
             totalItems: actualTotalLessons,
             error: nil,
             lessonProgress: lessonProgressDict
@@ -724,8 +723,8 @@ class GenerationOrchestrator: ObservableObject {
     }
     
     /// Update per-lesson stage safely from background tasks
-    private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) {
-        Task { @MainActor in
+    private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
+        await MainActor.run {
             // Only update if we're still in a generation phase (not failed/cancelled)
             if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .writingDemos {
                 if var lessonProgress = progress.lessonProgress[lessonId] {
