@@ -265,21 +265,24 @@ struct CourseShelfCover: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 12) {
                         WordBoundaryText(
                             text: package.title,
-                            font: .system(size: 20, weight: .semibold, design: .default),
-                            color: Color(hex: "#1C1917"),
+                            font: .custom("NewYorkMedium-Medium", size: 19),
+                            fallbackFont: .system(size: 19, weight: .medium, design: .default),
+                            color: Color(hex: "#1C1917").opacity(0.92),
+                            lineSpacing: 4,
+                            tracking: 0.3,
                             maxLines: 3,
-                            maxWidth: width - (isMostRecent ? 3 : 0) - 32
+                            maxWidth: width - (isMostRecent ? 3 : 0) - 36
                         )
                         
                         Text(packageMeta)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
                     }
-                    .padding(.top, 16)
-                    .padding(.horizontal, 16)
+                    .padding(.top, 18)
+                    .padding(.horizontal, 18)
                     
                     Spacer(minLength: 0)
                 }
@@ -320,22 +323,86 @@ struct CourseShelfCover: View {
 struct WordBoundaryText: View {
     let text: String
     let font: Font
+    let fallbackFont: Font?
     let color: Color
+    let lineSpacing: CGFloat
+    let tracking: CGFloat
     let maxLines: Int
     let maxWidth: CGFloat
     
+    init(
+        text: String,
+        font: Font,
+        fallbackFont: Font? = nil,
+        color: Color,
+        lineSpacing: CGFloat = 0,
+        tracking: CGFloat = 0,
+        maxLines: Int,
+        maxWidth: CGFloat
+    ) {
+        self.text = text
+        self.font = font
+        self.fallbackFont = fallbackFont
+        self.color = color
+        self.lineSpacing = lineSpacing
+        self.tracking = tracking
+        self.maxLines = maxLines
+        self.maxWidth = maxWidth
+    }
+    
     var body: some View {
         Text(truncatedText)
-            .font(font)
+            .font(fontWithFallback)
             .foregroundStyle(color)
+            .lineSpacing(lineSpacing)
+            .tracking(tracking)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
     
+    private var fontWithFallback: Font {
+        // Try the primary font first, fall back if needed
+        if let customName = extractCustomFontName(from: font),
+           UIFont(name: customName, size: 19) != nil {
+            return font
+        }
+        return fallbackFont ?? font
+    }
+    
+    private func extractCustomFontName(from font: Font) -> String? {
+        // Extract "NewYorkMedium-Medium" from custom font
+        let mirror = Mirror(reflecting: font)
+        for child in mirror.children {
+            if let provider = child.value as? Any {
+                let providerMirror = Mirror(reflecting: provider)
+                for providerChild in providerMirror.children {
+                    if let name = providerChild.value as? String {
+                        return name
+                    }
+                }
+            }
+        }
+        return nil
+    }
+    
     private var truncatedText: String {
-        let uiFont = UIFont.systemFont(ofSize: 20, weight: .semibold)
-        let attributes: [NSAttributedString.Key: Any] = [.font: uiFont]
+        // Use New York Medium if available, otherwise SF Pro Display Medium
+        let uiFont: UIFont
+        if let nyFont = UIFont(name: "NewYorkMedium-Medium", size: 19) {
+            uiFont = nyFont
+        } else {
+            uiFont = UIFont.systemFont(ofSize: 19, weight: .medium)
+        }
+        
+        // Account for tracking in width calculation
+        let trackingAdjustment = tracking * CGFloat(text.count) * 0.5
+        let effectiveMaxWidth = maxWidth - trackingAdjustment
+        
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: uiFont,
+            .kern: tracking
+        ]
         let words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         
         var lines: [String] = []
@@ -345,7 +412,7 @@ struct WordBoundaryText: View {
             let testLine = currentLine.isEmpty ? word : "\(currentLine) \(word)"
             let size = (testLine as NSString).size(withAttributes: attributes)
             
-            if size.width > maxWidth {
+            if size.width > effectiveMaxWidth {
                 if !currentLine.isEmpty {
                     lines.append(currentLine)
                     currentLine = word
@@ -376,7 +443,7 @@ struct WordBoundaryText: View {
                 let testString = "\(lastLine)\(ellipsis)"
                 let size = (testString as NSString).size(withAttributes: attributes)
                 
-                while size.width > maxWidth && !lastLine.isEmpty {
+                while size.width > effectiveMaxWidth && !lastLine.isEmpty {
                     let lastWords = lastLine.split(separator: " ")
                     if lastWords.count > 1 {
                         lastLine = lastWords.dropLast().joined(separator: " ")
