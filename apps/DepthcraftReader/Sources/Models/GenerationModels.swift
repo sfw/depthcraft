@@ -260,7 +260,10 @@ protocol PackagerRole {
         quizzes: [String: QuizDocument],
         demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata,
-        extendFrom: URL?
+        extendFrom: URL?,
+        plannedCurriculum: Curriculum?,
+        knowledgeLevel: KnowledgeLevel?,
+        depthLevel: DepthLevel?
     ) async throws -> URL
 }
 

@@ -146,6 +146,25 @@ final class CourseStore: ObservableObject {
         pendingPackageUpgrade = nil
     }
     
+    /// Reload package in place without upgrade dialog (for in-place retry updates)
+    func reloadPackageInPlace(from url: URL) {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let loaded = try PackageLoader.load(from: url)
+            applyPackageLoad(loaded: loaded, url: url)
+        } catch {
+            #if DEBUG
+            print("❌ Failed to reload package: \(error)")
+            #endif
+            if let validationError = error as? SchemaValidatorError {
+                errorMessage = validationError.userFriendlyDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
     private func applyPackageLoad(loaded: LoadedCourse, url: URL) {
         // Force-clear old course before setting new one to ensure SwiftUI detects the change
         course = nil
@@ -274,6 +293,26 @@ final class CourseStore: ObservableObject {
     func allHighlights() -> [HighlightNote] {
         guard let notes else { return [] }
         return notesStore.allHighlights(for: notes)
+    }
+    
+    /// Get lessons that were planned but failed to generate (not in built curriculum)
+    func failedLessons() -> [(unit: CurriculumUnit, lesson: CurriculumLesson)] {
+        guard let course else { return [] }
+        guard let plannedCurriculum = course.manifest.plannedCurriculum else { return [] }
+        
+        let builtLessonIds = Set(course.curriculum.lessons.keys)
+        var failed: [(unit: CurriculumUnit, lesson: CurriculumLesson)] = []
+        
+        for unit in plannedCurriculum.units {
+            for lessonId in unit.lessonIds {
+                if let lesson = plannedCurriculum.lessons[lessonId],
+                   !builtLessonIds.contains(lessonId) {
+                    failed.append((unit: unit, lesson: lesson))
+                }
+            }
+        }
+        
+        return failed
     }
     
     func libraryPackages() -> [LibraryPackageMetadata] {
