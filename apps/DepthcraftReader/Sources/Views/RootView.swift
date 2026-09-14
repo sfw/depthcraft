@@ -5,6 +5,7 @@ struct RootView: View {
     @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @State private var navigationPath: [NavigationDestination] = []
     @State private var showGenerationView = false
+    @State private var showingLibrary = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -12,13 +13,24 @@ struct RootView: View {
                 Group {
                     if store.isLoading && store.course == nil {
                         ProgressView("Opening course…")
-                    } else if shouldShowLibrary {
-                        LibraryView()
+                    } else if showingLibrary && store.availablePackages.count >= 2 {
+                        LibraryView(onSelectCourse: {
+                            showingLibrary = false
+                        })
                     } else {
                         CourseHomeView()
+                            .toolbar {
+                                if store.availablePackages.count >= 2 {
+                                    ToolbarItem(placement: .topBarTrailing) {
+                                        Button("Library") {
+                                            showingLibrary = true
+                                        }
+                                    }
+                                }
+                            }
                     }
                 }
-                .navigationTitle(shouldShowLibrary ? "" : "Depthcraft")
+                .navigationTitle(showingLibrary ? "" : "Depthcraft")
                 .navigationBarTitleDisplayMode(.large)
                 .navigationDestination(for: NavigationDestination.self) { destination in
                     switch destination {
@@ -30,6 +42,18 @@ struct RootView: View {
                 }
             }
             .environment(\.navigationPath, $navigationPath)
+            .onAppear {
+                if store.availablePackages.count >= 2 && store.course == nil {
+                    showingLibrary = true
+                }
+            }
+            .onChange(of: store.availablePackages.count) { oldCount, newCount in
+                if newCount >= 2 && store.course == nil {
+                    showingLibrary = true
+                } else if newCount < 2 {
+                    showingLibrary = false
+                }
+            }
             
             // Background generation status banner
             if isGenerationActive {
@@ -71,10 +95,6 @@ struct RootView: View {
         default:
             return false
         }
-    }
-    
-    private var shouldShowLibrary: Bool {
-        store.availablePackages.count >= 2
     }
 }
 

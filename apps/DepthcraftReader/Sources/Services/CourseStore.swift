@@ -148,11 +148,13 @@ final class CourseStore: ObservableObject {
         course = loaded
         let lessonIds = Array(loaded.curriculum.lessons.keys)
         let unitIds = loaded.curriculum.units.map(\.id)
-        progress = progressStore.load(
+        var loadedProgress = progressStore.load(
             packageId: loaded.manifest.packageId,
             lessonIds: lessonIds,
             unitIds: unitIds
         )
+        progressStore.markPackageOpened(&loadedProgress)
+        progress = loadedProgress
         notes = notesStore.load(packageId: loaded.manifest.packageId)
         errorMessage = nil
         refreshAvailablePackages()

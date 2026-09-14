@@ -3,6 +3,8 @@ import SwiftUI
 struct LibraryView: View {
     @EnvironmentObject private var store: CourseStore
     @State private var packages: [LibraryPackageMetadata] = []
+    @State private var showingImporter = false
+    let onSelectCourse: () -> Void
     
     var body: some View {
         ScrollView {
@@ -14,6 +16,7 @@ struct LibraryView: View {
                     if let mostRecent = packages.first {
                         Button {
                             store.loadPackage(from: mostRecent.url)
+                            onSelectCourse()
                         } label: {
                             HStack(spacing: 8) {
                                 Text("Continue")
@@ -42,6 +45,7 @@ struct LibraryView: View {
                             )
                             .onTapGesture {
                                 store.loadPackage(from: package.url)
+                                onSelectCourse()
                             }
                         }
                     }
@@ -53,14 +57,25 @@ struct LibraryView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     
-                    NavigationLink {
-                        GenerationView()
-                    } label: {
-                        Label("Generate a course", systemImage: "sparkles")
-                            .font(.subheadline)
+                    HStack(spacing: 12) {
+                        NavigationLink {
+                            GenerationView()
+                        } label: {
+                            Label("Generate", systemImage: "sparkles")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                        
+                        Button {
+                            showingImporter = true
+                        } label: {
+                            Label("Import", systemImage: "square.and.arrow.down")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
@@ -68,11 +83,42 @@ struct LibraryView: View {
             .padding(.vertical, 16)
         }
         .background(Color(hex: "#F5F0E6"))
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.init(filenameExtension: "depthcraft")].compactMap { $0 },
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
         .onAppear {
             refreshPackages()
         }
         .onChange(of: store.availablePackages) { _ in
             refreshPackages()
+        }
+    }
+    
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let sourceURL = urls.first else { return }
+            
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+            
+            do {
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                store.refreshAvailablePackages()
+                store.loadPackage(from: destinationURL)
+                onSelectCourse()
+            } catch {
+                print("Import error: \(error)")
+            }
+        case .failure(let error):
+            print("File importer error: \(error)")
         }
     }
     

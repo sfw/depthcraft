@@ -25,15 +25,14 @@ final class ProgressStore {
         if let data = defaults.data(forKey: key(for: packageId)),
            let existing = try? decoder.decode(DeviceProgress.self, from: data),
            existing.packageId == packageId {
-            var merged = merge(existing, lessonIds: lessonIds, unitIds: unitIds)
-            merged.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
-            save(merged)
-            return merged
+            return merge(existing, lessonIds: lessonIds, unitIds: unitIds)
         }
-        var blank = DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
-        blank.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
-        save(blank)
-        return blank
+        return DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
+    }
+    
+    func markPackageOpened(_ progress: inout DeviceProgress) {
+        progress.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
+        save(progress)
     }
 
     /// Merge new lesson/unit ids without clobbering existing completions.
