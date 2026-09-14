@@ -392,6 +392,12 @@ extension CourseHomeView {
                         try fileManager.removeItem(at: packageURL)
                     }
                     try fileManager.copyItem(at: sourceURL, to: packageURL)
+                    
+                    // Strip progress.json - device-local ProgressStore is authoritative
+                    let progressURL = packageURL.appendingPathComponent("progress.json")
+                    if fileManager.fileExists(atPath: progressURL.path) {
+                        try? fileManager.removeItem(at: progressURL)
+                    }
                 } else {
                     // It's a file (zip) - unzip with zip-slip protection, then validate
                     let tempDir = fileManager.temporaryDirectory
@@ -403,8 +409,25 @@ extension CourseHomeView {
                     
                     // Find the .depthcraft package directory in the extracted content
                     let extractedContents = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
-                    guard let extractedPackage = extractedContents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) else {
-                        throw ImportValidatorError.invalidPackageStructure("No .depthcraft package found in zip")
+                    let extractedPackage: URL
+                    
+                    // First try to find a .depthcraft child directory
+                    if let depthcraftChild = extractedContents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) {
+                        extractedPackage = depthcraftChild
+                    } else {
+                        // Fallback: check if extract root itself contains manifest.json + curriculum.json (flattened zip)
+                        let manifestURL = tempExtractDir.appendingPathComponent("manifest.json")
+                        let curriculumURL = tempExtractDir.appendingPathComponent("curriculum.json")
+                        
+                        if fileManager.fileExists(atPath: manifestURL.path) && fileManager.fileExists(atPath: curriculumURL.path) {
+                            // Extract root is the package - rename to .depthcraft
+                            let packageName = sourceURL.deletingPathExtension().lastPathComponent
+                            let renamedPackage = tempExtractDir.deletingLastPathComponent().appendingPathComponent("\(packageName).depthcraft")
+                            try fileManager.moveItem(at: tempExtractDir, to: renamedPackage)
+                            extractedPackage = renamedPackage
+                        } else {
+                            throw ImportValidatorError.invalidPackageStructure("No .depthcraft package found in zip")
+                        }
                     }
                     
                     // Validate the extracted package

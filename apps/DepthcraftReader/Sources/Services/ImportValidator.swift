@@ -429,7 +429,7 @@ private struct ZipArchive {
             return compressedData
         } else if entry.compressionMethod == 8 {
             // Deflate (raw deflate, not zlib)
-            return try compressedData.inflateRawDeflate()
+            return try compressedData.inflateRawDeflate(uncompressedSize: entry.uncompressedSize)
         } else {
             throw ImportValidatorError.invalidPackageStructure("Unsupported compression method: \(entry.compressionMethod)")
         }
@@ -500,7 +500,7 @@ private extension Data {
                (UInt32(self[offset + 3]) << 24)
     }
     
-    func inflateRawDeflate() throws -> Data {
+    func inflateRawDeflate(uncompressedSize: Int) throws -> Data {
         // Use Compression framework with raw deflate
         return try self.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) -> Data in
             guard let baseAddress = rawBufferPointer.baseAddress else {
@@ -510,8 +510,9 @@ private extension Data {
             let sourceBuffer = baseAddress.assumingMemoryBound(to: UInt8.self)
             let sourceSize = self.count
             
-            // Allocate output buffer (use uncompressed size estimate)
-            var outputData = Data(count: sourceSize * 4) // Estimate 4x expansion
+            // Allocate output buffer from uncompressedSize (with small floor for safety)
+            let bufferSize = max(uncompressedSize, 1024)
+            var outputData = Data(count: bufferSize)
             var outputSize = outputData.count
             
             let result = outputData.withUnsafeMutableBytes { outputBuffer -> compression_status in
