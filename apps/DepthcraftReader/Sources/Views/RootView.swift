@@ -7,7 +7,14 @@ struct RootView: View {
     @State private var showingLibrary = false
 
     var body: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
+            // Background generation status banner
+            // Pushes content down when visible (no overlay)
+            // Hide banner when on Generate page itself (no duplicate chrome)
+            if isGenerationActive && !isOnGeneratePage {
+                GenerationStatusBanner(orchestrator: orchestrator, navigationPath: $navigationPath)
+            }
+            
             NavigationStack(path: $navigationPath) {
                 Group {
                     if store.isLoading && store.course == nil {
@@ -54,13 +61,6 @@ struct RootView: View {
                 } else if newCount < 2 {
                     showingLibrary = false
                 }
-            }
-            
-            // Background generation status banner
-            // Hide banner when on Generate page itself (no duplicate chrome)
-            if isGenerationActive && !isOnGeneratePage {
-                GenerationStatusBanner(orchestrator: orchestrator, navigationPath: $navigationPath)
-                    .padding(.top, 50)
             }
         }
         .alert("Course Updated", isPresented: $store.showUpgradeDialog) {
