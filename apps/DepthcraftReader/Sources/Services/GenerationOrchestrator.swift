@@ -12,12 +12,15 @@ class GenerationOrchestrator: ObservableObject {
     private var partialDemos: [String: DemoWriterOutput] = [:]
     
     private let keyStore: APIKeyStore
+    let timingLogger = GenerationTimingLogger()
     
     init(keyStore: APIKeyStore) {
         self.keyStore = keyStore
     }
     
     func startGeneration(request: GenerationRequest) async {
+        timingLogger.startRun(topic: request.topic)
+        
         progress = GenerationProgress(
             phase: .planning,
             currentItem: "Planning curriculum",
@@ -44,13 +47,25 @@ class GenerationOrchestrator: ObservableObject {
                 priorCurriculum = nil
             }
             
-            let curriculum = try await planner.plan(
-                topic: request.topic,
-                locale: request.locale,
-                knowledgeLevel: request.knowledgeLevel,
-                depthLevel: request.depthLevel,
-                extendingCurriculum: priorCurriculum
+            let maxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.plannerConfig.provider,
+                model: request.plannerConfig.model
             )
+            
+            let curriculum = try await timingLogger.timeStage(
+                .planner,
+                provider: request.plannerConfig.provider.rawValue,
+                model: request.plannerConfig.model,
+                maxTokens: maxTokens
+            ) {
+                try await planner.plan(
+                    topic: request.topic,
+                    locale: request.locale,
+                    knowledgeLevel: request.knowledgeLevel,
+                    depthLevel: request.depthLevel,
+                    extendingCurriculum: priorCurriculum
+                )
+            }
             
             if let prior = priorCurriculum {
                 let priorUnitIds = Set(prior.units.map(\.id))
@@ -83,6 +98,7 @@ class GenerationOrchestrator: ObservableObject {
                 error: nil
             )
         } catch {
+            timingLogger.failRun()
             progress = GenerationProgress(
                 phase: .failed,
                 currentItem: nil,
@@ -161,12 +177,18 @@ class GenerationOrchestrator: ObservableObject {
                 knowledgeLevel: request.knowledgeLevel,
                 depthLevel: request.depthLevel,
                 provider: request.lessonWriterConfig.provider,
-                model: request.lessonWriterConfig.model
+                model: request.lessonWriterConfig.model,
+                timingLogger: timingLogger
             )
             
             // Skip lessons that are already generated (retry resume)
             let remainingLessons = lessonsToGenerate.filter { lessons[$0.id] == nil }
             let alreadyCompleted = lessonsToGenerate.count - remainingLessons.count
+            
+            let lessonMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model
+            )
             
             for (index, lesson) in remainingLessons.enumerated() {
                 guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
@@ -176,11 +198,19 @@ class GenerationOrchestrator: ObservableObject {
                 progress.currentItem = "Writing: \(lesson.title)"
                 progress.completedItems = alreadyCompleted + index
                 
-                let (markdown, meta) = try await lessonWriter.writeLesson(
-                    lesson: lesson,
-                    unit: unit,
-                    curriculum: curriculum
-                )
+                let (markdown, meta) = try await timingLogger.timeStage(
+                    .lessonWrite,
+                    lessonId: lesson.id,
+                    provider: request.lessonWriterConfig.provider.rawValue,
+                    model: request.lessonWriterConfig.model,
+                    maxTokens: lessonMaxTokens
+                ) {
+                    try await lessonWriter.writeLesson(
+                        lesson: lesson,
+                        unit: unit,
+                        curriculum: curriculum
+                    )
+                }
                 
                 lessons[lesson.id] = (markdown, meta)
                 partialLessons = lessons // Save progress for retry
@@ -205,6 +235,11 @@ class GenerationOrchestrator: ObservableObject {
             let remainingQuizzes = lessonsToGenerate.filter { quizzes[$0.id] == nil }
             let alreadyCompletedQuizzes = lessonsToGenerate.count - remainingQuizzes.count
             
+            let quizMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
             for (index, lesson) in remainingQuizzes.enumerated() {
                 guard let (markdown, _) = lessons[lesson.id] else {
                     throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
@@ -217,11 +252,19 @@ class GenerationOrchestrator: ObservableObject {
                 progress.currentItem = "Quiz for: \(lesson.title)"
                 progress.completedItems = alreadyCompletedQuizzes + index
                 
-                let quiz = try await quizWriter.writeQuiz(
-                    lessonMarkdown: markdown,
-                    lesson: lesson,
-                    unit: unit
-                )
+                let quiz = try await timingLogger.timeStage(
+                    .quiz,
+                    lessonId: lesson.id,
+                    provider: request.quizWriterConfig.provider.rawValue,
+                    model: request.quizWriterConfig.model,
+                    maxTokens: quizMaxTokens
+                ) {
+                    try await quizWriter.writeQuiz(
+                        lessonMarkdown: markdown,
+                        lesson: lesson,
+                        unit: unit
+                    )
+                }
                 
                 quizzes[lesson.id] = quiz
                 partialQuizzes = quizzes // Save progress for retry
@@ -246,6 +289,11 @@ class GenerationOrchestrator: ObservableObject {
             let remainingDemos = lessonsToGenerate.filter { demos[$0.id] == nil }
             let alreadyCompletedDemos = lessonsToGenerate.count - remainingDemos.count
             
+            let demoMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
             for (index, lesson) in remainingDemos.enumerated() {
                 guard let (markdown, _) = lessons[lesson.id] else {
                     throw GenerationError.validationFailed("Lesson content not found for \(lesson.id)")
@@ -258,11 +306,21 @@ class GenerationOrchestrator: ObservableObject {
                 progress.currentItem = "Checking: \(lesson.title)"
                 progress.completedItems = alreadyCompletedDemos + index
                 
-                if let demoOutput = try await demoWriter.writeDemos(
-                    lessonMarkdown: markdown,
-                    lesson: lesson,
-                    unit: unit
+                let demoOutput = try await timingLogger.timeStage(
+                    .demo,
+                    lessonId: lesson.id,
+                    provider: request.demoWriterConfig.provider.rawValue,
+                    model: request.demoWriterConfig.model,
+                    maxTokens: demoMaxTokens
                 ) {
+                    try await demoWriter.writeDemos(
+                        lessonMarkdown: markdown,
+                        lesson: lesson,
+                        unit: unit
+                    )
+                }
+                
+                if let demoOutput = demoOutput {
                     demos[lesson.id] = demoOutput
                 } else {
                     demos[lesson.id] = DemoWriterOutput(demos: [])
@@ -327,16 +385,22 @@ class GenerationOrchestrator: ObservableObject {
                 packager: packagerRun
             )
             
-            let packageURL = try await packager.packageCourse(
-                topic: request.topic,
-                locale: request.locale,
-                curriculum: slicedCurriculum,
-                lessons: lessons,
-                quizzes: quizzes,
-                demos: demos,
-                roleRuns: metadata,
-                extendFrom: request.extendFromPackageURL
-            )
+            let packageURL = try await timingLogger.timeStage(
+                .packager,
+                provider: "anthropic",
+                model: "packager-v1"
+            ) {
+                try await packager.packageCourse(
+                    topic: request.topic,
+                    locale: request.locale,
+                    curriculum: slicedCurriculum,
+                    lessons: lessons,
+                    quizzes: quizzes,
+                    demos: demos,
+                    roleRuns: metadata,
+                    extendFrom: request.extendFromPackageURL
+                )
+            }
             
             let manifestURL = packageURL.appendingPathComponent("manifest.json")
             let manifestData = try Data(contentsOf: manifestURL)
@@ -352,6 +416,8 @@ class GenerationOrchestrator: ObservableObject {
                 curriculum: finalCurriculum
             )
             
+            timingLogger.completeRun()
+            
             progress = GenerationProgress(
                 phase: .completed,
                 currentItem: nil,
@@ -360,6 +426,8 @@ class GenerationOrchestrator: ObservableObject {
                 error: nil
             )
         } catch {
+            timingLogger.failRun()
+            
             progress = GenerationProgress(
                 phase: .failed,
                 currentItem: nil,
@@ -379,5 +447,6 @@ class GenerationOrchestrator: ObservableObject {
         partialLessons = [:]
         partialQuizzes = [:]
         partialDemos = [:]
+        timingLogger.reset()
     }
 }

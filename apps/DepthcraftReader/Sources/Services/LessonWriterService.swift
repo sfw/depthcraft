@@ -9,8 +9,9 @@ class LessonWriterService: LessonWriterRole {
     private let depthLevel: DepthLevel
     private let provider: LLMProvider
     private let model: String
+    private let timingLogger: GenerationTimingLogger?
     
-    init(client: LLMClient, temperature: Double? = nil, topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
+    init(client: LLMClient, temperature: Double? = nil, topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String, timingLogger: GenerationTimingLogger? = nil) {
         self.client = client
         self.temperature = temperature
         self.topic = topic
@@ -19,6 +20,7 @@ class LessonWriterService: LessonWriterRole {
         self.depthLevel = depthLevel
         self.provider = provider
         self.model = model
+        self.timingLogger = timingLogger
     }
     
     func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
@@ -139,11 +141,30 @@ class LessonWriterService: LessonWriterRole {
             model: model
         )
         
-        let explainAnchors = try await complexityAnalyzer.analyzeComplexity(
-            markdown: markdown,
-            lessonTitle: lesson.title,
-            lessonId: lesson.id
-        )
+        let complexityMaxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
+        
+        let explainAnchors: [LessonMeta.Anchor]
+        if let logger = timingLogger {
+            explainAnchors = try await logger.timeStage(
+                .complexity,
+                lessonId: lesson.id,
+                provider: provider.rawValue,
+                model: model,
+                maxTokens: complexityMaxTokens
+            ) {
+                try await complexityAnalyzer.analyzeComplexity(
+                    markdown: markdown,
+                    lessonTitle: lesson.title,
+                    lessonId: lesson.id
+                )
+            }
+        } else {
+            explainAnchors = try await complexityAnalyzer.analyzeComplexity(
+                markdown: markdown,
+                lessonTitle: lesson.title,
+                lessonId: lesson.id
+            )
+        }
         
         meta = LessonMeta(
             schemaVersion: meta.schemaVersion,
