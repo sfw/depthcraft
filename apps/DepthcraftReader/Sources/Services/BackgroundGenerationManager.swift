@@ -61,12 +61,12 @@ class BackgroundGenerationManager: ObservableObject {
     }
     
     /// Post local notification for generation completion
-    func postCompletionNotification(topic: String, totalLessons: Int, durationMs: Int64?) {
+    func postCompletionNotification(topic: String, totalLessons: Int, durationMs: Int?) {
         let content = UNMutableNotificationContent()
         content.title = "Course Generated"
         content.body = "\(topic) is ready with \(totalLessons) lesson\(totalLessons == 1 ? "" : "s")"
         if let duration = durationMs {
-            let minutes = Int(duration / 60_000)
+            let minutes = duration / 60_000
             if minutes > 0 {
                 content.body += " (took \(minutes)m)"
             }
