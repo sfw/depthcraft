@@ -64,7 +64,7 @@ class BackgroundGenerationManager: ObservableObject {
     func postCompletionNotification(topic: String, totalLessons: Int, durationMs: Int64?) {
         let content = UNMutableNotificationContent()
         content.title = "Course Generated"
-        content.body = ""\(topic)" is ready with \(totalLessons) lesson\(totalLessons == 1 ? "" : "s")"
+        content.body = "\(topic) is ready with \(totalLessons) lesson\(totalLessons == 1 ? "" : "s")"
         if let duration = durationMs {
             let minutes = Int(duration / 60_000)
             if minutes > 0 {
@@ -90,7 +90,7 @@ class BackgroundGenerationManager: ObservableObject {
     func postFailureNotification(topic: String, error: String) {
         let content = UNMutableNotificationContent()
         content.title = "Generation Failed"
-        content.body = ""\(topic)" encountered an error"
+        content.body = "\(topic) encountered an error"
         content.sound = .default
         
         let request = UNNotificationRequest(
