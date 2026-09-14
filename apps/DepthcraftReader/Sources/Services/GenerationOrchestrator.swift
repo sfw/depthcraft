@@ -402,11 +402,10 @@ class GenerationOrchestrator: ObservableObject {
                 group.addTask {
                     // Wait for semaphore slot
                     await semaphore.wait()
-                    defer { await semaphore.signal() }
                     
                     // Generate missing stages for this lesson
                     // Returns partial result with completed stages even if mid-lesson failure occurs
-                    return await self.generateSingleLesson(
+                    let result = await self.generateSingleLesson(
                         lesson: lesson,
                         curriculum: curriculum,
                         request: request,
@@ -421,6 +420,10 @@ class GenerationOrchestrator: ObservableObject {
                         existingDemo: existingDemo,
                         completedCount: completedCount
                     )
+                    
+                    // Release semaphore slot (structured same-task release)
+                    await semaphore.signal()
+                    return result
                 }
             }
             
@@ -492,7 +495,6 @@ class GenerationOrchestrator: ObservableObject {
         var newLesson: (markdown: String, meta: LessonMeta)? = nil
         var newQuiz: QuizDocument? = nil
         var newDemo: DemoWriterOutput? = nil
-        var capturedError: Error? = nil
         
         // 1. Write lesson (or reuse existing)
         let markdown: String
@@ -557,8 +559,6 @@ class GenerationOrchestrator: ObservableObject {
                 newQuiz = generated
             } catch {
                 // Quiz failed but lesson succeeded - return partial with error
-                capturedError = error
-                // Don't attempt demo if quiz failed
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: newLesson,
