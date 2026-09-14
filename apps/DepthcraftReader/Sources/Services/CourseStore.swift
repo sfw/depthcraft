@@ -267,4 +267,41 @@ final class CourseStore: ObservableObject {
         guard let notes else { return [] }
         return notesStore.allHighlights(for: notes)
     }
+    
+    func libraryPackages() -> [LibraryPackageMetadata] {
+        var packages: [LibraryPackageMetadata] = []
+        
+        for url in availablePackages {
+            do {
+                let loaded = try PackageLoader.load(from: url)
+                let packageId = loaded.manifest.packageId
+                let lessonIds = Array(loaded.curriculum.lessons.keys)
+                let unitIds = loaded.curriculum.units.map(\.id)
+                
+                let progress = progressStore.load(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
+                
+                var lastOpenedDate: Date? = nil
+                if let lastOpenedStr = progress.lastOpenedAt {
+                    lastOpenedDate = ISO8601DateFormatter().date(from: lastOpenedStr)
+                }
+                
+                packages.append(LibraryPackageMetadata(
+                    id: packageId,
+                    packageId: packageId,
+                    title: loaded.manifest.title,
+                    lessonCount: loaded.curriculum.lessons.count,
+                    lastOpenedAt: lastOpenedDate,
+                    url: url
+                ))
+            } catch {
+                continue
+            }
+        }
+        
+        return packages.sorted { pkg1, pkg2 in
+            guard let date1 = pkg1.lastOpenedAt else { return false }
+            guard let date2 = pkg2.lastOpenedAt else { return true }
+            return date1 > date2
+        }
+    }
 }

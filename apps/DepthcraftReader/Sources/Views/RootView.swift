@@ -12,11 +12,13 @@ struct RootView: View {
                 Group {
                     if store.isLoading && store.course == nil {
                         ProgressView("Opening course…")
+                    } else if shouldShowLibrary {
+                        LibraryView()
                     } else {
                         CourseHomeView()
                     }
                 }
-                .navigationTitle("Depthcraft")
+                .navigationTitle(shouldShowLibrary ? "" : "Depthcraft")
                 .navigationBarTitleDisplayMode(.large)
                 .navigationDestination(for: NavigationDestination.self) { destination in
                     switch destination {
@@ -69,6 +71,10 @@ struct RootView: View {
         default:
             return false
         }
+    }
+    
+    private var shouldShowLibrary: Bool {
+        store.availablePackages.count >= 2
     }
 }
 

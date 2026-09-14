@@ -25,9 +25,13 @@ final class ProgressStore {
         if let data = defaults.data(forKey: key(for: packageId)),
            let existing = try? decoder.decode(DeviceProgress.self, from: data),
            existing.packageId == packageId {
-            return merge(existing, lessonIds: lessonIds, unitIds: unitIds)
+            var merged = merge(existing, lessonIds: lessonIds, unitIds: unitIds)
+            merged.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
+            save(merged)
+            return merged
         }
-        let blank = DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
+        var blank = DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
+        blank.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
         save(blank)
         return blank
     }
