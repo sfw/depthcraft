@@ -68,7 +68,7 @@ struct CourseHomeView: View {
                             .controlSize(.regular)
                         }
                         
-                        // Course actions: Extend and Export (twin light grey pills)
+                        // Course actions: Extend (grey) and Export (teal) side by side
                         HStack(spacing: 12) {
                             Button {
                                 showingExtendCourse = true
@@ -86,6 +86,7 @@ struct CourseHomeView: View {
                                     .font(.subheadline)
                             }
                             .buttonStyle(.bordered)
+                            .tint(.teal)
                             .controlSize(.regular)
                         }
                         .navigationDestination(isPresented: $showingExtendCourse) {
