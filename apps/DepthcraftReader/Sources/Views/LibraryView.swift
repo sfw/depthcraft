@@ -108,7 +108,7 @@ struct LibraryView: View {
                 }
                 .padding(.vertical, 16)
             }
-            .background(Color(hex: "#F5F0E6"))
+            .background(Color(hex: "#EDE6D9"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
@@ -264,26 +264,28 @@ struct CourseShelfCover: View {
                 if isMostRecent {
                     Rectangle()
                         .fill(Color(hex: "#0D9488"))
-                        .frame(width: 2.5)
+                        .frame(width: 3)
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(package.title)
-                        .font(.system(size: 21, weight: .semibold, design: .default))
-                        .foregroundStyle(Color(hex: "#1C1917"))
-                        .lineLimit(3)
-                        .truncationMode(.tail)
-                        .minimumScaleFactor(1.0)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        WordBoundaryText(
+                            text: package.title,
+                            font: .system(size: 22, weight: .semibold, design: .default),
+                            color: Color(hex: "#1C1917"),
+                            maxLines: 3,
+                            maxWidth: width - (isMostRecent ? 3 : 0) - 40
+                        )
+                        
+                        Text(packageMeta)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                    }
+                    .padding(.top, 20)
+                    .padding(.horizontal, 20)
                     
-                    Spacer()
-                    
-                    Text(packageMeta)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                    Spacer(minLength: 0)
                 }
-                .padding(19)
             }
             .frame(width: width, height: height)
             .background(Color(hex: "#F5F0E6"))
@@ -317,4 +319,81 @@ struct CourseShelfCover: View {
         }
     }
 }
+
+struct WordBoundaryText: View {
+    let text: String
+    let font: Font
+    let color: Color
+    let maxLines: Int
+    let maxWidth: CGFloat
+    
+    var body: some View {
+        Text(truncatedText)
+            .font(font)
+            .foregroundStyle(color)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private var truncatedText: String {
+        let uiFont = UIFont.systemFont(ofSize: 22, weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: uiFont]
+        let words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        
+        var lines: [String] = []
+        var currentLine = ""
+        
+        for word in words {
+            let testLine = currentLine.isEmpty ? word : "\(currentLine) \(word)"
+            let size = (testLine as NSString).size(withAttributes: attributes)
+            
+            if size.width > maxWidth {
+                if !currentLine.isEmpty {
+                    lines.append(currentLine)
+                    currentLine = word
+                    
+                    if lines.count >= maxLines {
+                        break
+                    }
+                } else {
+                    lines.append(word)
+                    currentLine = ""
+                    
+                    if lines.count >= maxLines {
+                        break
+                    }
+                }
+            } else {
+                currentLine = testLine
+            }
+        }
+        
+        if !currentLine.isEmpty && lines.count < maxLines {
+            lines.append(currentLine)
+        }
+        
+        if lines.count == maxLines && words.joined(separator: " ") != lines.joined(separator: " ") {
+            if var lastLine = lines.last {
+                let ellipsis = "…"
+                let testString = "\(lastLine)\(ellipsis)"
+                let size = (testString as NSString).size(withAttributes: attributes)
+                
+                while size.width > maxWidth && !lastLine.isEmpty {
+                    let lastWords = lastLine.split(separator: " ")
+                    if lastWords.count > 1 {
+                        lastLine = lastWords.dropLast().joined(separator: " ")
+                    } else {
+                        break
+                    }
+                }
+                
+                lines[lines.count - 1] = "\(lastLine)\(ellipsis)"
+            }
+        }
+        
+        return lines.joined(separator: "\n")
+    }
+}
+
 
