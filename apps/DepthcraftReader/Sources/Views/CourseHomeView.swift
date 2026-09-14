@@ -10,6 +10,7 @@ struct CourseHomeView: View {
     @Environment(\.navigationPath) private var navigationPath
     @State private var shareSheetItem: ShareItem?
     @State private var showingImporter = false
+    @State private var showingExtendCourse = false
     @State private var exportError: String?
     @State private var showingExportError = false
     @State private var importError: ImportValidatorError?
@@ -67,10 +68,10 @@ struct CourseHomeView: View {
                             .controlSize(.regular)
                         }
                         
-                        // Course actions: Extend and Export
+                        // Course actions: Extend and Export (twin light grey pills)
                         HStack(spacing: 12) {
-                            NavigationLink {
-                                GenerationView(extendFromCourse: course)
+                            Button {
+                                showingExtendCourse = true
                             } label: {
                                 Label("Extend Course", systemImage: "plus.circle")
                                     .font(.subheadline)
@@ -85,8 +86,12 @@ struct CourseHomeView: View {
                                     .font(.subheadline)
                             }
                             .buttonStyle(.bordered)
-                            .tint(.teal)
                             .controlSize(.regular)
+                        }
+                        .navigationDestination(isPresented: $showingExtendCourse) {
+                            if let course = store.course {
+                                GenerationView(extendFromCourse: course)
+                            }
                         }
                     }
                     .padding(.vertical, 8)
