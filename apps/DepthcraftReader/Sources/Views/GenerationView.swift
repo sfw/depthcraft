@@ -404,7 +404,9 @@ struct GenerationView: View {
                 
                 if let error = lessonProgress.error {
                     Button {
-                        // Show error reason
+                        // Show full error reason
+                        errorMessage = error
+                        showingError = true
                     } label: {
                         Text(error)
                             .font(.caption2)
