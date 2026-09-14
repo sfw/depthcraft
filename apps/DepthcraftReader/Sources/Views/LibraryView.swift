@@ -7,7 +7,19 @@ struct LibraryView: View {
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     let onSelectCourse: () -> Void
+    
+    private var isLandscape: Bool {
+        // Landscape when vertical size class is compact (reliable for iPad)
+        verticalSizeClass == .compact
+    }
+    
+    private var gridColumns: [GridItem] {
+        let spacing: CGFloat = isLandscape ? 18 : 22
+        let columnCount = isLandscape ? 4 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
+    }
     
     var body: some View {
         ScrollView {
@@ -56,13 +68,8 @@ struct LibraryView: View {
                     
                     // Vertical shelf with LazyVGrid
                     LazyVGrid(
-                        columns: horizontalSizeClass == .regular ? [
-                            GridItem(.flexible(), spacing: 22),
-                            GridItem(.flexible(), spacing: 22)
-                        ] : [
-                            GridItem(.flexible(), spacing: 22)
-                        ],
-                        spacing: 22
+                        columns: gridColumns,
+                        spacing: isLandscape ? 18 : 22
                     ) {
                         ForEach(packages) { package in
                             CourseShelfCover(
@@ -75,7 +82,7 @@ struct LibraryView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 22)
                     .padding(.top, 28)
                     
                     VStack(alignment: .leading, spacing: 12) {
@@ -257,8 +264,8 @@ struct CourseShelfCover: View {
     
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = width / 0.75
+            let cardWidth = geometry.size.width
+            let textMaxWidth = cardWidth - (isMostRecent ? 3 : 0) - 36
             
             HStack(spacing: 0) {
                 if isMostRecent {
@@ -268,26 +275,32 @@ struct CourseShelfCover: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 12) {
                         WordBoundaryText(
                             text: package.title,
-                            font: .system(size: 22, weight: .semibold, design: .default),
-                            color: Color(hex: "#1C1917"),
-                            maxLines: 3,
-                            maxWidth: width - (isMostRecent ? 3 : 0) - 40
+                            size: 19,
+                            weight: .medium,
+                            design: .serif,
+                            color: Color(hex: "#1C1917").opacity(0.92),
+                            lineSpacing: 4,
+                            tracking: 0.3,
+                            maxLines: 10,
+                            maxWidth: textMaxWidth
                         )
                         
                         Text(packageMeta)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
                     }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 18)
+                    .padding(.horizontal, 18)
                     
                     Spacer(minLength: 0)
                 }
+                .padding(.bottom, 18)
             }
-            .frame(width: width, height: height)
+            .frame(width: cardWidth, height: 310)
             .background(Color(hex: "#F5F0E6"))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -295,7 +308,7 @@ struct CourseShelfCover: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .aspectRatio(0.75, contentMode: .fit)
+        .frame(height: 310)
     }
     
     private var packageMeta: String {
@@ -322,23 +335,60 @@ struct CourseShelfCover: View {
 
 struct WordBoundaryText: View {
     let text: String
-    let font: Font
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
     let color: Color
+    let lineSpacing: CGFloat
+    let tracking: CGFloat
     let maxLines: Int
     let maxWidth: CGFloat
     
+    init(
+        text: String,
+        size: CGFloat,
+        weight: Font.Weight,
+        design: Font.Design,
+        color: Color,
+        lineSpacing: CGFloat = 0,
+        tracking: CGFloat = 0,
+        maxLines: Int,
+        maxWidth: CGFloat
+    ) {
+        self.text = text
+        self.size = size
+        self.weight = weight
+        self.design = design
+        self.color = color
+        self.lineSpacing = lineSpacing
+        self.tracking = tracking
+        self.maxLines = maxLines
+        self.maxWidth = maxWidth
+    }
+    
     var body: some View {
         Text(truncatedText)
-            .font(font)
+            .font(.system(size: size, weight: weight, design: design))
             .foregroundStyle(color)
+            .lineSpacing(lineSpacing)
+            .tracking(tracking)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private var truncatedText: String {
-        let uiFont = UIFont.systemFont(ofSize: 22, weight: .semibold)
-        let attributes: [NSAttributedString.Key: Any] = [.font: uiFont]
+        // Resolve UIFont with the same design (serif → New York Medium on Apple platforms)
+        let uiFont = resolvedUIFont()
+        
+        // Account for tracking in width calculation
+        let trackingAdjustment = tracking * CGFloat(text.count) * 0.5
+        let effectiveMaxWidth = maxWidth - trackingAdjustment
+        
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: uiFont,
+            .kern: tracking
+        ]
         let words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         
         var lines: [String] = []
@@ -348,7 +398,7 @@ struct WordBoundaryText: View {
             let testLine = currentLine.isEmpty ? word : "\(currentLine) \(word)"
             let size = (testLine as NSString).size(withAttributes: attributes)
             
-            if size.width > maxWidth {
+            if size.width > effectiveMaxWidth {
                 if !currentLine.isEmpty {
                     lines.append(currentLine)
                     currentLine = word
@@ -379,7 +429,7 @@ struct WordBoundaryText: View {
                 let testString = "\(lastLine)\(ellipsis)"
                 let size = (testString as NSString).size(withAttributes: attributes)
                 
-                while size.width > maxWidth && !lastLine.isEmpty {
+                while size.width > effectiveMaxWidth && !lastLine.isEmpty {
                     let lastWords = lastLine.split(separator: " ")
                     if lastWords.count > 1 {
                         lastLine = lastWords.dropLast().joined(separator: " ")
@@ -393,6 +443,41 @@ struct WordBoundaryText: View {
         }
         
         return lines.joined(separator: "\n")
+    }
+    
+    private func resolvedUIFont() -> UIFont {
+        // Convert Font.Weight to UIFont.Weight
+        let uiFontWeight: UIFont.Weight
+        switch weight {
+        case .ultraLight: uiFontWeight = .ultraLight
+        case .thin: uiFontWeight = .thin
+        case .light: uiFontWeight = .light
+        case .regular: uiFontWeight = .regular
+        case .medium: uiFontWeight = .medium
+        case .semibold: uiFontWeight = .semibold
+        case .bold: uiFontWeight = .bold
+        case .heavy: uiFontWeight = .heavy
+        case .black: uiFontWeight = .black
+        default: uiFontWeight = .regular
+        }
+        
+        // For serif design, create a font descriptor that matches the SwiftUI .system(design: .serif)
+        if design == .serif {
+            let traits = [UIFontDescriptor.TraitKey.weight: uiFontWeight]
+            // Start with a minimal descriptor, add serif design, then size and weight
+            if let descriptor = UIFontDescriptor()
+                .withDesign(.serif)?
+                .addingAttributes([
+                    .size: size,
+                    .traits: traits
+                ]) {
+                // Use size 0 to apply the descriptor's explicit size attribute
+                return UIFont(descriptor: descriptor, size: 0)
+            }
+        }
+        
+        // Fallback to default design with specified weight
+        return UIFont.systemFont(ofSize: size, weight: uiFontWeight)
     }
 }
 
