@@ -356,7 +356,7 @@ struct GenerationView: View {
                 }
             }
         }
-        .frame(maxHeight: 400)
+        .frame(maxHeight: .infinity)
     }
     
     private func lessonRow(lessonProgress: LessonGenerationProgress) -> some View {
