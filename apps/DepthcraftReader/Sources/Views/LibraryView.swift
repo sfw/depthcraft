@@ -139,11 +139,11 @@ struct CourseShelfCover: View {
     let isMostRecent: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 0) {
             if isMostRecent {
                 Rectangle()
                     .fill(Color(hex: "#0D9488"))
-                    .frame(height: 2.5)
+                    .frame(width: 2.5)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -162,7 +162,7 @@ struct CourseShelfCover: View {
             }
             .padding(16)
         }
-        .frame(width: 200, height: 260)
+        .frame(width: 200, height: 267)
         .background(Color(hex: "#F5F0E6"))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -173,10 +173,8 @@ struct CourseShelfCover: View {
     
     private var packageMeta: String {
         let lessonStr = "\(package.lessonCount) lesson\(package.lessonCount == 1 ? "" : "s")"
-        if let lastOpened = package.lastOpenedAt {
-            return "\(lessonStr) · \(formatLastOpened(lastOpened))"
-        }
-        return lessonStr
+        let lastOpenedStr = package.lastOpenedAt.map(formatLastOpened) ?? "Never opened"
+        return "\(lessonStr) · \(lastOpenedStr)"
     }
     
     private func formatLastOpened(_ date: Date) -> String {
