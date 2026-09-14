@@ -56,13 +56,10 @@ struct LibraryView: View {
                     
                     // Vertical shelf with LazyVGrid
                     LazyVGrid(
-                        columns: horizontalSizeClass == .regular ? [
-                            GridItem(.flexible(), spacing: 22),
-                            GridItem(.flexible(), spacing: 22)
-                        ] : [
-                            GridItem(.flexible(), spacing: 22)
+                        columns: [
+                            GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 18)
                         ],
-                        spacing: 22
+                        spacing: 18
                     ) {
                         ForEach(packages) { package in
                             CourseShelfCover(
@@ -271,18 +268,18 @@ struct CourseShelfCover: View {
                     VStack(alignment: .leading, spacing: 10) {
                         WordBoundaryText(
                             text: package.title,
-                            font: .system(size: 22, weight: .semibold, design: .default),
+                            font: .system(size: 20, weight: .semibold, design: .default),
                             color: Color(hex: "#1C1917"),
                             maxLines: 3,
-                            maxWidth: width - (isMostRecent ? 3 : 0) - 40
+                            maxWidth: width - (isMostRecent ? 3 : 0) - 32
                         )
                         
                         Text(packageMeta)
                             .font(.system(size: 13))
                             .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
                     }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 16)
                     
                     Spacer(minLength: 0)
                 }
@@ -337,7 +334,7 @@ struct WordBoundaryText: View {
     }
     
     private var truncatedText: String {
-        let uiFont = UIFont.systemFont(ofSize: 22, weight: .semibold)
+        let uiFont = UIFont.systemFont(ofSize: 20, weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [.font: uiFont]
         let words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
         
