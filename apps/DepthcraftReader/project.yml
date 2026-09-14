@@ -37,7 +37,6 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_CFBundleDisplayName: Depthcraft
         INFOPLIST_KEY_LSRequiresIPhoneOS: YES
-        INFOPLIST_KEY_UIBackgroundModes: processing
         INFOPLIST_KEY_NSUserNotificationsUsageDescription: "Depthcraft sends notifications when course generation completes or fails while the app is in the background"
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1

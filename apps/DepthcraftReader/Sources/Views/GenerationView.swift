@@ -29,6 +29,12 @@ struct GenerationView: View {
     
     var body: some View {
         Form {
+            // Show checkpoint resume option if available
+            if orchestrator.hasCheckpointAvailable && 
+               orchestrator.progress.phase == .idle {
+                checkpointResumeSection
+            }
+            
             if orchestrator.progress.phase == .idle {
                 setupSection
             } else if orchestrator.progress.phase == .awaitingApproval {
@@ -103,6 +109,49 @@ struct GenerationView: View {
             return true
         } catch {
             return false
+        }
+    }
+    
+    private var checkpointResumeSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .foregroundStyle(.blue)
+                        .font(.title2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Generation Interrupted")
+                            .font(.headline)
+                        if orchestrator.progress.totalItems > 0 {
+                            Text("Resume from \(orchestrator.progress.completedItems)/\(orchestrator.progress.totalItems) lessons?")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Previous generation was stopped. Resume from checkpoint?")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        resumeFromCheckpoint()
+                    } label: {
+                        Label("Resume", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    
+                    Button("Discard", role: .destructive) {
+                        orchestrator.reset()
+                    }
+                }
+            }
+            .padding(.vertical, 8)
         }
     }
     
@@ -620,6 +669,25 @@ struct GenerationView: View {
             } else {
                 // Was in planning phase
                 await orchestrator.startGeneration(request: request)
+            }
+        }
+    }
+    
+    private func resumeFromCheckpoint() {
+        guard let request = orchestrator.restoreFromCheckpoint() else {
+            errorMessage = "Failed to restore checkpoint"
+            showingError = true
+            return
+        }
+        
+        // Request notification permission and continue generation from checkpoint
+        Task {
+            await orchestrator.backgroundManager.requestNotificationPermission()
+            
+            // Only continue generation if checkpoint was mid-generation (not awaiting approval)
+            // If .awaitingApproval, UI will show editor and user must approve
+            if orchestrator.progress.phase != .awaitingApproval {
+                await orchestrator.continueGeneration(request: request)
             }
         }
     }

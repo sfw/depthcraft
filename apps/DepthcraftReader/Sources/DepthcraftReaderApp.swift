@@ -13,7 +13,10 @@ struct DepthcraftReaderApp: App {
                 .environmentObject(store)
                 .environmentObject(networkMonitor)
                 .environmentObject(orchestrator)
-                .onAppear { store.loadBundledCourseIfNeeded() }
+                .onAppear {
+                    store.loadBundledCourseIfNeeded()
+                    orchestrator.backgroundManager.clearNotificationBadge()
+                }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             handleScenePhaseChange(from: oldPhase, to: newPhase)
