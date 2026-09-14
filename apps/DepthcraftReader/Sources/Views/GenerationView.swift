@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct GenerationView: View {
-    @StateObject private var orchestrator: GenerationOrchestrator
+    @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @StateObject private var keyStore = APIKeyStore()
     @StateObject private var roleConfig: LLMRoleConfigService
     @EnvironmentObject private var courseStore: CourseStore
@@ -24,7 +24,6 @@ struct GenerationView: View {
         self.extendFromCourse = extendFromCourse
         let store = APIKeyStore()
         _keyStore = StateObject(wrappedValue: store)
-        _orchestrator = StateObject(wrappedValue: GenerationOrchestrator(keyStore: store))
         _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store))
     }
     
