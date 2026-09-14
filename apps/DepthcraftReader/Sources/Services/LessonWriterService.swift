@@ -23,7 +23,7 @@ class LessonWriterService: LessonWriterRole {
         self.timingLogger = timingLogger
     }
     
-    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
+    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta, llmMetadata: LLMResponse?) {
         let sectionRange: String
         switch depthLevel {
         case .brief:
@@ -122,15 +122,16 @@ class LessonWriterService: LessonWriterRole {
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let markdown: String
+        let lessonLLMMetadata: LLMResponse
         do {
-            markdown = try await client.complete(
+            lessonLLMMetadata = try await client.completeWithMetadata(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
                 maxTokens: maxTokens
             )
+            markdown = lessonLLMMetadata.text
         } catch let error as LLMClientError {
-            // Wrap LLM client errors with stage name for UI
             throw GenerationError.invalidResponse("Lessons: \(error.localizedDescription)")
         }
         
@@ -150,25 +151,42 @@ class LessonWriterService: LessonWriterRole {
         
         let explainAnchors: [LessonMeta.Anchor]
         if let logger = timingLogger {
-            explainAnchors = try await logger.timeStage(
+            let timingId = await logger.startStage(
                 .complexity,
                 lessonId: lesson.id,
                 provider: provider.rawValue,
                 model: model,
                 maxTokens: complexityMaxTokens
-            ) {
-                try await complexityAnalyzer.analyzeComplexity(
+            )
+            
+            do {
+                let complexityResult = try await complexityAnalyzer.analyzeComplexity(
                     markdown: markdown,
                     lessonTitle: lesson.title,
                     lessonId: lesson.id
                 )
+                explainAnchors = complexityResult.anchors
+                
+                // Complete timing with returned metadata
+                let metadata = complexityResult.llmMetadata
+                await logger.completeStage(
+                    timingId,
+                    tokensUsed: metadata.tokensUsed,
+                    finishReason: metadata.finishReason,
+                    requestCharCount: metadata.requestCharCount,
+                    responseCharCount: metadata.responseCharCount
+                )
+            } catch {
+                await logger.failStage(timingId, error: error.localizedDescription)
+                throw error
             }
         } else {
-            explainAnchors = try await complexityAnalyzer.analyzeComplexity(
+            let complexityResult = try await complexityAnalyzer.analyzeComplexity(
                 markdown: markdown,
                 lessonTitle: lesson.title,
                 lessonId: lesson.id
             )
+            explainAnchors = complexityResult.anchors
         }
         
         meta = LessonMeta(
@@ -177,7 +195,7 @@ class LessonWriterService: LessonWriterRole {
             anchors: meta.anchors + explainAnchors
         )
         
-        return (markdown, meta)
+        return (markdown, meta, lessonLLMMetadata)
     }
     
     private func extractMeta(from markdown: String, lessonId: String) -> LessonMeta {

@@ -545,26 +545,42 @@ class GenerationOrchestrator: ObservableObject {
         } else {
             await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
             
+            let timingId = await timingLogger.startStage(
+                .lessonWrite,
+                lessonId: lesson.id,
+                provider: request.lessonWriterConfig.provider.rawValue,
+                model: request.lessonWriterConfig.model,
+                maxTokens: lessonMaxTokens
+            )
+            
             do {
-                let generated = try await timingLogger.timeStage(
-                    .lessonWrite,
-                    lessonId: lesson.id,
-                    provider: request.lessonWriterConfig.provider.rawValue,
-                    model: request.lessonWriterConfig.model,
-                    maxTokens: lessonMaxTokens
-                ) {
-                    try await lessonWriter.writeLesson(
-                        lesson: lesson,
-                        unit: unit,
-                        curriculum: curriculum
+                let generated = try await lessonWriter.writeLesson(
+                    lesson: lesson,
+                    unit: unit,
+                    curriculum: curriculum
+                )
+                
+                markdown = generated.markdown
+                meta = generated.meta
+                
+                // Complete timing with returned metadata
+                if let metadata = generated.llmMetadata {
+                    await timingLogger.completeStage(
+                        timingId,
+                        tokensUsed: metadata.tokensUsed,
+                        finishReason: metadata.finishReason,
+                        requestCharCount: metadata.requestCharCount,
+                        responseCharCount: metadata.responseCharCount
                     )
+                } else {
+                    await timingLogger.completeStage(timingId)
                 }
                 
-                markdown = generated.0
-                meta = generated.1
                 newLesson = (markdown, meta)
             } catch {
-                // Lesson write failed - return immediately with error, no stages completed
+                // Lesson write failed - mark timing as failed
+                await timingLogger.failStage(timingId, error: error.localizedDescription)
+                
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: nil,

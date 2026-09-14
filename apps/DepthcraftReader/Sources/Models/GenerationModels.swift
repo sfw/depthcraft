@@ -180,7 +180,7 @@ protocol PlannerRole {
 }
 
 protocol LessonWriterRole {
-    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta)
+    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta, llmMetadata: LLMResponse?)
 }
 
 protocol QuizWriterRole {

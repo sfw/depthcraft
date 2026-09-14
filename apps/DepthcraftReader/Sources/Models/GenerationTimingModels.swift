@@ -16,6 +16,9 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
     let maxTokens: Int?
     var tokensUsed: Int?
     var durationMs: Int?
+    var finishReason: String?
+    var requestCharCount: Int?
+    var responseCharCount: Int?
     
     var computedDurationMs: Int? {
         guard let endedAt = endedAt else { return nil }
@@ -42,7 +45,10 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
         model: String? = nil,
         maxTokens: Int? = nil,
         tokensUsed: Int? = nil,
-        durationMs: Int? = nil
+        durationMs: Int? = nil,
+        finishReason: String? = nil,
+        requestCharCount: Int? = nil,
+        responseCharCount: Int? = nil
     ) {
         self.id = id
         self.stage = stage
@@ -56,6 +62,9 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
         self.maxTokens = maxTokens
         self.tokensUsed = tokensUsed
         self.durationMs = durationMs
+        self.finishReason = finishReason
+        self.requestCharCount = requestCharCount
+        self.responseCharCount = responseCharCount
     }
 }
 
@@ -251,6 +260,18 @@ extension GenerationTimingLog {
             
             if let tokensUsed = entry.tokensUsed {
                 md += "- **Tokens Used:** \(tokensUsed)\n"
+            }
+            
+            if let finishReason = entry.finishReason {
+                md += "- **Finish Reason:** \(finishReason)\n"
+            }
+            
+            if let requestCharCount = entry.requestCharCount {
+                md += "- **Request Char Count:** \(requestCharCount)\n"
+            }
+            
+            if let responseCharCount = entry.responseCharCount {
+                md += "- **Response Char Count:** \(responseCharCount)\n"
             }
             
             if let error = entry.error {
