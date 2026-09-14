@@ -74,7 +74,7 @@ struct GenerationTimingLogDetailView: View {
                                 
                                 Spacer()
                                 
-                                if let duration = entry.durationMs {
+                                if let duration = entry.effectiveDurationMs {
                                     Text(formatDuration(duration))
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -134,8 +134,10 @@ struct GenerationTimingLogDetailView: View {
         
         do {
             try jsonString.write(to: tempURL, atomically: true, encoding: .utf8)
-            shareItems = [tempURL]
-            showingShareSheet = true
+            DispatchQueue.main.async {
+                self.shareItems = [tempURL]
+                self.showingShareSheet = true
+            }
         } catch {
             print("Failed to export JSON: \(error)")
         }
@@ -149,8 +151,11 @@ struct GenerationTimingLogDetailView: View {
         
         do {
             try markdown.write(to: tempURL, atomically: true, encoding: .utf8)
-            shareItems = [tempURL]
-            showingShareSheet = true
+            
+            DispatchQueue.main.async {
+                self.shareItems = [tempURL]
+                self.showingShareSheet = true
+            }
         } catch {
             print("Failed to export Markdown: \(error)")
         }
@@ -179,7 +184,7 @@ struct TimingEntryDetailView: View {
                     LabeledContent("Ended", value: formatDate(endedAt))
                 }
                 
-                if let duration = entry.durationMs {
+                if let duration = entry.effectiveDurationMs {
                     LabeledContent("Duration", value: formatDuration(duration))
                 }
             }

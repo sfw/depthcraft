@@ -15,10 +15,15 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
     let model: String?
     let maxTokens: Int?
     var tokensUsed: Int?
+    var durationMs: Int?
     
-    var durationMs: Int? {
+    var computedDurationMs: Int? {
         guard let endedAt = endedAt else { return nil }
         return Int((endedAt.timeIntervalSince(startedAt)) * 1000)
+    }
+    
+    var effectiveDurationMs: Int? {
+        durationMs ?? computedDurationMs
     }
     
     var isComplete: Bool {
@@ -36,7 +41,8 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
         provider: String? = nil,
         model: String? = nil,
         maxTokens: Int? = nil,
-        tokensUsed: Int? = nil
+        tokensUsed: Int? = nil,
+        durationMs: Int? = nil
     ) {
         self.id = id
         self.stage = stage
@@ -49,6 +55,7 @@ struct GenerationTimingEntry: Codable, Identifiable, Equatable {
         self.model = model
         self.maxTokens = maxTokens
         self.tokensUsed = tokensUsed
+        self.durationMs = durationMs
     }
 }
 
@@ -98,18 +105,23 @@ struct GenerationTimingLog: Codable, Identifiable {
     let startedAt: Date
     var completedAt: Date?
     var entries: [GenerationTimingEntry]
+    var totalDurationMs: Int?
     
     var isComplete: Bool {
         completedAt != nil
     }
     
-    var totalDurationMs: Int? {
+    var computedTotalDurationMs: Int? {
         guard let completedAt = completedAt else { return nil }
         return Int((completedAt.timeIntervalSince(startedAt)) * 1000)
     }
     
+    var effectiveTotalDurationMs: Int? {
+        totalDurationMs ?? computedTotalDurationMs
+    }
+    
     var totalDurationFormatted: String {
-        guard let ms = totalDurationMs else { return "In progress" }
+        guard let ms = effectiveTotalDurationMs else { return "In progress" }
         return formatDuration(ms)
     }
     
@@ -119,7 +131,8 @@ struct GenerationTimingLog: Codable, Identifiable {
         topic: String,
         startedAt: Date = Date(),
         completedAt: Date? = nil,
-        entries: [GenerationTimingEntry] = []
+        entries: [GenerationTimingEntry] = [],
+        totalDurationMs: Int? = nil
     ) {
         self.id = id
         self.runId = runId
@@ -127,6 +140,7 @@ struct GenerationTimingLog: Codable, Identifiable {
         self.startedAt = startedAt
         self.completedAt = completedAt
         self.entries = entries
+        self.totalDurationMs = totalDurationMs
     }
 }
 
@@ -192,7 +206,7 @@ extension GenerationTimingLog {
             
             for entry in entries {
                 let lessonIdStr = entry.lessonId ?? "–"
-                let durationStr = entry.durationMs.map { formatDuration($0) } ?? "–"
+                let durationStr = entry.effectiveDurationMs.map { formatDuration($0) } ?? "–"
                 let providerStr = entry.provider ?? "–"
                 let modelStr = entry.model ?? "–"
                 
@@ -217,7 +231,7 @@ extension GenerationTimingLog {
                 md += "- **Ended:** \(formatISO8601(endedAt))\n"
             }
             
-            if let duration = entry.durationMs {
+            if let duration = entry.effectiveDurationMs {
                 md += "- **Duration:** \(formatDuration(duration))\n"
             }
             

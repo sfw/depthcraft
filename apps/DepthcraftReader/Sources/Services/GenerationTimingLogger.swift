@@ -22,6 +22,7 @@ class GenerationTimingLogger: ObservableObject {
     func completeRun() {
         guard var log = currentLog else { return }
         log.completedAt = Date()
+        log.totalDurationMs = log.computedTotalDurationMs
         currentLog = log
         persistLog(log)
     }
@@ -29,6 +30,7 @@ class GenerationTimingLogger: ObservableObject {
     func failRun() {
         guard var log = currentLog else { return }
         log.completedAt = Date()
+        log.totalDurationMs = log.computedTotalDurationMs
         currentLog = log
         persistLog(log)
     }
@@ -82,6 +84,7 @@ class GenerationTimingLogger: ObservableObject {
         entry.endedAt = Date()
         entry.status = .ok
         entry.tokensUsed = tokensUsed
+        entry.durationMs = entry.computedDurationMs
         
         log.entries[entryIndex] = entry
         activeEntries.removeValue(forKey: entryId)
@@ -103,6 +106,7 @@ class GenerationTimingLogger: ObservableObject {
         entry.endedAt = Date()
         entry.status = .fail
         entry.error = error
+        entry.durationMs = entry.computedDurationMs
         
         log.entries[entryIndex] = entry
         activeEntries.removeValue(forKey: entryId)

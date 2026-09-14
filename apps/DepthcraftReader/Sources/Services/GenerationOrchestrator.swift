@@ -324,8 +324,8 @@ class GenerationOrchestrator: ObservableObject {
             
             let packageURL = try await timingLogger.timeStage(
                 .packager,
-                provider: "anthropic",
-                model: "packager-v1"
+                provider: nil,
+                model: nil
             ) {
                 try await packager.packageCourse(
                     topic: request.topic,
@@ -358,7 +358,7 @@ class GenerationOrchestrator: ObservableObject {
             
             // Post completion notification
             if let request = activeRequest {
-                let durationMs = timingLogger.currentLog?.totalDurationMs
+                let durationMs = timingLogger.currentLog?.effectiveTotalDurationMs
                 backgroundManager.postCompletionNotification(
                     topic: request.topic,
                     totalLessons: actualTotalLessons,

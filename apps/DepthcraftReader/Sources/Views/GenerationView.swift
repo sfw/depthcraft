@@ -316,7 +316,7 @@ struct GenerationView: View {
                     LabeledContent("Lessons", value: "\(output.curriculum.lessons.count)")
                     
                     if let log = orchestrator.timingLogger.currentLog,
-                       let totalDuration = log.totalDurationMs {
+                       let totalDuration = log.effectiveTotalDurationMs {
                         LabeledContent("Duration", value: formatDuration(totalDuration))
                     }
                     
@@ -333,7 +333,7 @@ struct GenerationView: View {
                             HStack {
                                 Label("View Timing Log", systemImage: "clock")
                                 Spacer()
-                                if let duration = log.totalDurationMs {
+                                if let duration = log.effectiveTotalDurationMs {
                                     Text(formatDuration(duration))
                                         .foregroundStyle(.secondary)
                                 }
