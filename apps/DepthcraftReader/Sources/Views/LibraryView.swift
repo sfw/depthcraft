@@ -268,8 +268,9 @@ struct CourseShelfCover: View {
                     VStack(alignment: .leading, spacing: 12) {
                         WordBoundaryText(
                             text: package.title,
-                            font: .custom("NewYorkMedium-Medium", size: 19),
-                            fallbackFont: .system(size: 19, weight: .medium, design: .default),
+                            size: 19,
+                            weight: .medium,
+                            design: .serif,
                             color: Color(hex: "#1C1917").opacity(0.92),
                             lineSpacing: 4,
                             tracking: 0.3,
@@ -322,8 +323,9 @@ struct CourseShelfCover: View {
 
 struct WordBoundaryText: View {
     let text: String
-    let font: Font
-    let fallbackFont: Font?
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
     let color: Color
     let lineSpacing: CGFloat
     let tracking: CGFloat
@@ -332,8 +334,9 @@ struct WordBoundaryText: View {
     
     init(
         text: String,
-        font: Font,
-        fallbackFont: Font? = nil,
+        size: CGFloat,
+        weight: Font.Weight,
+        design: Font.Design,
         color: Color,
         lineSpacing: CGFloat = 0,
         tracking: CGFloat = 0,
@@ -341,8 +344,9 @@ struct WordBoundaryText: View {
         maxWidth: CGFloat
     ) {
         self.text = text
-        self.font = font
-        self.fallbackFont = fallbackFont
+        self.size = size
+        self.weight = weight
+        self.design = design
         self.color = color
         self.lineSpacing = lineSpacing
         self.tracking = tracking
@@ -352,7 +356,7 @@ struct WordBoundaryText: View {
     
     var body: some View {
         Text(truncatedText)
-            .font(fontWithFallback)
+            .font(.system(size: size, weight: weight, design: design))
             .foregroundStyle(color)
             .lineSpacing(lineSpacing)
             .tracking(tracking)
@@ -361,39 +365,9 @@ struct WordBoundaryText: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
     
-    private var fontWithFallback: Font {
-        // Try the primary font first, fall back if needed
-        if let customName = extractCustomFontName(from: font),
-           UIFont(name: customName, size: 19) != nil {
-            return font
-        }
-        return fallbackFont ?? font
-    }
-    
-    private func extractCustomFontName(from font: Font) -> String? {
-        // Extract "NewYorkMedium-Medium" from custom font
-        let mirror = Mirror(reflecting: font)
-        for child in mirror.children {
-            if let provider = child.value as? Any {
-                let providerMirror = Mirror(reflecting: provider)
-                for providerChild in providerMirror.children {
-                    if let name = providerChild.value as? String {
-                        return name
-                    }
-                }
-            }
-        }
-        return nil
-    }
-    
     private var truncatedText: String {
-        // Use New York Medium if available, otherwise SF Pro Display Medium
-        let uiFont: UIFont
-        if let nyFont = UIFont(name: "NewYorkMedium-Medium", size: 19) {
-            uiFont = nyFont
-        } else {
-            uiFont = UIFont.systemFont(ofSize: 19, weight: .medium)
-        }
+        // Resolve UIFont with the same design (serif → New York Medium on Apple platforms)
+        let uiFont = resolvedUIFont()
         
         // Account for tracking in width calculation
         let trackingAdjustment = tracking * CGFloat(text.count) * 0.5
@@ -457,6 +431,42 @@ struct WordBoundaryText: View {
         }
         
         return lines.joined(separator: "\n")
+    }
+    
+    private func resolvedUIFont() -> UIFont {
+        // Convert Font.Weight to UIFont.Weight
+        let uiFontWeight: UIFont.Weight
+        switch weight {
+        case .ultraLight: uiFontWeight = .ultraLight
+        case .thin: uiFontWeight = .thin
+        case .light: uiFontWeight = .light
+        case .regular: uiFontWeight = .regular
+        case .medium: uiFontWeight = .medium
+        case .semibold: uiFontWeight = .semibold
+        case .bold: uiFontWeight = .bold
+        case .heavy: uiFontWeight = .heavy
+        case .black: uiFontWeight = .black
+        default: uiFontWeight = .regular
+        }
+        
+        // Try to create a font with the specified design (serif → New York)
+        if design == .serif {
+            // Create a serif font descriptor
+            let descriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body)
+                .withDesign(.serif)?
+                .withSymbolicTraits(.init(rawValue: 0)) // Clear traits
+            
+            if let serifDescriptor = descriptor {
+                // Create base serif font, then apply weight
+                let baseFont = UIFont(descriptor: serifDescriptor, size: size)
+                let traits = [UIFontDescriptor.TraitKey.weight: uiFontWeight]
+                let weightedDescriptor = baseFont.fontDescriptor.addingAttributes([.traits: traits])
+                return UIFont(descriptor: weightedDescriptor, size: size)
+            }
+        }
+        
+        // Fallback to default design with specified weight
+        return UIFont.systemFont(ofSize: size, weight: uiFontWeight)
     }
 }
 
