@@ -600,6 +600,17 @@ class GenerationOrchestrator: ObservableObject {
                     lessons: completedLessons
                 )
                 
+                // Create planned curriculum (what this package was supposed to build - selected units only)
+                let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
+                let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+                let plannedCurriculum = Curriculum(
+                    schemaVersion: curriculum.schemaVersion,
+                    status: curriculum.status,
+                    approvedAt: curriculum.approvedAt,
+                    units: selectedUnits,
+                    lessons: selectedLessons
+                )
+                
                 let packager = PackagerService()
                 let plannerRun = RoleRun(
                     provider: request.plannerConfig.provider.rawValue,
@@ -651,7 +662,7 @@ class GenerationOrchestrator: ObservableObject {
                         demos: demos,
                         roleRuns: metadata,
                         extendFrom: request.extendFromPackageURL,
-                        plannedCurriculum: curriculum,
+                        plannedCurriculum: plannedCurriculum,
                         knowledgeLevel: request.knowledgeLevel,
                         depthLevel: request.depthLevel
                     )
@@ -1219,6 +1230,17 @@ class GenerationOrchestrator: ObservableObject {
             lessons: completedLessons
         )
         
+        // Create planned curriculum (what this package was supposed to build - selected units only)
+        let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
+        let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+        let plannedCurriculum = Curriculum(
+            schemaVersion: curriculum.schemaVersion,
+            status: curriculum.status,
+            approvedAt: curriculum.approvedAt,
+            units: selectedUnits,
+            lessons: selectedLessons
+        )
+        
         let packager = PackagerService()
         let plannerRun = RoleRun(
             provider: request.plannerConfig.provider.rawValue,
@@ -1270,7 +1292,7 @@ class GenerationOrchestrator: ObservableObject {
                 demos: partialDemos,
                 roleRuns: metadata,
                 extendFrom: request.extendFromPackageURL,
-                plannedCurriculum: curriculum,
+                plannedCurriculum: plannedCurriculum,
                 knowledgeLevel: request.knowledgeLevel,
                 depthLevel: request.depthLevel
             )

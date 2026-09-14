@@ -540,7 +540,7 @@ extension CourseHomeView {
                 )
                 
                 // Reload the package after successful retry
-                store.loadPackage(from: course.rootURL)
+                store.reloadPackageInPlace(from: course.rootURL)
                 retryingLesson = nil
             } catch {
                 retryError = error.localizedDescription

@@ -146,6 +146,25 @@ final class CourseStore: ObservableObject {
         pendingPackageUpgrade = nil
     }
     
+    /// Reload package in place without upgrade dialog (for in-place retry updates)
+    func reloadPackageInPlace(from url: URL) {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let loaded = try PackageLoader.load(from: url)
+            applyPackageLoad(loaded: loaded, url: url)
+        } catch {
+            #if DEBUG
+            print("❌ Failed to reload package: \(error)")
+            #endif
+            if let validationError = error as? SchemaValidatorError {
+                errorMessage = validationError.userFriendlyDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
     private func applyPackageLoad(loaded: LoadedCourse, url: URL) {
         // Force-clear old course before setting new one to ensure SwiftUI detects the change
         course = nil
