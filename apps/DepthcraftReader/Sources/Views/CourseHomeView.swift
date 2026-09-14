@@ -3,8 +3,7 @@ import SwiftUI
 struct CourseHomeView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.navigationPath) private var navigationPath
-    @State private var showingShareSheet = false
-    @State private var exportURL: URL?
+    @State private var shareSheetItem: URL?
     @State private var showingImporter = false
     @State private var exportError: String?
     @State private var showingExportError = false
@@ -228,10 +227,8 @@ struct CourseHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .sheet(isPresented: $showingShareSheet) {
-            if let url = exportURL {
-                PackageShareSheet(activityItems: [url])
-            }
+        .sheet(item: $shareSheetItem) { url in
+            PackageShareSheet(activityItems: [url])
         }
         .alert("Export Failed", isPresented: $showingExportError) {
             Button("OK", role: .cancel) {}
@@ -316,8 +313,7 @@ struct CourseHomeView: View {
             }
             
             // Only present share sheet after confirmed bytes on disk
-            self.exportURL = zipURL
-            showingShareSheet = true
+            self.shareSheetItem = zipURL
         } catch {
             exportError = "Failed to export course: \(error.localizedDescription)"
             showingExportError = true
