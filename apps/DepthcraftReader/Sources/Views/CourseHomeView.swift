@@ -12,6 +12,14 @@ struct CourseHomeView: View {
                 // Cover band: title, subtitle, colophon
                 Section {
                     VStack(alignment: .leading, spacing: 16) {
+                        // Restrained home brand mark
+                        Image("HomeMark")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 28)
+                            .accessibilityHidden(true)
+                            .padding(.top, 16)
+                        
                         VStack(alignment: .leading, spacing: 8) {
                             Text(course.manifest.title)
                                 .font(.system(.title, design: .serif, weight: .semibold))
@@ -139,17 +147,6 @@ struct CourseHomeView: View {
                         Text("Notes")
                             .textCase(nil)
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                // More section (collapsed secondary actions)
-                Section {
-                    NavigationLink {
-                        MoreMenuView()
-                    } label: {
-                        Text("More")
-                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }

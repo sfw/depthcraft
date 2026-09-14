@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "HomeMark-28@1x-opaque.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "HomeMark-28@2x-opaque.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "HomeMark-28@3x-opaque.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
