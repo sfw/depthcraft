@@ -74,6 +74,7 @@ struct DemoManifest: Codable, Hashable {
     let kit: String
     let entry: String
     let fallback: String
+    let learningGoal: String?
 }
 
 struct QuizDocument: Codable, Hashable {

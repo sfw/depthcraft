@@ -407,7 +407,8 @@ class PackagerService: PackagerRole {
                             title: demo.title,
                             kit: demo.kit,
                             entry: demo.entry,
-                            fallback: demo.fallback
+                            fallback: demo.fallback,
+                            learningGoal: demo.learningGoal
                         )
                         let demoManifestData = try encoder.encode(demoManifest)
                         try demoManifestData.write(to: demoURL.appendingPathComponent("demo.json"))
