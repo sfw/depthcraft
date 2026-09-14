@@ -6,7 +6,6 @@ struct LibraryView: View {
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let onSelectCourse: () -> Void
     
     private func gridColumns(for width: CGFloat, height: CGFloat) -> [GridItem] {
@@ -160,6 +159,7 @@ struct LibraryView: View {
         }
         .onChange(of: store.availablePackages) { _ in
             refreshPackages()
+        }
         }
     }
     
