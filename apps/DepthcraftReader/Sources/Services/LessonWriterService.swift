@@ -63,6 +63,11 @@ class LessonWriterService: LessonWriterRole {
         - Include \(sectionRange) main ## sections
         - Depth writing guidance: \(depthGuidance)
         
+        Tables (GFM):
+        - If emitting a table: header row, separator |---|---|, then data rows with NO blank lines between any table rows
+        - No line breaks mid-cell or split pipes across lines
+        - Prefer a short bullet list when a table isn't worth it
+        
         Output ONLY markdown, no JSON or metadata.
         """
         
