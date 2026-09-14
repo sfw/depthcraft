@@ -188,10 +188,6 @@ class GenerationOrchestrator: ObservableObject {
                 timingLogger: timingLogger
             )
             
-            // Skip lessons that are already generated (retry resume)
-            let remainingLessons = lessonsToGenerate.filter { lessons[$0.id] == nil }
-            let alreadyCompleted = lessonsToGenerate.count - remainingLessons.count
-            
             // Prepare all generation services upfront
             let lessonMaxTokens = ModelCapabilities.maxOutputTokens(
                 provider: request.lessonWriterConfig.provider,
@@ -231,8 +227,9 @@ class GenerationOrchestrator: ObservableObject {
             )
             
             // Generate lessons, quizzes, and demos in parallel with bounded concurrency
+            // Retry-friendly: each lesson checks partial state and skips completed stages
             try await self.generateLessonsInParallel(
-                remainingLessons: remainingLessons,
+                lessonsToGenerate: lessonsToGenerate,
                 curriculum: curriculum,
                 request: request,
                 lessonWriter: lessonWriter,
@@ -243,14 +240,8 @@ class GenerationOrchestrator: ObservableObject {
                 demoMaxTokens: demoMaxTokens,
                 lessons: &lessons,
                 quizzes: &quizzes,
-                demos: &demos,
-                alreadyCompleted: alreadyCompleted
+                demos: &demos
             )
-            
-            // Update partial progress after all parallel work completes
-            partialLessons = lessons
-            partialQuizzes = quizzes
-            partialDemos = demos
             
             progress.phase = .packaging
             progress.currentItem = "Packaging course"
@@ -365,8 +356,9 @@ class GenerationOrchestrator: ObservableObject {
     
     /// Generate lessons, quizzes, and demos in parallel with bounded concurrency
     /// Each lesson's work (lesson → quiz → demo) runs sequentially, but multiple lessons run in parallel
+    /// Retry-friendly: checks partial state and only generates missing stages per lesson
     private func generateLessonsInParallel(
-        remainingLessons: [CurriculumLesson],
+        lessonsToGenerate: [CurriculumLesson],
         curriculum: Curriculum,
         request: GenerationRequest,
         lessonWriter: LessonWriterService,
@@ -377,50 +369,81 @@ class GenerationOrchestrator: ObservableObject {
         demoMaxTokens: Int,
         lessons: inout [String: (markdown: String, meta: LessonMeta)],
         quizzes: inout [String: QuizDocument],
-        demos: inout [String: DemoWriterOutput],
-        alreadyCompleted: Int
+        demos: inout [String: DemoWriterOutput]
     ) async throws {
-        // Track completed count for progress updates
-        let completedCount = ThreadSafeCounter(initialValue: alreadyCompleted)
+        // Count completed lessons (all 3 stages done)
+        let initialCompleted = lessonsToGenerate.filter { lesson in
+            lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+        }.count
+        let completedCount = ThreadSafeCounter(initialValue: initialCompleted)
         
         // Use a semaphore to limit concurrency
         let semaphore = AsyncSemaphore(maxCount: maxConcurrentLessons)
         
-        try await withThrowingTaskGroup(of: LessonGenerationResult.self) { group in
-            // Spawn tasks for all remaining lessons
-            for lesson in remainingLessons {
-                group.addTask {
-                    // Wait for semaphore slot
-                    await semaphore.wait()
-                    defer { Task { await semaphore.signal() } }
+        do {
+            try await withThrowingTaskGroup(of: LessonGenerationResult?.self) { group in
+                // Spawn tasks for all lessons (they check partial state internally)
+                for lesson in lessonsToGenerate {
+                    group.addTask {
+                        // Wait for semaphore slot
+                        await semaphore.wait()
+                        defer { await semaphore.signal() }
+                        
+                        // Check if this lesson is fully complete (all stages done)
+                        let hasLesson = lessons[lesson.id] != nil
+                        let hasQuiz = quizzes[lesson.id] != nil
+                        let hasDemo = demos[lesson.id] != nil
+                        
+                        if hasLesson && hasQuiz && hasDemo {
+                            // All stages complete, nothing to do
+                            return nil
+                        }
+                        
+                        // Generate missing stages for this lesson
+                        return try await self.generateSingleLesson(
+                            lesson: lesson,
+                            curriculum: curriculum,
+                            request: request,
+                            lessonWriter: lessonWriter,
+                            lessonMaxTokens: lessonMaxTokens,
+                            quizWriter: quizWriter,
+                            quizMaxTokens: quizMaxTokens,
+                            demoWriter: demoWriter,
+                            demoMaxTokens: demoMaxTokens,
+                            existingLesson: lessons[lesson.id],
+                            existingQuiz: quizzes[lesson.id],
+                            existingDemo: demos[lesson.id],
+                            completedCount: completedCount
+                        )
+                    }
+                }
+                
+                // Collect results as they complete and save incrementally
+                for try await result in group {
+                    guard let result = result else { continue }
                     
-                    // Generate lesson + quiz + demo sequentially
-                    return try await self.generateSingleLesson(
-                        lesson: lesson,
-                        curriculum: curriculum,
-                        request: request,
-                        lessonWriter: lessonWriter,
-                        lessonMaxTokens: lessonMaxTokens,
-                        quizWriter: quizWriter,
-                        quizMaxTokens: quizMaxTokens,
-                        demoWriter: demoWriter,
-                        demoMaxTokens: demoMaxTokens,
-                        completedCount: completedCount
-                    )
+                    lessons[result.lessonId] = (result.markdown, result.meta)
+                    quizzes[result.lessonId] = result.quiz
+                    demos[result.lessonId] = result.demo
+                    
+                    // Save partial progress incrementally (retry resume)
+                    partialLessons = lessons
+                    partialQuizzes = quizzes
+                    partialDemos = demos
                 }
             }
-            
-            // Collect results as they complete
-            for try await result in group {
-                lessons[result.lessonId] = (result.markdown, result.meta)
-                quizzes[result.lessonId] = result.quiz
-                demos[result.lessonId] = result.demo
-            }
+        } catch {
+            // Save partial progress on failure (critical for retry)
+            partialLessons = lessons
+            partialQuizzes = quizzes
+            partialDemos = demos
+            throw error
         }
     }
     
     /// Generate a single lesson's complete content (lesson write → quiz → demo)
-    /// This runs sequentially for one lesson, respecting dependencies
+    /// Retry-friendly: skips stages that already exist in partial state
+    /// Respects dependencies: lesson before quiz/demo
     private func generateSingleLesson(
         lesson: CurriculumLesson,
         curriculum: Curriculum,
@@ -431,67 +454,88 @@ class GenerationOrchestrator: ObservableObject {
         quizMaxTokens: Int,
         demoWriter: DemoWriterService,
         demoMaxTokens: Int,
+        existingLesson: (markdown: String, meta: LessonMeta)?,
+        existingQuiz: QuizDocument?,
+        existingDemo: DemoWriterOutput?,
         completedCount: ThreadSafeCounter
     ) async throws -> LessonGenerationResult {
         guard let unit = curriculum.units.first(where: { $0.id == lesson.unitId }) else {
             throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
         }
         
-        // 1. Write lesson
-        await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
-        
-        let (markdown, meta) = try await timingLogger.timeStage(
-            .lessonWrite,
-            lessonId: lesson.id,
-            provider: request.lessonWriterConfig.provider.rawValue,
-            model: request.lessonWriterConfig.model,
-            maxTokens: lessonMaxTokens
-        ) {
-            try await lessonWriter.writeLesson(
-                lesson: lesson,
-                unit: unit,
-                curriculum: curriculum
-            )
+        // 1. Write lesson (or reuse existing)
+        let (markdown, meta): (String, LessonMeta)
+        if let existing = existingLesson {
+            markdown = existing.markdown
+            meta = existing.meta
+        } else {
+            await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
+            
+            (markdown, meta) = try await timingLogger.timeStage(
+                .lessonWrite,
+                lessonId: lesson.id,
+                provider: request.lessonWriterConfig.provider.rawValue,
+                model: request.lessonWriterConfig.model,
+                maxTokens: lessonMaxTokens
+            ) {
+                try await lessonWriter.writeLesson(
+                    lesson: lesson,
+                    unit: unit,
+                    curriculum: curriculum
+                )
+            }
         }
         
-        // 2. Write quiz (needs lesson markdown)
-        await updateProgress(phase: .writingQuizzes, item: "Quiz for: \(lesson.title)", completed: completedCount.value)
-        
-        let quiz = try await timingLogger.timeStage(
-            .quiz,
-            lessonId: lesson.id,
-            provider: request.quizWriterConfig.provider.rawValue,
-            model: request.quizWriterConfig.model,
-            maxTokens: quizMaxTokens
-        ) {
-            try await quizWriter.writeQuiz(
-                lessonMarkdown: markdown,
-                lesson: lesson,
-                unit: unit
-            )
+        // 2. Write quiz (or reuse existing) - needs lesson markdown
+        let quiz: QuizDocument
+        if let existing = existingQuiz {
+            quiz = existing
+        } else {
+            await updateProgress(phase: .writingQuizzes, item: "Quiz for: \(lesson.title)", completed: completedCount.value)
+            
+            quiz = try await timingLogger.timeStage(
+                .quiz,
+                lessonId: lesson.id,
+                provider: request.quizWriterConfig.provider.rawValue,
+                model: request.quizWriterConfig.model,
+                maxTokens: quizMaxTokens
+            ) {
+                try await quizWriter.writeQuiz(
+                    lessonMarkdown: markdown,
+                    lesson: lesson,
+                    unit: unit
+                )
+            }
         }
         
-        // 3. Write demo (needs lesson markdown)
-        await updateProgress(phase: .writingDemos, item: "Checking: \(lesson.title)", completed: completedCount.value)
-        
-        let demoOutput = try await timingLogger.timeStage(
-            .demo,
-            lessonId: lesson.id,
-            provider: request.demoWriterConfig.provider.rawValue,
-            model: request.demoWriterConfig.model,
-            maxTokens: demoMaxTokens
-        ) {
-            try await demoWriter.writeDemos(
-                lessonMarkdown: markdown,
-                lesson: lesson,
-                unit: unit
-            )
+        // 3. Write demo (or reuse existing) - needs lesson markdown
+        let demo: DemoWriterOutput
+        if let existing = existingDemo {
+            demo = existing
+        } else {
+            await updateProgress(phase: .writingDemos, item: "Checking: \(lesson.title)", completed: completedCount.value)
+            
+            let demoOutput = try await timingLogger.timeStage(
+                .demo,
+                lessonId: lesson.id,
+                provider: request.demoWriterConfig.provider.rawValue,
+                model: request.demoWriterConfig.model,
+                maxTokens: demoMaxTokens
+            ) {
+                try await demoWriter.writeDemos(
+                    lessonMarkdown: markdown,
+                    lesson: lesson,
+                    unit: unit
+                )
+            }
+            
+            demo = demoOutput ?? DemoWriterOutput(demos: [])
         }
         
-        let demo = demoOutput ?? DemoWriterOutput(demos: [])
-        
-        // Increment completed count
-        await completedCount.increment()
+        // Increment completed count only if we did actual work
+        if existingLesson == nil || existingQuiz == nil || existingDemo == nil {
+            await completedCount.increment()
+        }
         
         return LessonGenerationResult(
             lessonId: lesson.id,
