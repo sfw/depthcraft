@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct SettingsStubView: View {
+struct SettingsView: View {
     @StateObject private var keyStore = APIKeyStore()
     @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @EnvironmentObject private var networkMonitor: NetworkMonitor

@@ -3,7 +3,8 @@ import SwiftUI
 struct CourseHomeView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.navigationPath) private var navigationPath
-    @State private var showingMoreMenu = false
+    @State private var showingShareSheet = false
+    @State private var exportURL: URL?
     @State private var showingImporter = false
 
     var body: some View {
@@ -55,6 +56,27 @@ struct CourseHomeView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.teal)
+                            .controlSize(.regular)
+                        }
+                        
+                        // Course actions: Extend and Export
+                        HStack(spacing: 12) {
+                            NavigationLink {
+                                GenerationView(extendFromCourse: course)
+                            } label: {
+                                Label("Extend Course", systemImage: "plus.circle")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
+                            
+                            Button {
+                                exportCourse()
+                            } label: {
+                                Label("Export", systemImage: "square.and.arrow.up")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
                             .controlSize(.regular)
                         }
                     }
@@ -202,25 +224,9 @@ struct CourseHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingMoreMenu = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-            }
-        }
-        .sheet(isPresented: $showingMoreMenu) {
-            NavigationStack {
-                MoreMenuView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") {
-                                showingMoreMenu = false
-                            }
-                        }
-                    }
+        .sheet(isPresented: $showingShareSheet) {
+            if let url = exportURL {
+                ShareSheet(activityItems: [url])
             }
         }
         .fileImporter(
@@ -229,6 +235,15 @@ struct CourseHomeView: View {
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
         }
     }
     
@@ -285,4 +300,35 @@ struct CourseHomeView: View {
             return "\(weeks)w ago"
         }
     }
+    
+    private func exportCourse() {
+        guard let course = store.course else { return }
+        
+        let sourceURL = course.rootURL
+        let fileName = sourceURL.lastPathComponent
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let exportURL = tempDirectory.appendingPathComponent(fileName)
+        
+        do {
+            if FileManager.default.fileExists(atPath: exportURL.path) {
+                try FileManager.default.removeItem(at: exportURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: exportURL)
+            
+            self.exportURL = exportURL
+            showingShareSheet = true
+        } catch {
+            print("Export error: \(error)")
+        }
+    }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

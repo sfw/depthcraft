@@ -4,12 +4,13 @@ struct LibraryView: View {
     @EnvironmentObject private var store: CourseStore
     @State private var packages: [LibraryPackageMetadata] = []
     @State private var showingImporter = false
-    @State private var showingMoreMenu = false
+    @State private var importError: ImportValidatorError?
+    @State private var showingImportError = false
     let onSelectCourse: () -> Void
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 0) {
                 // Restrained home brand mark + wordmark
                 HStack(spacing: 10) {
                     Image("HomeMark")
@@ -52,21 +53,26 @@ struct LibraryView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 22) {
-                        ForEach(packages) { package in
-                            CourseShelfCover(
-                                package: package,
-                                isMostRecent: package.id == packages.first?.id
-                            )
-                            .onTapGesture {
-                                store.loadPackage(from: package.url)
-                                onSelectCourse()
-                            }
+                // Vertical shelf with LazyVGrid
+                LazyVGrid(
+                    columns: [
+                        GridItem(.adaptive(minimum: 160, maximum: 300), spacing: 22)
+                    ],
+                    spacing: 22
+                ) {
+                    ForEach(packages) { package in
+                        CourseShelfCover(
+                            package: package,
+                            isMostRecent: package.id == packages.first?.id
+                        )
+                        .onTapGesture {
+                            store.loadPackage(from: package.url)
+                            onSelectCourse()
                         }
                     }
-                    .padding(.horizontal, 20)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 28)
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Create")
@@ -94,11 +100,27 @@ struct LibraryView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 12)
+                .padding(.top, 24)
             }
             .padding(.vertical, 16)
         }
         .background(Color(hex: "#F5F0E6"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
+        }
+        .alert("Import Failed", isPresented: $showingImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let error = importError {
+                Text(error.userFriendlyDescription)
+            }
+        }
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.init(filenameExtension: "depthcraft")].compactMap { $0 },
@@ -111,27 +133,6 @@ struct LibraryView: View {
         }
         .onChange(of: store.availablePackages) { _ in
             refreshPackages()
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingMoreMenu = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-            }
-        }
-        .sheet(isPresented: $showingMoreMenu) {
-            NavigationStack {
-                MoreMenuView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") {
-                                showingMoreMenu = false
-                            }
-                        }
-                    }
-            }
         }
     }
     
@@ -147,21 +148,33 @@ struct LibraryView: View {
                 }
             }
             
-            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
-            
             do {
+                // Validate the imported package before copying
+                try ImportValidator.validateImportedPackage(at: sourceURL)
+                
+                let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+                
                 if FileManager.default.fileExists(atPath: destinationURL.path) {
                     try FileManager.default.removeItem(at: destinationURL)
                 }
                 try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                
                 store.refreshAvailablePackages()
                 store.loadPackage(from: destinationURL)
                 onSelectCourse()
+            } catch let error as ImportValidatorError {
+                importError = error
+                showingImportError = true
+                print("Import validation error: \(error.localizedDescription)")
             } catch {
+                importError = ImportValidatorError.invalidPackageStructure("An unexpected error occurred during import")
+                showingImportError = true
                 print("Import error: \(error)")
             }
         case .failure(let error):
+            importError = ImportValidatorError.invalidPackageStructure("File selection failed")
+            showingImportError = true
             print("File importer error: \(error)")
         }
     }
@@ -176,37 +189,43 @@ struct CourseShelfCover: View {
     let isMostRecent: Bool
     
     var body: some View {
-        HStack(spacing: 0) {
-            if isMostRecent {
-                Rectangle()
-                    .fill(Color(hex: "#0D9488"))
-                    .frame(width: 3)
-            }
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = width / 0.75
             
-            VStack(alignment: .leading, spacing: 10) {
-                Text(package.title)
-                    .font(.system(size: 22, weight: .semibold, design: .default))
-                    .foregroundStyle(Color(hex: "#1C1917"))
-                    .lineLimit(3)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 0) {
+                if isMostRecent {
+                    Rectangle()
+                        .fill(Color(hex: "#0D9488"))
+                        .frame(width: 2.5)
+                }
                 
-                Spacer()
-                
-                Text(packageMeta)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(package.title)
+                        .font(.system(size: 21, weight: .semibold, design: .default))
+                        .foregroundStyle(Color(hex: "#1C1917"))
+                        .lineLimit(3)
+                        .minimumScaleFactor(1.0)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Spacer()
+                    
+                    Text(packageMeta)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
+                }
+                .padding(19)
             }
-            .padding(20)
+            .frame(width: width, height: height)
+            .background(Color(hex: "#F5F0E6"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .frame(width: 320, height: 427)
-        .background(Color(hex: "#F5F0E6"))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .aspectRatio(0.75, contentMode: .fit)
     }
     
     private var packageMeta: String {
@@ -230,4 +249,3 @@ struct CourseShelfCover: View {
         }
     }
 }
-
