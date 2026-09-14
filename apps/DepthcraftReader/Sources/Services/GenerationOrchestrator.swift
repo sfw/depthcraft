@@ -674,7 +674,11 @@ class GenerationOrchestrator: ObservableObject {
             )
         } catch {
             // Check if we have any completed lessons (partial success)
-            let completedLessonsCount = lessons.count
+            let completedLessonIds = Set(lessonsToGenerate.compactMap { lesson in
+                let hasAll = lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+                return hasAll ? lesson.id : nil
+            })
+            let completedLessonsCount = completedLessonIds.count
             let failedLessonsCount = actualTotalLessons - completedLessonsCount
             let hasPartialSuccess = completedLessonsCount > 0
             
@@ -686,12 +690,6 @@ class GenerationOrchestrator: ObservableObject {
                 
                 // Package only successful lessons
                 do {
-                    // Filter to only lessons that have all three components (lesson, quiz, demo)
-                    let completedLessonIds = Set(lessonsToGenerate.compactMap { lesson in
-                        let hasAll = lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
-                        return hasAll ? lesson.id : nil
-                    })
-                    
                     // Slice curriculum to only completed lessons
                     let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
                     
