@@ -57,8 +57,9 @@ struct LibraryView: View {
                     // Vertical shelf with LazyVGrid
                     LazyVGrid(
                         columns: [
-                            GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 18)
+                            GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 18, alignment: .top)
                         ],
+                        alignment: .leading,
                         spacing: 18
                     ) {
                         ForEach(packages) { package in
@@ -270,7 +271,7 @@ struct CourseShelfCover: View {
                         color: Color(hex: "#1C1917").opacity(0.92),
                         lineSpacing: 4,
                         tracking: 0.3,
-                        maxLines: 3,
+                        maxLines: 9,
                         maxWidth: 224
                     )
                     
@@ -284,6 +285,7 @@ struct CourseShelfCover: View {
                 .padding(.bottom, 18)
             }
         }
+        .frame(minHeight: 200)
         .background(Color(hex: "#F5F0E6"))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
