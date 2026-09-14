@@ -449,19 +449,18 @@ struct WordBoundaryText: View {
         default: uiFontWeight = .regular
         }
         
-        // Try to create a font with the specified design (serif → New York)
+        // For serif design, create a font descriptor that matches the SwiftUI .system(design: .serif)
         if design == .serif {
-            // Create a serif font descriptor
-            let descriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body)
+            let traits = [UIFontDescriptor.TraitKey.weight: uiFontWeight]
+            // Start with a minimal descriptor, add serif design, then size and weight
+            if let descriptor = UIFontDescriptor()
                 .withDesign(.serif)?
-                .withSymbolicTraits(.init(rawValue: 0)) // Clear traits
-            
-            if let serifDescriptor = descriptor {
-                // Create base serif font, then apply weight
-                let baseFont = UIFont(descriptor: serifDescriptor, size: size)
-                let traits = [UIFontDescriptor.TraitKey.weight: uiFontWeight]
-                let weightedDescriptor = baseFont.fontDescriptor.addingAttributes([.traits: traits])
-                return UIFont(descriptor: weightedDescriptor, size: size)
+                .addingAttributes([
+                    .size: size,
+                    .traits: traits
+                ]) {
+                // Use size 0 to apply the descriptor's explicit size attribute
+                return UIFont(descriptor: descriptor, size: 0)
             }
         }
         
