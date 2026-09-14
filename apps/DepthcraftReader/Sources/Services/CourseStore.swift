@@ -26,12 +26,6 @@ final class CourseStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
-        refreshAvailablePackages()
-        
-        if availablePackages.count >= 2 {
-            return
-        }
-        
         do {
             let url = try determineStartupPackageURL()
             let loaded = try PackageLoader.load(from: url)
