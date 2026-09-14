@@ -31,23 +31,31 @@ struct GenerationView: View {
     }
     
     var body: some View {
-        Form {
-            // Show checkpoint resume option if available
-            if orchestrator.hasCheckpointAvailable && 
-               orchestrator.progress.phase == .idle {
-                checkpointResumeSection
-            }
-            
-            if orchestrator.progress.phase == .idle {
-                setupSection
-            } else if orchestrator.progress.phase == .awaitingApproval {
-                approvalSection
-            } else if orchestrator.progress.phase == .completed {
-                completedSection
-            } else if orchestrator.progress.phase == .failed {
-                failedSection
-            } else {
+        Group {
+            // Progress phase needs to fill space, so don't use Form
+            if orchestrator.progress.phase != .idle && 
+               orchestrator.progress.phase != .awaitingApproval &&
+               orchestrator.progress.phase != .completed &&
+               orchestrator.progress.phase != .failed {
                 progressSection
+            } else {
+                Form {
+                    // Show checkpoint resume option if available
+                    if orchestrator.hasCheckpointAvailable && 
+                       orchestrator.progress.phase == .idle {
+                        checkpointResumeSection
+                    }
+                    
+                    if orchestrator.progress.phase == .idle {
+                        setupSection
+                    } else if orchestrator.progress.phase == .awaitingApproval {
+                        approvalSection
+                    } else if orchestrator.progress.phase == .completed {
+                        completedSection
+                    } else if orchestrator.progress.phase == .failed {
+                        failedSection
+                    }
+                }
             }
         }
         .navigationTitle(extendFromCourse != nil ? "Extend Course" : "Generate Course")
@@ -286,18 +294,20 @@ struct GenerationView: View {
     }
     
     private var progressSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 0) {
             if let curriculum = orchestrator.draftCurriculum {
+                // Sticky header with summary
                 VStack(alignment: .leading, spacing: 16) {
-                    // Sticky header with summary
                     progressHeaderView
-                    
                     Divider()
-                    
-                    // Lesson list
-                    lessonListView(curriculum: curriculum)
                 }
+                .padding(.horizontal)
                 .padding(.vertical, 8)
+                .background(Color(uiColor: .systemBackground))
+                
+                // Lesson list fills remaining space
+                lessonListView(curriculum: curriculum)
+                    .padding(.horizontal)
             } else {
                 // Fallback if no curriculum (shouldn't happen during generation)
                 VStack(alignment: .leading, spacing: 12) {
@@ -313,9 +323,12 @@ struct GenerationView: View {
                     ProgressView(value: orchestrator.progress.progressPercent)
                         .tint(.teal)
                 }
-                .padding(.vertical, 8)
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(uiColor: .systemGroupedBackground))
     }
     
     private var progressHeaderView: some View {
@@ -355,8 +368,9 @@ struct GenerationView: View {
                     lessonRow(lessonProgress: lessonProgress)
                 }
             }
+            .padding(.vertical, 8)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     private func lessonRow(lessonProgress: LessonGenerationProgress) -> some View {
