@@ -686,17 +686,34 @@ class GenerationOrchestrator: ObservableObject {
                 
                 // Package only successful lessons
                 do {
-                    // Slice curriculum to only selected units before packaging
+                    // Filter to only lessons that have all three components (lesson, quiz, demo)
+                    let completedLessonIds = Set(lessonsToGenerate.compactMap { lesson in
+                        let hasAll = lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+                        return hasAll ? lesson.id : nil
+                    })
+                    
+                    // Slice curriculum to only completed lessons
                     let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
-                    let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
-                    let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+                    
+                    // Filter units to only include completed lesson IDs and remove empty units
+                    let filteredUnits = selectedUnits.compactMap { unit -> CurriculumUnit? in
+                        let completedLessonIdsInUnit = unit.lessonIds.filter { completedLessonIds.contains($0) }
+                        guard !completedLessonIdsInUnit.isEmpty else { return nil }
+                        return CurriculumUnit(
+                            id: unit.id,
+                            title: unit.title,
+                            lessonIds: completedLessonIdsInUnit
+                        )
+                    }
+                    
+                    let completedLessons = curriculum.lessons.filter { completedLessonIds.contains($0.key) }
                     
                     let slicedCurriculum = Curriculum(
                         schemaVersion: curriculum.schemaVersion,
                         status: curriculum.status,
                         approvedAt: curriculum.approvedAt,
-                        units: selectedUnits,
-                        lessons: selectedLessons
+                        units: filteredUnits,
+                        lessons: completedLessons
                     )
                     
                     let packager = PackagerService()
