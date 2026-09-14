@@ -585,6 +585,7 @@ class GenerationOrchestrator: ObservableObject {
                     return CurriculumUnit(
                         id: unit.id,
                         title: unit.title,
+                        order: unit.order,
                         lessonIds: completedLessonIdsInUnit
                     )
                 }
@@ -1197,6 +1198,7 @@ class GenerationOrchestrator: ObservableObject {
             return CurriculumUnit(
                 id: unit.id,
                 title: unit.title,
+                order: unit.order,
                 lessonIds: completedLessonIdsInUnit
             )
         }
