@@ -11,8 +11,6 @@ class LessonWriterService: LessonWriterRole {
     private let model: String
     private let timingLogger: GenerationTimingLogger?
     
-    var lastLLMMetadata: LLMResponse?
-    
     init(client: LLMClient, temperature: Double? = nil, topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String, timingLogger: GenerationTimingLogger? = nil) {
         self.client = client
         self.temperature = temperature
@@ -25,7 +23,7 @@ class LessonWriterService: LessonWriterRole {
         self.timingLogger = timingLogger
     }
     
-    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta) {
+    func writeLesson(lesson: CurriculumLesson, unit: CurriculumUnit, curriculum: Curriculum) async throws -> (markdown: String, meta: LessonMeta, llmMetadata: LLMResponse?) {
         let sectionRange: String
         switch depthLevel {
         case .brief:
@@ -124,16 +122,15 @@ class LessonWriterService: LessonWriterRole {
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let markdown: String
-        let llmResponse: LLMResponse
+        let lessonLLMMetadata: LLMResponse
         do {
-            llmResponse = try await client.completeWithMetadata(
+            lessonLLMMetadata = try await client.completeWithMetadata(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
                 maxTokens: maxTokens
             )
-            markdown = llmResponse.text
-            lastLLMMetadata = llmResponse
+            markdown = lessonLLMMetadata.text
         } catch let error as LLMClientError {
             throw GenerationError.invalidResponse("Lessons: \(error.localizedDescription)")
         }
@@ -163,34 +160,33 @@ class LessonWriterService: LessonWriterRole {
             )
             
             do {
-                explainAnchors = try await complexityAnalyzer.analyzeComplexity(
+                let complexityResult = try await complexityAnalyzer.analyzeComplexity(
                     markdown: markdown,
                     lessonTitle: lesson.title,
                     lessonId: lesson.id
                 )
+                explainAnchors = complexityResult.anchors
                 
-                // Complete timing with metadata
-                if let metadata = complexityAnalyzer.lastLLMMetadata {
-                    await logger.completeStage(
-                        timingId,
-                        tokensUsed: metadata.tokensUsed,
-                        finishReason: metadata.finishReason,
-                        requestCharCount: metadata.requestCharCount,
-                        responseCharCount: metadata.responseCharCount
-                    )
-                } else {
-                    await logger.completeStage(timingId)
-                }
+                // Complete timing with returned metadata
+                let metadata = complexityResult.llmMetadata
+                await logger.completeStage(
+                    timingId,
+                    tokensUsed: metadata.tokensUsed,
+                    finishReason: metadata.finishReason,
+                    requestCharCount: metadata.requestCharCount,
+                    responseCharCount: metadata.responseCharCount
+                )
             } catch {
                 await logger.failStage(timingId, error: error.localizedDescription)
                 throw error
             }
         } else {
-            explainAnchors = try await complexityAnalyzer.analyzeComplexity(
+            let complexityResult = try await complexityAnalyzer.analyzeComplexity(
                 markdown: markdown,
                 lessonTitle: lesson.title,
                 lessonId: lesson.id
             )
+            explainAnchors = complexityResult.anchors
         }
         
         meta = LessonMeta(
@@ -199,7 +195,7 @@ class LessonWriterService: LessonWriterRole {
             anchors: meta.anchors + explainAnchors
         )
         
-        return (markdown, meta)
+        return (markdown, meta, lessonLLMMetadata)
     }
     
     private func extractMeta(from markdown: String, lessonId: String) -> LessonMeta {

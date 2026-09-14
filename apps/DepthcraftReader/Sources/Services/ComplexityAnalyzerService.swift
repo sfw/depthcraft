@@ -9,8 +9,6 @@ class ComplexityAnalyzerService {
     private let provider: LLMProvider
     private let model: String
     
-    var lastLLMMetadata: LLMResponse?
-    
     init(client: LLMClient, temperature: Double? = nil, topic: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
@@ -21,7 +19,7 @@ class ComplexityAnalyzerService {
         self.model = model
     }
     
-    func analyzeComplexity(markdown: String, lessonTitle: String, lessonId: String) async throws -> [LessonMeta.Anchor] {
+    func analyzeComplexity(markdown: String, lessonTitle: String, lessonId: String) async throws -> (anchors: [LessonMeta.Anchor], llmMetadata: LLMResponse) {
         let knowledgeGuidance: String
         switch knowledgeLevel {
         case .new:
@@ -90,7 +88,6 @@ class ComplexityAnalyzerService {
                 maxTokens: maxTokens
             )
             response = llmResponse.text
-            lastLLMMetadata = llmResponse
         } catch let error as LLMClientError {
             // Wrap LLM client errors with stage name for UI
             throw GenerationError.invalidResponse("Complexity: \(error.localizedDescription)")
@@ -99,7 +96,7 @@ class ComplexityAnalyzerService {
         let anchors = try parseComplexityResponse(response, lessonId: lessonId)
         
         // Soft safety cap: trim to 24 if model overfires
-        return Array(anchors.prefix(24))
+        return (anchors: Array(anchors.prefix(24)), llmMetadata: llmResponse)
     }
     
     private func parseComplexityResponse(_ response: String, lessonId: String) throws -> [LessonMeta.Anchor] {

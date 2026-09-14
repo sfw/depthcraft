@@ -560,8 +560,11 @@ class GenerationOrchestrator: ObservableObject {
                     curriculum: curriculum
                 )
                 
-                // Complete timing with metadata captured during writeLesson
-                if let metadata = lessonWriter.lastLLMMetadata {
+                markdown = generated.markdown
+                meta = generated.meta
+                
+                // Complete timing with returned metadata
+                if let metadata = generated.llmMetadata {
                     await timingLogger.completeStage(
                         timingId,
                         tokensUsed: metadata.tokensUsed,
@@ -573,8 +576,6 @@ class GenerationOrchestrator: ObservableObject {
                     await timingLogger.completeStage(timingId)
                 }
                 
-                markdown = generated.0
-                meta = generated.1
                 newLesson = (markdown, meta)
             } catch {
                 // Lesson write failed - mark timing as failed
