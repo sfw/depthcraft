@@ -43,6 +43,15 @@ struct GenerationView: View {
             }
         }
         .navigationTitle(extendFromCourse != nil ? "Extend Course" : "Generate Course")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink {
+                    GenerationTimingLogsListView()
+                } label: {
+                    Label("Timing Logs", systemImage: "clock")
+                }
+            }
+        }
         .alert("Error", isPresented: $showingError) {
             Button("OK") {
                 errorMessage = nil
@@ -307,9 +316,31 @@ struct GenerationView: View {
                     LabeledContent("Units", value: "\(output.curriculum.units.count)")
                     LabeledContent("Lessons", value: "\(output.curriculum.lessons.count)")
                     
+                    if let log = orchestrator.timingLogger.currentLog,
+                       let totalDuration = log.totalDurationMs {
+                        LabeledContent("Duration", value: formatDuration(totalDuration))
+                    }
+                    
                     Text("Saved on this iPad")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                
+                if let log = orchestrator.timingLogger.currentLog {
+                    Section("Timing Summary") {
+                        NavigationLink {
+                            GenerationTimingLogDetailView(log: log)
+                        } label: {
+                            HStack {
+                                Label("View Timing Log", systemImage: "clock")
+                                Spacer()
+                                if let duration = log.totalDurationMs {
+                                    Text(formatDuration(duration))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 Section {
