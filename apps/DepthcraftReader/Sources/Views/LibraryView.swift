@@ -117,6 +117,19 @@ struct LibraryView: View {
             }
             .background(Color(hex: "#EDE6D9"))
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if store.course != nil {
+                        Button {
+                            onSelectCourse()
+                        } label: {
+                            Label("Course", systemImage: "arrow.left")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                }
+                
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
