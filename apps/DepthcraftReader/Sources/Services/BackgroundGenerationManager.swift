@@ -1,7 +1,6 @@
 import Foundation
 import UIKit
 import UserNotifications
-import BackgroundTasks
 
 /// Manages background execution and notifications for course generation
 /// 
@@ -9,65 +8,27 @@ import BackgroundTasks
 /// 
 /// What iOS Allows:
 /// 1. beginBackgroundTask: ~30s-3min best-effort continuation when backgrounded
-/// 2. BGProcessingTask: Longer work when device idle/charging (iOS 13+)
-/// 3. Checkpoint/Resume: Persist state to survive process death
+/// 2. Checkpoint/Resume: Persist state to survive process death
 /// 
 /// What We Guarantee:
 /// - Frequent checkpointing survives process death (every lesson completion)
 /// - Resume from checkpoint on app foreground/restart (zero lesson redo)
-/// - Notifications on complete/fail (if app alive or via checkpoint on next launch)
+/// - Notifications on complete/fail
 /// - Best-effort continuation while backgrounded (iOS decides how long)
-/// - BGProcessingTask continues generation when charging/idle (requires system scheduling)
 /// 
 /// What We Don't Guarantee:
 /// - Multi-day background runs without foreground return (iOS terminates suspended apps)
-/// - Immediate continuation when backgrounded (BGProcessingTask is system-scheduled)
+/// - Continuation after beginBackgroundTask expires (~30s-3min)
 /// - Generation during Low Power Mode (iOS suspends background work)
 /// 
 /// Tradeoffs:
 /// - Exhaustive depth may require periodic foreground returns for very long runs
-/// - BGProcessingTask helps but isn't instant (system decides when to run)
 /// - Best results: keep device charging, don't force-quit app, return to foreground periodically
+/// - Checkpoint ensures zero lesson redo even if process dies
 @MainActor
 class BackgroundGenerationManager: ObservableObject {
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var hasRequestedNotificationPermission = false
-    private let bgTaskIdentifier = "com.depthcraft.generation.continue"
-    
-    /// Register BGProcessingTask handler (call once at app launch)
-    func registerBackgroundTasks() {
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: bgTaskIdentifier,
-            using: nil
-        ) { task in
-            // BGProcessingTask handler runs out-of-process, can't directly resume
-            // Mark task complete immediately - actual resume happens on foreground via checkpoint
-            task.setTaskCompleted(success: true)
-        }
-    }
-    
-    /// Schedule BGProcessingTask for continuation when device is idle/charging
-    func scheduleBGProcessingTask() {
-        let request = BGProcessingTaskRequest(identifier: bgTaskIdentifier)
-        request.requiresNetworkConnectivity = true // LLM API calls need network
-        request.requiresExternalPower = false // Don't require charging (user preference)
-        
-        // Schedule as early as possible for best-effort continuation
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 60) // 1 minute from now
-        
-        do {
-            try BGTaskScheduler.shared.submit(request)
-            print("✓ BGProcessingTask scheduled")
-        } catch {
-            print("⚠️ Could not schedule BGProcessingTask: \(error)")
-        }
-    }
-    
-    /// Cancel BGProcessingTask (call when generation completes or fails)
-    func cancelBGProcessingTask() {
-        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: bgTaskIdentifier)
-        print("✓ BGProcessingTask cancelled")
-    }
     
     /// Request notification permission (call once at generation start)
     func requestNotificationPermission() async {
@@ -100,9 +61,6 @@ class BackgroundGenerationManager: ObservableObject {
             self?.handleBackgroundTaskExpiration()
         }
         
-        // Schedule BGProcessingTask for longer background continuation
-        scheduleBGProcessingTask()
-        
         print("✓ Background task started: \(name)")
     }
     
@@ -121,7 +79,6 @@ class BackgroundGenerationManager: ObservableObject {
         
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
-        cancelBGProcessingTask() // Also cancel pending BGProcessingTask
         print("✓ Background task ended")
     }
     
@@ -175,29 +132,6 @@ class BackgroundGenerationManager: ObservableObject {
                 print("⚠️ Failed to post failure notification: \(error)")
             } else {
                 print("✓ Posted failure notification")
-            }
-        }
-    }
-    
-    /// Post notification for checkpoint resume (app was killed, now resuming)
-    func postCheckpointResumeNotification(topic: String, completedItems: Int, totalItems: Int) {
-        let content = UNMutableNotificationContent()
-        content.title = "🔄 Generation Resuming"
-        content.body = "\(topic) continuing from \(completedItems)/\(totalItems) lessons"
-        content.sound = .default
-        content.categoryIdentifier = "GENERATION_RESUME"
-        
-        let request = UNNotificationRequest(
-            identifier: "generation-resume-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("⚠️ Failed to post resume notification: \(error)")
-            } else {
-                print("✓ Posted resume notification")
             }
         }
     }

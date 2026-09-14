@@ -7,14 +7,6 @@ struct DepthcraftReaderApp: App {
     @StateObject private var orchestrator = GenerationOrchestrator(keyStore: APIKeyStore())
     @Environment(\.scenePhase) private var scenePhase
 
-    init() {
-        // Register background tasks on app launch
-        let manager = BackgroundGenerationManager()
-        Task { @MainActor in
-            manager.registerBackgroundTasks()
-        }
-    }
-
     var body: some Scene {
         WindowGroup {
             RootView()

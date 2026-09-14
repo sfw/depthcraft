@@ -29,6 +29,9 @@ class GenerationOrchestrator: ObservableObject {
     /// Store the last request for notifications
     private var activeRequest: GenerationRequest?
     
+    /// Track when generation started (for checkpoint persistence)
+    private var generationStartedAt: Date?
+    
     init(keyStore: APIKeyStore) {
         self.keyStore = keyStore
         
@@ -54,15 +57,34 @@ class GenerationOrchestrator: ObservableObject {
         partialQuizzes = checkpoint.partialQuizzes
         partialDemos = checkpoint.partialDemos
         
-        // Restore progress state
-        let phase = GenerationPhase(rawValue: checkpoint.phase) ?? .idle
-        progress = GenerationProgress(
-            phase: phase,
-            currentItem: nil,
-            completedItems: checkpoint.completedItems,
-            totalItems: checkpoint.totalItems,
-            error: nil
-        )
+        // Restore generation start time
+        generationStartedAt = checkpoint.startedAt
+        
+        // Restore progress state - branch on checkpoint phase
+        let checkpointPhase = GenerationPhase(rawValue: checkpoint.phase) ?? .idle
+        
+        if checkpointPhase == .awaitingApproval {
+            // Checkpoint was awaiting approval - restore to that state (show editor, don't auto-continue)
+            progress = GenerationProgress(
+                phase: .awaitingApproval,
+                currentItem: nil,
+                completedItems: checkpoint.completedItems,
+                totalItems: checkpoint.totalItems,
+                error: nil,
+                lessonProgress: [:]
+            )
+        } else {
+            // Checkpoint was mid-generation or post-approval - restore to .idle so continueGeneration can proceed
+            // DO NOT restore checkpoint's phase (could be .writingLessons etc) which would trigger re-entrancy guard
+            progress = GenerationProgress(
+                phase: .idle,
+                currentItem: nil,
+                completedItems: checkpoint.completedItems,
+                totalItems: checkpoint.totalItems,
+                error: nil,
+                lessonProgress: [:]  // Will be re-initialized in continueGeneration
+            )
+        }
         
         // Reconstruct request (API keys from keyStore, temperatures from global settings)
         guard let curriculum = checkpoint.curriculum else {
@@ -75,31 +97,53 @@ class GenerationOrchestrator: ObservableObject {
         let quizWriterProvider = LLMProvider(rawValue: checkpoint.quizWriterProvider) ?? .anthropic
         let demoWriterProvider = LLMProvider(rawValue: checkpoint.demoWriterProvider) ?? .anthropic
         
+        // Validate API keys exist (fail fast if missing)
+        guard let plannerKey = try? keyStore.getKey(for: plannerProvider), !plannerKey.isEmpty else {
+            print("⚠️ Missing API key for planner provider: \(plannerProvider.rawValue)")
+            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            return nil
+        }
+        guard let lessonWriterKey = try? keyStore.getKey(for: lessonWriterProvider), !lessonWriterKey.isEmpty else {
+            print("⚠️ Missing API key for lesson writer provider: \(lessonWriterProvider.rawValue)")
+            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            return nil
+        }
+        guard let quizWriterKey = try? keyStore.getKey(for: quizWriterProvider), !quizWriterKey.isEmpty else {
+            print("⚠️ Missing API key for quiz writer provider: \(quizWriterProvider.rawValue)")
+            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            return nil
+        }
+        guard let demoWriterKey = try? keyStore.getKey(for: demoWriterProvider), !demoWriterKey.isEmpty else {
+            print("⚠️ Missing API key for demo writer provider: \(demoWriterProvider.rawValue)")
+            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            return nil
+        }
+        
         let plannerConfig = LLMConfiguration(
             provider: plannerProvider,
             model: checkpoint.plannerModel,
-            apiKey: (try? keyStore.getKey(for: plannerProvider)) ?? "",
+            apiKey: plannerKey,
             temperature: keyStore.getGlobalTemperature()
         )
         
         let lessonWriterConfig = LLMConfiguration(
             provider: lessonWriterProvider,
             model: checkpoint.lessonWriterModel,
-            apiKey: (try? keyStore.getKey(for: lessonWriterProvider)) ?? "",
+            apiKey: lessonWriterKey,
             temperature: keyStore.getGlobalTemperature()
         )
         
         let quizWriterConfig = LLMConfiguration(
             provider: quizWriterProvider,
             model: checkpoint.quizWriterModel,
-            apiKey: (try? keyStore.getKey(for: quizWriterProvider)) ?? "",
+            apiKey: quizWriterKey,
             temperature: keyStore.getGlobalTemperature()
         )
         
         let demoWriterConfig = LLMConfiguration(
             provider: demoWriterProvider,
             model: checkpoint.demoWriterModel,
-            apiKey: (try? keyStore.getKey(for: demoWriterProvider)) ?? "",
+            apiKey: demoWriterKey,
             temperature: keyStore.getGlobalTemperature()
         )
         
@@ -118,13 +162,6 @@ class GenerationOrchestrator: ObservableObject {
         
         hasCheckpointAvailable = true
         print("✓ Restored from checkpoint: \(checkpoint.completedItems)/\(checkpoint.totalItems) lessons")
-        
-        // Post resume notification
-        backgroundManager.postCheckpointResumeNotification(
-            topic: checkpoint.topic,
-            completedItems: checkpoint.completedItems,
-            totalItems: checkpoint.totalItems
-        )
         
         return request
     }
@@ -160,7 +197,7 @@ class GenerationOrchestrator: ObservableObject {
             },
             partialQuizzes: partialQuizzes,
             partialDemos: partialDemos,
-            startedAt: Date(), // TODO: track actual start time
+            startedAt: generationStartedAt ?? Date(),
             lastUpdatedAt: Date()
         )
         
@@ -170,6 +207,7 @@ class GenerationOrchestrator: ObservableObject {
     
     func startGeneration(request: GenerationRequest) async {
         activeRequest = request
+        generationStartedAt = Date()
         timingLogger.startRun(topic: request.topic)
         
         // Request notification permission and begin background task
@@ -294,16 +332,6 @@ class GenerationOrchestrator: ObservableObject {
         // Ensure background task is active (may have been stopped if user returned to foreground)
         backgroundManager.beginBackgroundTask(name: "course-generation")
         
-        // Set phase immediately so UI updates even before any await
-        let totalLessons = curriculum.units.flatMap { $0.lessonIds }.count
-        progress = GenerationProgress(
-            phase: .writingLessons,
-            currentItem: "Starting generation...",
-            completedItems: 0,
-            totalItems: totalLessons,
-            error: nil
-        )
-        
         // Stamp approval
         curriculum.status = "approved"
         curriculum.approvedAt = ISO8601DateFormatter().string(from: Date())
@@ -367,6 +395,19 @@ class GenerationOrchestrator: ObservableObject {
         var lessons = partialLessons
         var quizzes = partialQuizzes
         var demos = partialDemos
+        
+        // Count already-complete lessons (all 3 stages done) to seed progress
+        let alreadyComplete = lessonsToGenerate.filter { lesson in
+            lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+        }.count
+        
+        progress = GenerationProgress(
+            phase: .writingLessons,
+            currentItem: "Writing lessons",
+            completedItems: alreadyComplete,
+            totalItems: actualTotalLessons,
+            error: nil
+        )
         
         do {
             let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
@@ -439,7 +480,7 @@ class GenerationOrchestrator: ObservableObject {
             
             progress.phase = .packaging
             progress.currentItem = "Packaging course"
-            progress.completedItems = totalLessons
+            progress.completedItems = actualTotalLessons
             
             // Slice curriculum to only selected units before packaging
             // Product lock: built package = only what learner can study (no draft stubs)
@@ -544,8 +585,8 @@ class GenerationOrchestrator: ObservableObject {
             progress = GenerationProgress(
                 phase: .completed,
                 currentItem: nil,
-                completedItems: totalLessons,
-                totalItems: totalLessons,
+                completedItems: actualTotalLessons,
+                totalItems: actualTotalLessons,
                 error: nil
             )
         } catch {
@@ -564,7 +605,7 @@ class GenerationOrchestrator: ObservableObject {
                 phase: .failed,
                 currentItem: nil,
                 completedItems: progress.completedItems,
-                totalItems: totalLessons,
+                totalItems: actualTotalLessons,
                 error: error.localizedDescription
             )
             
@@ -901,6 +942,7 @@ class GenerationOrchestrator: ObservableObject {
         partialDemos = [:]
         timingLogger.reset()
         activeRequest = nil
+        generationStartedAt = nil
     }
     
     /// Handle app entering background (called from app lifecycle)
