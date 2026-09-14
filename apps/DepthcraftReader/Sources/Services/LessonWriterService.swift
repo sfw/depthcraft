@@ -11,6 +11,8 @@ class LessonWriterService: LessonWriterRole {
     private let model: String
     private let timingLogger: GenerationTimingLogger?
     
+    var lastLLMMetadata: LLMResponse?
+    
     init(client: LLMClient, temperature: Double? = nil, topic: String, locale: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String, timingLogger: GenerationTimingLogger? = nil) {
         self.client = client
         self.temperature = temperature
@@ -122,15 +124,17 @@ class LessonWriterService: LessonWriterRole {
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let markdown: String
+        let llmResponse: LLMResponse
         do {
-            markdown = try await client.complete(
+            llmResponse = try await client.completeWithMetadata(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
                 maxTokens: maxTokens
             )
+            markdown = llmResponse.text
+            lastLLMMetadata = llmResponse
         } catch let error as LLMClientError {
-            // Wrap LLM client errors with stage name for UI
             throw GenerationError.invalidResponse("Lessons: \(error.localizedDescription)")
         }
         
@@ -150,18 +154,36 @@ class LessonWriterService: LessonWriterRole {
         
         let explainAnchors: [LessonMeta.Anchor]
         if let logger = timingLogger {
-            explainAnchors = try await logger.timeStage(
+            let timingId = logger.startStage(
                 .complexity,
                 lessonId: lesson.id,
                 provider: provider.rawValue,
                 model: model,
                 maxTokens: complexityMaxTokens
-            ) {
-                try await complexityAnalyzer.analyzeComplexity(
+            )
+            
+            do {
+                explainAnchors = try await complexityAnalyzer.analyzeComplexity(
                     markdown: markdown,
                     lessonTitle: lesson.title,
                     lessonId: lesson.id
                 )
+                
+                // Complete timing with metadata
+                if let metadata = complexityAnalyzer.lastLLMMetadata {
+                    logger.completeStage(
+                        timingId,
+                        tokensUsed: metadata.tokensUsed,
+                        finishReason: metadata.finishReason,
+                        requestCharCount: metadata.requestCharCount,
+                        responseCharCount: metadata.responseCharCount
+                    )
+                } else {
+                    logger.completeStage(timingId)
+                }
+            } catch {
+                logger.failStage(timingId, error: error.localizedDescription)
+                throw error
             }
         } else {
             explainAnchors = try await complexityAnalyzer.analyzeComplexity(

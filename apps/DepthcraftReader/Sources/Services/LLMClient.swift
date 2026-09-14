@@ -1,7 +1,16 @@
 import Foundation
 
+struct LLMResponse {
+    let text: String
+    let finishReason: String?
+    let tokensUsed: Int?
+    let requestCharCount: Int
+    let responseCharCount: Int
+}
+
 protocol LLMClient {
     func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int) async throws -> String
+    func completeWithMetadata(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int) async throws -> LLMResponse
 }
 
 enum LLMClientError: LocalizedError {
@@ -112,6 +121,13 @@ class AnthropicClient: LLMClient {
     }
     
     func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
+        let response = try await completeWithMetadata(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature, maxTokens: maxTokens)
+        return response.text
+    }
+    
+    func completeWithMetadata(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> LLMResponse {
+        let requestCharCount = systemPrompt.count + userPrompt.count
+        
         let url = URL(string: "https://api.anthropic.com/v1/messages")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -184,6 +200,11 @@ class AnthropicClient: LLMClient {
             throw LLMClientError.invalidJSON
         }
         
+        // Extract stop_reason and usage
+        let stopReason = json["stop_reason"] as? String
+        let usage = json["usage"] as? [String: Any]
+        let tokensUsed = usage?["output_tokens"] as? Int
+        
         // Extract text blocks (ignore thinking blocks from adaptive thinking models)
         var textParts: [String] = []
         for block in contentArray {
@@ -197,8 +218,15 @@ class AnthropicClient: LLMClient {
             throw LLMClientError.invalidJSON
         }
         
-        // Concatenate all text blocks
-        return textParts.joined(separator: "\n\n")
+        let text = textParts.joined(separator: "\n\n")
+        
+        return LLMResponse(
+            text: text,
+            finishReason: stopReason,
+            tokensUsed: tokensUsed,
+            requestCharCount: requestCharCount,
+            responseCharCount: text.count
+        )
     }
 }
 
@@ -212,6 +240,13 @@ class OpenAIClient: LLMClient {
     }
     
     func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
+        let response = try await completeWithMetadata(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature, maxTokens: maxTokens)
+        return response.text
+    }
+    
+    func completeWithMetadata(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> LLMResponse {
+        let requestCharCount = systemPrompt.count + userPrompt.count
+        
         let url = URL(string: "https://api.openai.com/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -285,25 +320,28 @@ class OpenAIClient: LLMClient {
             throw LLMClientError.invalidJSON
         }
         
-        // Extract finish_reason for diagnostics
+        // Extract finish_reason and usage
         let finishReason = firstChoice["finish_reason"] as? String
+        let usage = json["usage"] as? [String: Any]
+        let tokensUsed = usage?["completion_tokens"] as? Int
         
         // Handle content as String OR array of content parts (reasoning models)
+        let text: String
         if let contentString = message["content"] as? String {
-            return contentString
+            text = contentString
         } else if let contentArray = message["content"] as? [[String: Any]] {
             // Extract text from content parts (ignore reasoning blocks)
             var textParts: [String] = []
             for part in contentArray {
                 if let type = part["type"] as? String, type == "text",
-                   let text = part["text"] as? String {
-                    textParts.append(text)
+                   let partText = part["text"] as? String {
+                    textParts.append(partText)
                 }
             }
             guard !textParts.isEmpty else {
                 throw LLMClientError.invalidJSON
             }
-            return textParts.joined(separator: "\n\n")
+            text = textParts.joined(separator: "\n\n")
         } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
             // Content is null or missing - check finish_reason for context
             let reason = finishReason ?? "unknown"
@@ -311,6 +349,14 @@ class OpenAIClient: LLMClient {
         } else {
             throw LLMClientError.invalidJSON
         }
+        
+        return LLMResponse(
+            text: text,
+            finishReason: finishReason,
+            tokensUsed: tokensUsed,
+            requestCharCount: requestCharCount,
+            responseCharCount: text.count
+        )
     }
 }
 
@@ -324,6 +370,13 @@ class OpenRouterClient: LLMClient {
     }
     
     func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
+        let response = try await completeWithMetadata(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature, maxTokens: maxTokens)
+        return response.text
+    }
+    
+    func completeWithMetadata(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> LLMResponse {
+        let requestCharCount = systemPrompt.count + userPrompt.count
+        
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -393,25 +446,28 @@ class OpenRouterClient: LLMClient {
             throw LLMClientError.invalidJSON
         }
         
-        // Extract finish_reason for diagnostics
+        // Extract finish_reason and usage
         let finishReason = firstChoice["finish_reason"] as? String
+        let usage = json["usage"] as? [String: Any]
+        let tokensUsed = usage?["completion_tokens"] as? Int
         
         // Handle content as String OR array of content parts (reasoning models)
+        let text: String
         if let contentString = message["content"] as? String {
-            return contentString
+            text = contentString
         } else if let contentArray = message["content"] as? [[String: Any]] {
             // Extract text from content parts (ignore reasoning blocks)
             var textParts: [String] = []
             for part in contentArray {
                 if let type = part["type"] as? String, type == "text",
-                   let text = part["text"] as? String {
-                    textParts.append(text)
+                   let partText = part["text"] as? String {
+                    textParts.append(partText)
                 }
             }
             guard !textParts.isEmpty else {
                 throw LLMClientError.invalidJSON
             }
-            return textParts.joined(separator: "\n\n")
+            text = textParts.joined(separator: "\n\n")
         } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
             // Content is null or missing - check finish_reason for context
             let reason = finishReason ?? "unknown"
@@ -419,6 +475,14 @@ class OpenRouterClient: LLMClient {
         } else {
             throw LLMClientError.invalidJSON
         }
+        
+        return LLMResponse(
+            text: text,
+            finishReason: finishReason,
+            tokensUsed: tokensUsed,
+            requestCharCount: requestCharCount,
+            responseCharCount: text.count
+        )
     }
 }
 
@@ -435,6 +499,13 @@ class CustomOpenAIClient: LLMClient {
     }
     
     func complete(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> String {
+        let response = try await completeWithMetadata(systemPrompt: systemPrompt, userPrompt: userPrompt, temperature: temperature, maxTokens: maxTokens)
+        return response.text
+    }
+    
+    func completeWithMetadata(systemPrompt: String, userPrompt: String, temperature: Double?, maxTokens: Int = 4096) async throws -> LLMResponse {
+        let requestCharCount = systemPrompt.count + userPrompt.count
+        
         let urlString = "\(baseURL)/chat/completions"
         guard let url = URL(string: urlString) else {
             throw LLMClientError.apiError("Invalid custom base URL: \(baseURL)")
@@ -508,25 +579,28 @@ class CustomOpenAIClient: LLMClient {
             throw LLMClientError.invalidJSON
         }
         
-        // Extract finish_reason for diagnostics
+        // Extract finish_reason and usage
         let finishReason = firstChoice["finish_reason"] as? String
+        let usage = json["usage"] as? [String: Any]
+        let tokensUsed = usage?["completion_tokens"] as? Int
         
         // Handle content as String OR array of content parts (reasoning models)
+        let text: String
         if let contentString = message["content"] as? String {
-            return contentString
+            text = contentString
         } else if let contentArray = message["content"] as? [[String: Any]] {
             // Extract text from content parts (ignore reasoning blocks)
             var textParts: [String] = []
             for part in contentArray {
                 if let type = part["type"] as? String, type == "text",
-                   let text = part["text"] as? String {
-                    textParts.append(text)
+                   let partText = part["text"] as? String {
+                    textParts.append(partText)
                 }
             }
             guard !textParts.isEmpty else {
                 throw LLMClientError.invalidJSON
             }
-            return textParts.joined(separator: "\n\n")
+            text = textParts.joined(separator: "\n\n")
         } else if message["content"] == nil || (message["content"] as? NSNull) != nil {
             // Content is null or missing - check finish_reason for context
             let reason = finishReason ?? "unknown"
@@ -534,6 +608,14 @@ class CustomOpenAIClient: LLMClient {
         } else {
             throw LLMClientError.invalidJSON
         }
+        
+        return LLMResponse(
+            text: text,
+            finishReason: finishReason,
+            tokensUsed: tokensUsed,
+            requestCharCount: requestCharCount,
+            responseCharCount: text.count
+        )
     }
 }
 

@@ -546,18 +546,32 @@ class GenerationOrchestrator: ObservableObject {
             await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
             
             do {
-                let generated = try await timingLogger.timeStage(
+                // Start timing manually to capture LLM metadata
+                let timingId = timingLogger.startStage(
                     .lessonWrite,
                     lessonId: lesson.id,
                     provider: request.lessonWriterConfig.provider.rawValue,
                     model: request.lessonWriterConfig.model,
                     maxTokens: lessonMaxTokens
-                ) {
-                    try await lessonWriter.writeLesson(
-                        lesson: lesson,
-                        unit: unit,
-                        curriculum: curriculum
+                )
+                
+                let generated = try await lessonWriter.writeLesson(
+                    lesson: lesson,
+                    unit: unit,
+                    curriculum: curriculum
+                )
+                
+                // Complete timing with metadata captured during writeLesson
+                if let metadata = lessonWriter.lastLLMMetadata {
+                    timingLogger.completeStage(
+                        timingId,
+                        tokensUsed: metadata.tokensUsed,
+                        finishReason: metadata.finishReason,
+                        requestCharCount: metadata.requestCharCount,
+                        responseCharCount: metadata.responseCharCount
                     )
+                } else {
+                    timingLogger.completeStage(timingId)
                 }
                 
                 markdown = generated.0

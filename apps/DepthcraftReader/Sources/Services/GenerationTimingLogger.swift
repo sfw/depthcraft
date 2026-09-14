@@ -73,7 +73,10 @@ class GenerationTimingLogger: ObservableObject {
     
     func completeStage(
         _ entryId: UUID,
-        tokensUsed: Int? = nil
+        tokensUsed: Int? = nil,
+        finishReason: String? = nil,
+        requestCharCount: Int? = nil,
+        responseCharCount: Int? = nil
     ) {
         guard var log = currentLog,
               let entryIndex = log.entries.firstIndex(where: { $0.id == entryId }),
@@ -85,6 +88,9 @@ class GenerationTimingLogger: ObservableObject {
         entry.status = .ok
         entry.tokensUsed = tokensUsed
         entry.durationMs = entry.computedDurationMs
+        entry.finishReason = finishReason
+        entry.requestCharCount = requestCharCount
+        entry.responseCharCount = responseCharCount
         
         log.entries[entryIndex] = entry
         activeEntries.removeValue(forKey: entryId)

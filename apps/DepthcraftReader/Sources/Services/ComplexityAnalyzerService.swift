@@ -9,6 +9,8 @@ class ComplexityAnalyzerService {
     private let provider: LLMProvider
     private let model: String
     
+    var lastLLMMetadata: LLMResponse?
+    
     init(client: LLMClient, temperature: Double? = nil, topic: String, knowledgeLevel: KnowledgeLevel, depthLevel: DepthLevel, provider: LLMProvider, model: String) {
         self.client = client
         self.temperature = temperature
@@ -79,13 +81,16 @@ class ComplexityAnalyzerService {
         let maxTokens = ModelCapabilities.maxOutputTokens(provider: provider, model: model)
         
         let response: String
+        let llmResponse: LLMResponse
         do {
-            response = try await client.complete(
+            llmResponse = try await client.completeWithMetadata(
                 systemPrompt: systemPrompt,
                 userPrompt: userPrompt,
                 temperature: temperature,
                 maxTokens: maxTokens
             )
+            response = llmResponse.text
+            lastLLMMetadata = llmResponse
         } catch let error as LLMClientError {
             // Wrap LLM client errors with stage name for UI
             throw GenerationError.invalidResponse("Complexity: \(error.localizedDescription)")
