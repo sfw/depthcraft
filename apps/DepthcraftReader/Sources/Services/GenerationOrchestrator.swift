@@ -35,10 +35,19 @@ class GenerationOrchestrator: ObservableObject {
     init(keyStore: APIKeyStore) {
         self.keyStore = keyStore
         
-        // Check for existing checkpoint on init
-        hasCheckpointAvailable = checkpointManager.hasCheckpoint()
-        if hasCheckpointAvailable {
-            print("✓ Checkpoint detected on init - ready to resume")
+        // Check for existing checkpoint on init and peek completed/total for resume UI
+        if let checkpoint = checkpointManager.loadCheckpoint() {
+            hasCheckpointAvailable = true
+            // Peek completed/total so resume banner can show N/M before user taps
+            progress = GenerationProgress(
+                phase: .idle,
+                currentItem: nil,
+                completedItems: checkpoint.completedItems,
+                totalItems: checkpoint.totalItems,
+                error: nil,
+                lessonProgress: [:]
+            )
+            print("✓ Checkpoint detected on init - ready to resume (\(checkpoint.completedItems)/\(checkpoint.totalItems) lessons)")
         }
     }
     
@@ -100,22 +109,26 @@ class GenerationOrchestrator: ObservableObject {
         // Validate API keys exist (fail fast if missing)
         guard let plannerKey = try? keyStore.getKey(for: plannerProvider), !plannerKey.isEmpty else {
             print("⚠️ Missing API key for planner provider: \(plannerProvider.rawValue)")
-            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            checkpointManager.clearCheckpoint()
+            hasCheckpointAvailable = false
             return nil
         }
         guard let lessonWriterKey = try? keyStore.getKey(for: lessonWriterProvider), !lessonWriterKey.isEmpty else {
             print("⚠️ Missing API key for lesson writer provider: \(lessonWriterProvider.rawValue)")
-            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            checkpointManager.clearCheckpoint()
+            hasCheckpointAvailable = false
             return nil
         }
         guard let quizWriterKey = try? keyStore.getKey(for: quizWriterProvider), !quizWriterKey.isEmpty else {
             print("⚠️ Missing API key for quiz writer provider: \(quizWriterProvider.rawValue)")
-            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            checkpointManager.clearCheckpoint()
+            hasCheckpointAvailable = false
             return nil
         }
         guard let demoWriterKey = try? keyStore.getKey(for: demoWriterProvider), !demoWriterKey.isEmpty else {
             print("⚠️ Missing API key for demo writer provider: \(demoWriterProvider.rawValue)")
-            hasCheckpointAvailable = false  // Clear flag to avoid error loop
+            checkpointManager.clearCheckpoint()
+            hasCheckpointAvailable = false
             return nil
         }
         
@@ -395,19 +408,6 @@ class GenerationOrchestrator: ObservableObject {
         var lessons = partialLessons
         var quizzes = partialQuizzes
         var demos = partialDemos
-        
-        // Count already-complete lessons (all 3 stages done) to seed progress
-        let alreadyComplete = lessonsToGenerate.filter { lesson in
-            lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
-        }.count
-        
-        progress = GenerationProgress(
-            phase: .writingLessons,
-            currentItem: "Writing lessons",
-            completedItems: alreadyComplete,
-            totalItems: actualTotalLessons,
-            error: nil
-        )
         
         do {
             let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
@@ -801,16 +801,10 @@ class GenerationOrchestrator: ObservableObject {
                 
                 newLesson = (markdown, meta)
             } catch {
-<<<<<<< HEAD
-                // Lesson write failed - mark timing as failed and update lesson stage
-                await timingLogger.failStage(timingId, error: error.localizedDescription)
-                await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
-=======
                 // Lesson write failed - mark timing and stage as failed
                 await timingLogger.failStage(timingId, error: error.localizedDescription)
                 await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
                 
->>>>>>> bed2081 (Fix #54 regression + approval bypass + soft issues)
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: nil,
@@ -923,11 +917,7 @@ class GenerationOrchestrator: ObservableObject {
         }
     }
     
-<<<<<<< HEAD
-    /// Update per-lesson stage safely from background tasks
-=======
     /// Update per-lesson stage in progress dictionary
->>>>>>> bed2081 (Fix #54 regression + approval bypass + soft issues)
     private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
         await MainActor.run {
             // Only update if we're still in a generation phase (not failed/cancelled)
