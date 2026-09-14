@@ -401,7 +401,7 @@ private struct ZipArchive {
         
         // Search backwards from end (EOCD is usually at the end)
         let searchStart = data.count - 22
-        let searchEnd = max(0, data.count - 65557)
+        let searchEnd = Swift.max(0, data.count - 65557)
         
         for i in stride(from: searchStart, through: searchEnd, by: -1) {
             if data.uint32(at: i) == signature {
@@ -511,7 +511,7 @@ private extension Data {
             let sourceSize = self.count
             
             // Allocate output buffer from uncompressedSize (with small floor for safety)
-            let bufferSize = max(uncompressedSize, 1024)
+            let bufferSize = Swift.max(uncompressedSize, 1024)
             var outputData = Data(count: bufferSize)
             var outputSize = outputData.count
             
