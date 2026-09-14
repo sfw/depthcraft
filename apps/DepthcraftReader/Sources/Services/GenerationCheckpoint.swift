@@ -16,12 +16,23 @@ struct GenerationCheckpoint: Codable {
     // Model configurations
     let plannerProvider: String
     let plannerModel: String
+    let plannerCustomEndpointId: String?  // UUID string for custom endpoint
+    let plannerCustomBaseURL: String?     // Base URL for custom endpoint
+    
     let lessonWriterProvider: String
     let lessonWriterModel: String
+    let lessonWriterCustomEndpointId: String?
+    let lessonWriterCustomBaseURL: String?
+    
     let quizWriterProvider: String
     let quizWriterModel: String
+    let quizWriterCustomEndpointId: String?
+    let quizWriterCustomBaseURL: String?
+    
     let demoWriterProvider: String
     let demoWriterModel: String
+    let demoWriterCustomEndpointId: String?
+    let demoWriterCustomBaseURL: String?
     
     // Generation state
     let phase: String

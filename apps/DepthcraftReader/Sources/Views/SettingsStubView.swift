@@ -2,9 +2,10 @@ import SwiftUI
 
 struct SettingsStubView: View {
     @StateObject private var keyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @EnvironmentObject private var networkMonitor: NetworkMonitor
     @State private var showingKeyEntry: LLMProvider?
-    @State private var showingCustomConfig = false
+    @State private var showingCustomEndpointSheet: CustomEndpointSheet.Mode?
     @State private var keyInput = ""
     @State private var errorMessage: String?
     
@@ -33,11 +34,19 @@ struct SettingsStubView: View {
             }
             
             Section {
-                customProviderRow()
+                ForEach(customEndpointsStore.endpoints) { endpoint in
+                    customEndpointRow(endpoint: endpoint)
+                }
+                
+                Button {
+                    showingCustomEndpointSheet = .add
+                } label: {
+                    Label("Add Custom Endpoint", systemImage: "plus.circle")
+                }
             } header: {
-                Text("Custom Endpoint (OpenAI-compatible)")
+                Text("Custom Endpoints (OpenAI-compatible)")
             } footer: {
-                Text("Configure a custom OpenAI-compatible endpoint such as Moonshot/Kimi (https://api.moonshot.cn/v1) or any other compatible API.")
+                Text("Add multiple custom OpenAI-compatible endpoints such as Moonshot/Kimi (https://api.moonshot.cn/v1) or any other compatible API. Each endpoint appears as its own provider in model selection.")
                     .font(.caption)
             }
             
@@ -48,6 +57,10 @@ struct SettingsStubView: View {
             }
         }
         .navigationTitle("Settings")
+        .onAppear {
+            // Perform migration on first appearance
+            customEndpointsStore.migrateLegacyCustomEndpoint(from: keyStore)
+        }
         .sheet(item: $showingKeyEntry) { provider in
             KeyEntrySheet(
                 provider: provider,
@@ -58,10 +71,14 @@ struct SettingsStubView: View {
                 )
             )
         }
-        .sheet(isPresented: $showingCustomConfig) {
+        .sheet(item: $showingCustomEndpointSheet) { mode in
             CustomEndpointSheet(
-                keyStore: keyStore,
-                isPresented: $showingCustomConfig
+                mode: mode,
+                customEndpointsStore: customEndpointsStore,
+                isPresented: Binding(
+                    get: { showingCustomEndpointSheet != nil },
+                    set: { if !$0 { showingCustomEndpointSheet = nil } }
+                )
             )
         }
     }
@@ -93,53 +110,51 @@ struct SettingsStubView: View {
         }
     }
     
-    private func customProviderRow() -> some View {
+    private func customEndpointRow(endpoint: CustomEndpoint) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Custom Endpoint")
-                    .font(.body)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(endpoint.label)
+                        .font(.body)
+                    
+                    if customEndpointsStore.hasKey(for: endpoint) {
+                        Text("Configured")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Text(endpoint.baseURL)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        
+                        if let defaultModel = endpoint.defaultModel {
+                            Text("Model: \(defaultModel)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("No key configured")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 
                 Spacer()
                 
-                if keyStore.hasCustomKey && !keyStore.customBaseURL.isEmpty {
-                    Button("Edit") {
-                        showingCustomConfig = true
-                    }
-                    .buttonStyle(.borderless)
-                    
-                    Button("Remove", role: .destructive) {
-                        try? keyStore.deleteKey(for: .custom)
-                        keyStore.setCustomBaseURL("")
-                        keyStore.setCustomModel("")
-                    }
-                    .buttonStyle(.borderless)
-                } else {
-                    Button("Configure") {
-                        showingCustomConfig = true
-                    }
-                    .buttonStyle(.borderless)
+                Button("Edit") {
+                    showingCustomEndpointSheet = .edit(endpoint)
                 }
-            }
-            
-            if keyStore.hasCustomKey && !keyStore.customBaseURL.isEmpty {
-                Text("Configured")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
+                .buttonStyle(.bordered)
                 
-                if !keyStore.customBaseURL.isEmpty {
-                    Text(keyStore.customBaseURL)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                Button("Remove", role: .destructive) {
+                    customEndpointsStore.delete(endpoint)
                 }
-                
-                if !keyStore.customModel.isEmpty {
-                    Text("Model: \(keyStore.customModel)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .font(.caption)
+                .buttonStyle(.bordered)
             }
         }
+        .padding(.vertical, 4)
     }
 }
 
@@ -198,38 +213,65 @@ struct KeyEntrySheet: View {
 }
 
 struct CustomEndpointSheet: View {
-    let keyStore: APIKeyStore
+    enum Mode: Identifiable {
+        case add
+        case edit(CustomEndpoint)
+        
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .edit(let endpoint): return "edit-\(endpoint.id.uuidString)"
+            }
+        }
+    }
+    
+    let mode: Mode
+    let customEndpointsStore: CustomEndpointsStore
     @Binding var isPresented: Bool
     
+    @State private var label: String
     @State private var baseURL: String
-    @State private var model: String
+    @State private var defaultModel: String
     @State private var apiKey: String
     @State private var hasExistingKey: Bool
     @State private var errorMessage: String?
     
-    init(keyStore: APIKeyStore, isPresented: Binding<Bool>) {
-        self.keyStore = keyStore
+    init(mode: Mode, customEndpointsStore: CustomEndpointsStore, isPresented: Binding<Bool>) {
+        self.mode = mode
+        self.customEndpointsStore = customEndpointsStore
         self._isPresented = isPresented
-        self._baseURL = State(initialValue: keyStore.customBaseURL)
-        self._model = State(initialValue: keyStore.customModel)
-        // SECURITY: Never load existing key into the field (prevents shoulder surfing)
-        // Show placeholder if key exists; only update if user enters new key
-        let hasKey = (try? keyStore.getKey(for: .custom)) != nil
-        self._hasExistingKey = State(initialValue: hasKey)
-        self._apiKey = State(initialValue: "")
+        
+        switch mode {
+        case .add:
+            self._label = State(initialValue: "")
+            self._baseURL = State(initialValue: "")
+            self._defaultModel = State(initialValue: "")
+            self._apiKey = State(initialValue: "")
+            self._hasExistingKey = State(initialValue: false)
+        case .edit(let endpoint):
+            self._label = State(initialValue: endpoint.label)
+            self._baseURL = State(initialValue: endpoint.baseURL)
+            self._defaultModel = State(initialValue: endpoint.defaultModel ?? "")
+            self._apiKey = State(initialValue: "")
+            let hasKey = customEndpointsStore.hasKey(for: endpoint)
+            self._hasExistingKey = State(initialValue: hasKey)
+        }
     }
     
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    TextField("Label", text: $label)
+                        .autocorrectionDisabled()
+                    
                     TextField("Base URL", text: $baseURL)
                         .textContentType(.URL)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                     
-                    TextField("Model", text: $model)
+                    TextField("Default Model (optional)", text: $defaultModel)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                     
@@ -252,16 +294,16 @@ struct CustomEndpointSheet: View {
                     Text("Endpoint Configuration")
                 } footer: {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Example for Moonshot/Kimi:")
-                        Text("Base URL: https://api.moonshot.cn/v1")
-                        Text("Model: moonshot-v1-8k")
+                        Text("Label: A friendly name for this endpoint (e.g., \"Moonshot\", \"Local LLM\")")
+                        Text("Base URL: e.g., https://api.moonshot.cn/v1")
+                        Text("Default Model: Optional. Will be used as initial model selection.")
                         Text("")
                         Text("Your API key is stored securely in the device Keychain and never leaves your device.")
                     }
                     .font(.caption)
                 }
             }
-            .navigationTitle("Custom Endpoint")
+            .navigationTitle(mode.isAdd ? "Add Custom Endpoint" : "Edit Custom Endpoint")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -271,26 +313,62 @@ struct CustomEndpointSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        saveConfig()
+                        saveEndpoint()
                     }
-                    .disabled(baseURL.isEmpty || model.isEmpty || (!hasExistingKey && apiKey.isEmpty))
+                    .disabled(!isValid)
                 }
             }
         }
     }
     
-    private func saveConfig() {
+    private var isValid: Bool {
+        !label.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !baseURL.trimmingCharacters(in: .whitespaces).isEmpty &&
+        (hasExistingKey || !apiKey.isEmpty)
+    }
+    
+    private func saveEndpoint() {
         do {
-            // Only update key if user entered a new one
-            if !apiKey.isEmpty {
-                try keyStore.setKey(apiKey, for: .custom)
+            let trimmedLabel = label.trimmingCharacters(in: .whitespaces)
+            let trimmedURL = baseURL.trimmingCharacters(in: .whitespaces)
+            let trimmedModel = defaultModel.trimmingCharacters(in: .whitespaces)
+            
+            switch mode {
+            case .add:
+                let endpoint = CustomEndpoint(
+                    label: trimmedLabel,
+                    baseURL: trimmedURL,
+                    defaultModel: trimmedModel.isEmpty ? nil : trimmedModel
+                )
+                if !apiKey.isEmpty {
+                    try customEndpointsStore.setKey(apiKey, for: endpoint)
+                }
+                customEndpointsStore.add(endpoint)
+                
+            case .edit(let existingEndpoint):
+                let updatedEndpoint = CustomEndpoint(
+                    id: existingEndpoint.id,
+                    label: trimmedLabel,
+                    baseURL: trimmedURL,
+                    defaultModel: trimmedModel.isEmpty ? nil : trimmedModel
+                )
+                if !apiKey.isEmpty {
+                    try customEndpointsStore.setKey(apiKey, for: updatedEndpoint)
+                }
+                customEndpointsStore.update(updatedEndpoint)
             }
-            keyStore.setCustomBaseURL(baseURL)
-            keyStore.setCustomModel(model)
+            
             isPresented = false
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+extension CustomEndpointSheet.Mode {
+    var isAdd: Bool {
+        if case .add = self { return true }
+        return false
     }
 }
 

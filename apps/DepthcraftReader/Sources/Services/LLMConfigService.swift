@@ -4,19 +4,25 @@ import Foundation
 @MainActor
 class LLMConfigService {
     private let apiKeyStore: APIKeyStore
+    private let customEndpointsStore: CustomEndpointsStore
     private let roleConfigService: LLMRoleConfigService
     
-    init(apiKeyStore: APIKeyStore) {
+    init(apiKeyStore: APIKeyStore, customEndpointsStore: CustomEndpointsStore) {
         self.apiKeyStore = apiKeyStore
-        self.roleConfigService = LLMRoleConfigService(apiKeyStore: apiKeyStore)
+        self.customEndpointsStore = customEndpointsStore
+        self.roleConfigService = LLMRoleConfigService(apiKeyStore: apiKeyStore, customEndpointsStore: customEndpointsStore)
+        
+        // Migrate legacy custom endpoint on init
+        customEndpointsStore.migrateLegacyCustomEndpoint(from: apiKeyStore)
     }
     
     /// Check if we have any API key configured
     func hasAPIKey() -> Bool {
-        return apiKeyStore.hasAnthropicKey ||
-               apiKeyStore.hasOpenAIKey ||
-               apiKeyStore.hasOpenRouterKey ||
-               apiKeyStore.hasCustomKey
+        let hasFixedProvider = apiKeyStore.hasAnthropicKey ||
+                              apiKeyStore.hasOpenAIKey ||
+                              apiKeyStore.hasOpenRouterKey
+        let hasCustomEndpoint = customEndpointsStore.endpoints.contains { customEndpointsStore.hasKey(for: $0) }
+        return hasFixedProvider || hasCustomEndpoint
     }
     
     /// Get the first available LLM configuration for Explain role

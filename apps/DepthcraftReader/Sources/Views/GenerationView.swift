@@ -3,6 +3,7 @@ import SwiftUI
 struct GenerationView: View {
     @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @StateObject private var keyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @StateObject private var roleConfig: LLMRoleConfigService
     @EnvironmentObject private var courseStore: CourseStore
     @Environment(\.dismiss) private var dismiss
@@ -23,8 +24,10 @@ struct GenerationView: View {
     init(extendFromCourse: LoadedCourse? = nil) {
         self.extendFromCourse = extendFromCourse
         let store = APIKeyStore()
+        let customStore = CustomEndpointsStore()
         _keyStore = StateObject(wrappedValue: store)
-        _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store))
+        _customEndpointsStore = StateObject(wrappedValue: customStore)
+        _roleConfig = StateObject(wrappedValue: LLMRoleConfigService(apiKeyStore: store, customEndpointsStore: customStore))
     }
     
     var body: some View {
@@ -83,6 +86,9 @@ struct GenerationView: View {
             Text("The generated course has been loaded. Tap OK to return to the course home.")
         }
         .onAppear {
+            // Migrate legacy custom endpoint on first appearance
+            customEndpointsStore.migrateLegacyCustomEndpoint(from: keyStore)
+            
             // If extending, pre-populate from existing course and default to Brief
             if let course = extendFromCourse {
                 topic = course.manifest.topic

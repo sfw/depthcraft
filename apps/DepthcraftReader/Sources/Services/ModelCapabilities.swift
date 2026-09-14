@@ -19,6 +19,16 @@ struct ModelCapabilities {
         }
     }
     
+    /// Get the maximum output tokens for a provider selection and model
+    static func maxOutputTokens(selection: ProviderSelection, model: String) -> Int {
+        switch selection {
+        case .fixed(let provider):
+            return maxOutputTokens(provider: provider, model: model)
+        case .customEndpoint:
+            return customMaxOutput(model: model)
+        }
+    }
+    
     // MARK: - Anthropic
     
     private static func anthropicMaxOutput(model: String) -> Int {

@@ -13,6 +13,7 @@ class GenerationOrchestrator: ObservableObject {
     private var partialDemos: [String: DemoWriterOutput] = [:]
     
     private let keyStore: APIKeyStore
+    private let customEndpointsStore: CustomEndpointsStore
     let timingLogger = GenerationTimingLogger()
     
     /// Maximum number of lessons to generate concurrently (Perf Slice 2)
@@ -32,8 +33,9 @@ class GenerationOrchestrator: ObservableObject {
     /// Track when generation started (for checkpoint persistence)
     private var generationStartedAt: Date?
     
-    init(keyStore: APIKeyStore) {
+    init(keyStore: APIKeyStore, customEndpointsStore: CustomEndpointsStore) {
         self.keyStore = keyStore
+        self.customEndpointsStore = customEndpointsStore
         
         // Check for existing checkpoint on init and peek completed/total for resume UI
         if let checkpoint = checkpointManager.loadCheckpoint() {
@@ -101,64 +103,119 @@ class GenerationOrchestrator: ObservableObject {
             return nil
         }
         
+        // Helper to reconstruct LLMConfiguration from checkpoint
+        func buildConfig(
+            provider: LLMProvider,
+            model: String,
+            customEndpointId: String?,
+            customBaseURL: String?
+        ) throws -> LLMConfiguration {
+            if provider == .custom {
+                // Custom endpoint - need to get key and baseURL
+                var apiKey: String?
+                var baseURL: String?
+                
+                // Try to find endpoint by ID first
+                if let endpointIdString = customEndpointId,
+                   let endpointId = UUID(uuidString: endpointIdString),
+                   let endpoint = customEndpointsStore.getEndpoint(id: endpointId) {
+                    apiKey = try? customEndpointsStore.getKey(for: endpoint)
+                    baseURL = endpoint.baseURL
+                }
+                
+                // Fallback to baseURL lookup or legacy storage
+                if apiKey == nil, let customBaseURL = customBaseURL {
+                    // Try to find endpoint by baseURL
+                    if let endpoint = customEndpointsStore.endpoints.first(where: { $0.baseURL == customBaseURL }) {
+                        apiKey = try? customEndpointsStore.getKey(for: endpoint)
+                        baseURL = endpoint.baseURL
+                    } else {
+                        // Legacy: try old .custom keychain location (for in-flight checkpoints from pre-#59)
+                        apiKey = try? keyStore.getKey(for: .custom)
+                        baseURL = customBaseURL
+                    }
+                }
+                
+                guard let apiKey = apiKey, !apiKey.isEmpty else {
+                    throw NSError(domain: "GenerationOrchestrator", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Missing API key for custom endpoint"
+                    ])
+                }
+                guard let baseURL = baseURL, !baseURL.isEmpty else {
+                    throw NSError(domain: "GenerationOrchestrator", code: 2, userInfo: [
+                        NSLocalizedDescriptionKey: "Missing base URL for custom endpoint"
+                    ])
+                }
+                
+                return LLMConfiguration(
+                    provider: .custom,
+                    model: model,
+                    apiKey: apiKey,
+                    temperature: keyStore.getGlobalTemperature(),
+                    customBaseURL: baseURL
+                )
+            } else {
+                // Fixed provider
+                guard let apiKey = try? keyStore.getKey(for: provider), !apiKey.isEmpty else {
+                    throw NSError(domain: "GenerationOrchestrator", code: 3, userInfo: [
+                        NSLocalizedDescriptionKey: "Missing API key for provider: \(provider.rawValue)"
+                    ])
+                }
+                
+                return LLMConfiguration(
+                    provider: provider,
+                    model: model,
+                    apiKey: apiKey,
+                    temperature: keyStore.getGlobalTemperature()
+                )
+            }
+        }
+        
         let plannerProvider = LLMProvider(rawValue: checkpoint.plannerProvider) ?? .anthropic
         let lessonWriterProvider = LLMProvider(rawValue: checkpoint.lessonWriterProvider) ?? .anthropic
         let quizWriterProvider = LLMProvider(rawValue: checkpoint.quizWriterProvider) ?? .anthropic
         let demoWriterProvider = LLMProvider(rawValue: checkpoint.demoWriterProvider) ?? .anthropic
         
-        // Validate API keys exist (fail fast if missing)
-        guard let plannerKey = try? keyStore.getKey(for: plannerProvider), !plannerKey.isEmpty else {
-            print("⚠️ Missing API key for planner provider: \(plannerProvider.rawValue)")
+        // Build configurations with custom endpoint support
+        let plannerConfig: LLMConfiguration
+        let lessonWriterConfig: LLMConfiguration
+        let quizWriterConfig: LLMConfiguration
+        let demoWriterConfig: LLMConfiguration
+        
+        do {
+            plannerConfig = try buildConfig(
+                provider: plannerProvider,
+                model: checkpoint.plannerModel,
+                customEndpointId: checkpoint.plannerCustomEndpointId,
+                customBaseURL: checkpoint.plannerCustomBaseURL
+            )
+            
+            lessonWriterConfig = try buildConfig(
+                provider: lessonWriterProvider,
+                model: checkpoint.lessonWriterModel,
+                customEndpointId: checkpoint.lessonWriterCustomEndpointId,
+                customBaseURL: checkpoint.lessonWriterCustomBaseURL
+            )
+            
+            quizWriterConfig = try buildConfig(
+                provider: quizWriterProvider,
+                model: checkpoint.quizWriterModel,
+                customEndpointId: checkpoint.quizWriterCustomEndpointId,
+                customBaseURL: checkpoint.quizWriterCustomBaseURL
+            )
+            
+            demoWriterConfig = try buildConfig(
+                provider: demoWriterProvider,
+                model: checkpoint.demoWriterModel,
+                customEndpointId: checkpoint.demoWriterCustomEndpointId,
+                customBaseURL: checkpoint.demoWriterCustomBaseURL
+            )
+        } catch {
+            print("⚠️ Failed to build configurations from checkpoint: \(error.localizedDescription)")
             checkpointManager.clearCheckpoint()
             hasCheckpointAvailable = false
             return nil
         }
-        guard let lessonWriterKey = try? keyStore.getKey(for: lessonWriterProvider), !lessonWriterKey.isEmpty else {
-            print("⚠️ Missing API key for lesson writer provider: \(lessonWriterProvider.rawValue)")
-            checkpointManager.clearCheckpoint()
-            hasCheckpointAvailable = false
-            return nil
-        }
-        guard let quizWriterKey = try? keyStore.getKey(for: quizWriterProvider), !quizWriterKey.isEmpty else {
-            print("⚠️ Missing API key for quiz writer provider: \(quizWriterProvider.rawValue)")
-            checkpointManager.clearCheckpoint()
-            hasCheckpointAvailable = false
-            return nil
-        }
-        guard let demoWriterKey = try? keyStore.getKey(for: demoWriterProvider), !demoWriterKey.isEmpty else {
-            print("⚠️ Missing API key for demo writer provider: \(demoWriterProvider.rawValue)")
-            checkpointManager.clearCheckpoint()
-            hasCheckpointAvailable = false
-            return nil
-        }
-        
-        let plannerConfig = LLMConfiguration(
-            provider: plannerProvider,
-            model: checkpoint.plannerModel,
-            apiKey: plannerKey,
-            temperature: keyStore.getGlobalTemperature()
-        )
-        
-        let lessonWriterConfig = LLMConfiguration(
-            provider: lessonWriterProvider,
-            model: checkpoint.lessonWriterModel,
-            apiKey: lessonWriterKey,
-            temperature: keyStore.getGlobalTemperature()
-        )
-        
-        let quizWriterConfig = LLMConfiguration(
-            provider: quizWriterProvider,
-            model: checkpoint.quizWriterModel,
-            apiKey: quizWriterKey,
-            temperature: keyStore.getGlobalTemperature()
-        )
-        
-        let demoWriterConfig = LLMConfiguration(
-            provider: demoWriterProvider,
-            model: checkpoint.demoWriterModel,
-            apiKey: demoWriterKey,
-            temperature: keyStore.getGlobalTemperature()
-        )
         
         let request = GenerationRequest(
             topic: checkpoint.topic,
@@ -186,6 +243,24 @@ class GenerationOrchestrator: ObservableObject {
             return
         }
         
+        // Helper to extract custom endpoint info from LLMConfiguration
+        func getCustomEndpointInfo(_ config: LLMConfiguration) -> (id: String?, baseURL: String?) {
+            if config.provider == .custom, let baseURL = config.customBaseURL {
+                // Try to find matching endpoint by baseURL
+                if let endpoint = customEndpointsStore.endpoints.first(where: { $0.baseURL == baseURL }) {
+                    return (endpoint.id.uuidString, baseURL)
+                }
+                // Fallback: just store the baseURL for legacy compatibility
+                return (nil, baseURL)
+            }
+            return (nil, nil)
+        }
+        
+        let plannerEndpoint = getCustomEndpointInfo(request.plannerConfig)
+        let lessonWriterEndpoint = getCustomEndpointInfo(request.lessonWriterConfig)
+        let quizWriterEndpoint = getCustomEndpointInfo(request.quizWriterConfig)
+        let demoWriterEndpoint = getCustomEndpointInfo(request.demoWriterConfig)
+        
         let checkpoint = GenerationCheckpoint(
             topic: request.topic,
             locale: request.locale,
@@ -195,12 +270,20 @@ class GenerationOrchestrator: ObservableObject {
             extendFromPackageURL: request.extendFromPackageURL,
             plannerProvider: request.plannerConfig.provider.rawValue,
             plannerModel: request.plannerConfig.model,
+            plannerCustomEndpointId: plannerEndpoint.id,
+            plannerCustomBaseURL: plannerEndpoint.baseURL,
             lessonWriterProvider: request.lessonWriterConfig.provider.rawValue,
             lessonWriterModel: request.lessonWriterConfig.model,
+            lessonWriterCustomEndpointId: lessonWriterEndpoint.id,
+            lessonWriterCustomBaseURL: lessonWriterEndpoint.baseURL,
             quizWriterProvider: request.quizWriterConfig.provider.rawValue,
             quizWriterModel: request.quizWriterConfig.model,
+            quizWriterCustomEndpointId: quizWriterEndpoint.id,
+            quizWriterCustomBaseURL: quizWriterEndpoint.baseURL,
             demoWriterProvider: request.demoWriterConfig.provider.rawValue,
             demoWriterModel: request.demoWriterConfig.model,
+            demoWriterCustomEndpointId: demoWriterEndpoint.id,
+            demoWriterCustomBaseURL: demoWriterEndpoint.baseURL,
             phase: progress.phase.rawValue,
             curriculum: curriculum,
             completedItems: progress.completedItems,
