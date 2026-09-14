@@ -463,3 +463,4 @@ extension CourseHomeView {
             print("File importer error: \(error)")
         }
     }
+}
