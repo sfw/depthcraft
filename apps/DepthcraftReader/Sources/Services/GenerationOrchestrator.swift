@@ -185,7 +185,7 @@ class GenerationOrchestrator: ObservableObject {
         let actualTotalLessons = lessonsToGenerate.count
         
         // Initialize per-lesson progress tracking
-        var lessonProgressDict: [String: LessonProgress] = [:]
+        var lessonProgressDict: [String: LessonGenerationProgress] = [:]
         for lesson in lessonsToGenerate {
             let existingLesson = partialLessons[lesson.id]
             let existingQuiz = partialQuizzes[lesson.id]
@@ -204,7 +204,7 @@ class GenerationOrchestrator: ObservableObject {
                 stage = .queued
             }
             
-            lessonProgressDict[lesson.id] = LessonProgress(
+            lessonProgressDict[lesson.id] = LessonGenerationProgress(
                 lessonId: lesson.id,
                 lessonTitle: lesson.title,
                 stage: stage,

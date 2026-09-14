@@ -180,8 +180,8 @@ enum LessonStage: String, Equatable, Codable {
     }
 }
 
-/// Per-lesson progress state
-struct LessonProgress: Equatable, Codable {
+/// Per-lesson progress state during generation
+struct LessonGenerationProgress: Equatable, Codable {
     let lessonId: String
     let lessonTitle: String
     var stage: LessonStage
@@ -204,7 +204,7 @@ struct GenerationProgress {
     var error: String?
     
     /// Per-lesson progress (keyed by lessonId)
-    var lessonProgress: [String: LessonProgress] = [:]
+    var lessonProgress: [String: LessonGenerationProgress] = [:]
     
     var progressPercent: Double {
         guard totalItems > 0 else { return 0 }
@@ -217,7 +217,7 @@ struct GenerationProgress {
     }
     
     /// Get curriculum-ordered lesson progress
-    func orderedLessons(for curriculum: Curriculum) -> [LessonProgress] {
+    func orderedLessons(for curriculum: Curriculum) -> [LessonGenerationProgress] {
         let allLessonIds = curriculum.units.flatMap { $0.lessonIds }
         return allLessonIds.compactMap { lessonProgress[$0] }
     }

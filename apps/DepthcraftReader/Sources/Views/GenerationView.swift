@@ -304,7 +304,7 @@ struct GenerationView: View {
         .frame(maxHeight: 400)
     }
     
-    private func lessonRow(lessonProgress: LessonProgress) -> some View {
+    private func lessonRow(lessonProgress: LessonGenerationProgress) -> some View {
         HStack(spacing: 12) {
             // Stage icon
             stageIcon(for: lessonProgress.stage)
