@@ -4,6 +4,7 @@ struct LibraryView: View {
     @EnvironmentObject private var store: CourseStore
     @State private var packages: [LibraryPackageMetadata] = []
     @State private var showingImporter = false
+    @State private var showingMoreMenu = false
     let onSelectCourse: () -> Void
     
     var body: some View {
@@ -96,6 +97,27 @@ struct LibraryView: View {
         .onChange(of: store.availablePackages) { _ in
             refreshPackages()
         }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingMoreMenu = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
+        }
+        .sheet(isPresented: $showingMoreMenu) {
+            NavigationStack {
+                MoreMenuView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") {
+                                showingMoreMenu = false
+                            }
+                        }
+                    }
+            }
+        }
     }
     
     private func handleImport(_ result: Result<[URL], Error>) {
@@ -143,26 +165,27 @@ struct CourseShelfCover: View {
             if isMostRecent {
                 Rectangle()
                     .fill(Color(hex: "#0D9488"))
-                    .frame(width: 2.5)
+                    .frame(width: 3)
             }
             
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text(package.title)
-                    .font(.system(size: 19, weight: .semibold, design: .default))
+                    .font(.system(size: 22, weight: .semibold, design: .default))
                     .foregroundStyle(Color(hex: "#1C1917"))
-                    .lineLimit(2)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Spacer()
                 
                 Text(packageMeta)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(Color(hex: "#1C1917").opacity(0.6))
             }
-            .padding(16)
+            .padding(20)
         }
-        .frame(width: 200, height: 267)
+        .frame(width: 320, height: 427)
         .background(Color(hex: "#F5F0E6"))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
