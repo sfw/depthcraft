@@ -4,7 +4,6 @@ struct RootView: View {
     @EnvironmentObject private var store: CourseStore
     @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @State private var navigationPath: [NavigationDestination] = []
-    @State private var showGenerationView = false
     @State private var showingLibrary = false
 
     var body: some View {
@@ -38,6 +37,8 @@ struct RootView: View {
                         UnitView(unitId: unitId)
                     case .lesson(let unitId, let lessonId):
                         LessonPlayerView(unitId: unitId, lessonId: lessonId, navigationPath: $navigationPath)
+                    case .generation:
+                        GenerationView()
                     }
                 }
             }
@@ -57,20 +58,8 @@ struct RootView: View {
             
             // Background generation status banner
             if isGenerationActive {
-                GenerationStatusBanner(orchestrator: orchestrator, showGenerationView: $showGenerationView)
+                GenerationStatusBanner(orchestrator: orchestrator, navigationPath: $navigationPath)
                     .padding(.top, 50)
-            }
-        }
-        .sheet(isPresented: $showGenerationView) {
-            NavigationStack {
-                GenerationView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") {
-                                showGenerationView = false
-                            }
-                        }
-                    }
             }
         }
         .alert("Course Updated", isPresented: $store.showUpgradeDialog) {
@@ -101,11 +90,11 @@ struct RootView: View {
 /// Banner shown at top of screen when generation is active
 struct GenerationStatusBanner: View {
     @ObservedObject var orchestrator: GenerationOrchestrator
-    @Binding var showGenerationView: Bool
+    @Binding var navigationPath: [NavigationDestination]
     
     var body: some View {
         Button {
-            showGenerationView = true
+            navigationPath.append(.generation)
         } label: {
             HStack(spacing: 12) {
                 ProgressView()
