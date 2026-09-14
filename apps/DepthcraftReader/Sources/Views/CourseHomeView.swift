@@ -155,12 +155,22 @@ struct CourseHomeView: View {
                     Spacer()
                     
                     VStack(spacing: 16) {
-                        Image(systemName: "square.on.square.dashed")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
+                        // Restrained home brand mark + wordmark
+                        HStack(spacing: 10) {
+                            Image("HomeMark")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 28)
+                                .accessibilityHidden(true)
+                            
+                            Text("Depthcraft")
+                                .font(.system(size: 16, weight: .semibold, design: .default))
+                                .foregroundStyle(Color(hex: "#1C1917"))
+                        }
                         
                         Text("No Course")
                             .font(.system(.title2, design: .serif, weight: .semibold))
+                            .padding(.top, 8)
                         
                         Text("Set API keys in Settings, then Generate")
                             .font(.subheadline)

@@ -10,14 +10,20 @@ struct LibraryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // Restrained home brand mark
-                Image("HomeMark")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 28)
-                    .accessibilityHidden(true)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                // Restrained home brand mark + wordmark
+                HStack(spacing: 10) {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                        .accessibilityHidden(true)
+                    
+                    Text("Depthcraft")
+                        .font(.system(size: 16, weight: .semibold, design: .default))
+                        .foregroundStyle(Color(hex: "#1C1917"))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Library")
@@ -47,7 +53,7 @@ struct LibraryView: View {
                 .padding(.top, 8)
                 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 18) {
+                    HStack(spacing: 22) {
                         ForEach(packages) { package in
                             CourseShelfCover(
                                 package: package,
