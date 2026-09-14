@@ -10,6 +10,12 @@ struct CourseHomeView: View {
                 // Cover band: title, subtitle, colophon
                 Section {
                     VStack(alignment: .leading, spacing: 16) {
+                        // Restrained home brand mark
+                        Image("HomeMark")
+                            .resizable()
+                            .frame(width: 28, height: 28)
+                            .padding(.bottom, 8)
+                        
                         VStack(alignment: .leading, spacing: 8) {
                             Text(course.manifest.title)
                                 .font(.system(.title, design: .serif, weight: .semibold))

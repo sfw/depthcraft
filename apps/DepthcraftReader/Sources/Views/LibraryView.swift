@@ -9,6 +9,13 @@ struct LibraryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // Restrained home brand mark
+                Image("HomeMark")
+                    .resizable()
+                    .frame(width: 28, height: 28)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Library")
                         .font(.system(.largeTitle, design: .serif, weight: .semibold))

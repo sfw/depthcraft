@@ -50,10 +50,18 @@ struct SettingsStubView: View {
                     .font(.caption)
             }
             
-            Section("About") {
-                LabeledContent("Reader", value: "0.1.0")
+            Section {
+                let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+                HStack {
+                    Text("Depthcraft · \(version)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                }
                 LabeledContent("Schema", value: "0.1.0")
                 LabeledContent("Mode", value: networkMonitor.isOnline ? "Online" : "Offline")
+            } header: {
+                Text("About")
             }
         }
         .navigationTitle("Settings")
