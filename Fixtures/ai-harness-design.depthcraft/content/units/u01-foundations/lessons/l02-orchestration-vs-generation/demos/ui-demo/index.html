@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UI Kit Demo</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #demo-container {
+      width: 100%;
+      max-width: 600px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="demo-container"></div>
+  
+  <script type="module">
+    // Import UI Kit from app-bundled kit using kit: URL scheme
+    try {
+      await import('kit:ui-v0/kit.js');
+      console.log('✅ UI Kit loaded:', window.DepthcraftUIKit);
+    } catch (error) {
+      if (window.webkit?.messageHandlers?.demoError) {
+        window.webkit.messageHandlers.demoError.postMessage(`Kit import failed: ${error.message}`);
+      }
+      throw error;
+    }
+    
+    // Demo: Step sequence showing orchestration patterns
+    const stepDemo = DepthcraftUIKit.createStepSequence({
+      containerId: 'demo-container',
+      learningGoal: 'Understand orchestration layers in AI harness design',
+      steps: [
+        {
+          title: 'Step 1: Single Call',
+          content: 'Start simple: one prompt, one model call, one response. Direct and transparent, but limited to what fits in one context window.'
+        },
+        {
+          title: 'Step 2: Sequential Chain',
+          content: 'Break work into stages: outline → draft → review. Each stage feeds the next. Orchestration begins.'
+        },
+        {
+          title: 'Step 3: Parallel Branches',
+          content: 'Run independent tasks concurrently: generate lesson + quiz + meta in parallel. Harness coordinates completion.'
+        },
+        {
+          title: 'Step 4: Conditional Logic',
+          content: 'Inspect outputs and branch: if validation fails, retry with correction. If schema missing, regenerate specific field.'
+        },
+        {
+          title: 'Step 5: Tool Integration',
+          content: 'Models request tools (search, compute, format). Harness executes safely, feeds results back. Agentic behavior emerges.'
+        },
+        {
+          title: 'Step 6: Human Handoff',
+          content: 'When stuck or policy-blocked, escalate to human. Harness preserves state, resumes after human decision. Full loop.'
+        }
+      ]
+    });
+    
+    // Expose reset for demo controls
+    window.resetDemo = function() {
+      stepDemo.reset();
+    };
+  </script>
+</body>
+</html>

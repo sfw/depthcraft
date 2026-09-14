@@ -240,7 +240,7 @@ class PackagerService: PackagerRole {
     }
     
     private func validateDemoSpec(_ demo: DemoSpec, lessonId: String, lessonMarkdown: String) throws {
-        let allowedKits = ["three-v0"]
+        let allowedKits = ["three-v0", "ui-v0"]
         guard allowedKits.contains(demo.kit) else {
             throw GenerationError.validationFailed("Demo '\(demo.demoId)' in lesson '\(lessonId)' uses disallowed kit '\(demo.kit)'. Allowed: \(allowedKits.joined(separator: ", "))")
         }

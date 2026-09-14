@@ -69,9 +69,11 @@ class DemoWriterService: DemoWriterRole {
         - learningGoal: one-line string stating what the learner gains by interacting (not what the demo shows)
         - fallback.md: MUST teach the SAME learningGoal if WebView fails. Not a summary; a standalone lesson snippet
         
-        THREE-V0 CAPABILITY GATE:
-        - Kit allowlist: ONLY "three-v0" (bundled Three.js r170). NO ui-v0, NO other libraries
-        - If the interaction requires APIs not in core Three.js r170 → return {"demos":[]} — do not fake it
+        KIT SELECTION GUIDANCE:
+        - Two kits available: "three-v0" (3D/spatial) and "ui-v0" (non-3D interactive)
+        - Choose "three-v0" ONLY for spatial/3D manipulation (transforms, coordinate systems, WebGL)
+        - Choose "ui-v0" for non-3D interactive patterns (tap-reveal, drag-match, param exploration)
+        - If neither kit fits the interaction → return {"demos":[]} — do not fake it
         - NO external URLs (http/https) anywhere in demo files
         - NO mid-flight fetch/XHR in JavaScript
         
@@ -101,6 +103,52 @@ class DemoWriterService: DemoWriterRole {
         - What is NOT available: No CDN access, no fetch calls, no external addons, no OrbitControls or other helpers not in core Three.js
         - If needed API is missing from core Three.js r170: return no demo (empty array)
         
+        UI-V0 KIT CARD (AUTHORITATIVE):
+        - Touch-first interactive primitives for non-3D learn-by-doing
+        - Available import: 'kit:ui-v0/kit.js' (exports window.DepthcraftUIKit namespace)
+        - Platform: iPadOS/iOS touch-first (44pt minimum touch targets, no hover-only interactions)
+        - Offline: No CDN, no fetch, no external fonts — fully self-contained
+        - What Reader injects: 8 primitives + thin DOM escape
+        
+        UI-V0 PRIMITIVES (all available):
+        1. TapReveal: Tap to progressively reveal hidden content
+           - Use: Multi-step explanations, layered concepts
+           - Example: createTapReveal({ containerId: 'demo', items: [{title: '...', content: '...'}] })
+        
+        2. StepSequence: Navigate through sequential steps with prev/next controls
+           - Use: Procedures, algorithms, walkthroughs
+           - Example: createStepSequence({ containerId: 'demo', steps: [{title: '...', content: '...'}] })
+        
+        3. OrderList: Drag to reorder items (touch-compatible)
+           - Use: Sequence ordering, ranking, priority
+           - Example: createOrderList({ containerId: 'demo', items: [...], correctOrder: [...] })
+        
+        4. DragMatch: Drag items to matching targets
+           - Use: Vocabulary matching, concept pairing, classification
+           - Example: createDragMatch({ containerId: 'demo', items: [...], targets: [...], matches: {...} })
+        
+        5. HotspotDiagram: Tap hotspots on image/SVG to reveal info
+           - Use: Annotated diagrams, anatomy, architecture
+           - Example: createHotspotDiagram({ containerId: 'demo', svgContent: '...', hotspots: [{x: 50, y: 30, info: '...'}] })
+        
+        6. ParamExplorer: Sliders/toggles with live visual feedback
+           - Use: Parameter exploration, formula visualization, config tuning
+           - Example: createParamExplorer({ containerId: 'demo', params: [...], renderFn: (output, vals) => {...} })
+        
+        7. ClassifyBins: Sort items into categorical bins
+           - Use: Classification, categorization, sorting
+           - Example: createClassifyBins({ containerId: 'demo', items: [...], bins: [...], correctBins: {...} })
+        
+        8. ChallengeLoop: Try → feedback → retry pattern (local validation only)
+           - Use: Practice problems, code exercises, format practice
+           - Example: createChallengeLoop({ containerId: 'demo', question: '...', checkFn: (ans) => ({correct: bool, message: '...'}), hintFn: (attempts) => '...' })
+        
+        UI-V0 THIN DOM ESCAPE:
+        - When NO primitive fits, use injectCustom() for minimal custom HTML/JS
+        - Still offline, touch-first, no network, same injection rules
+        - Example: DepthcraftUIKit.injectCustom('demo', '<div>...</div>', (container) => { /* setup */ })
+        - Prefer primitives over DOM escape; escape is for edge cases only
+        
         OUTPUT FORMAT (JSON only, no markdown fences):
         {
           "demos": [
@@ -108,10 +156,10 @@ class DemoWriterService: DemoWriterRole {
               "demoId": "kebab-case-id",
               "title": "Brief title",
               "learningGoal": "What learner gains by interacting (one line)",
-              "kit": "three-v0",
+              "kit": "three-v0",  // or "ui-v0"
               "entry": "index.html",
               "fallback": "fallback.md",
-              "entryHTML": "<!DOCTYPE html>\\n<html>\\n<head><title>Demo</title></head>\\n<body>\\n<script type=\\"module\\">\\nimport * as THREE from 'kit:three-v0/three.module.min.js';\\n// Kit import succeeded - now safe to create canvas\\nconst canvas = document.createElement('canvas');\\ncanvas.id = 'c';\\ndocument.body.appendChild(canvas);\\n// Demo code that renders to canvas\\n</script>\\n</body>\\n</html>",
+              "entryHTML": "<!DOCTYPE html>\\n<html>\\n<head><title>Demo</title></head>\\n<body>\\n<div id=\\"demo\\"></div>\\n<script type=\\"module\\">\\nimport 'kit:ui-v0/kit.js';\\nconst demo = DepthcraftUIKit.createTapReveal({containerId: 'demo', items: [...]});\\n</script>\\n</body>\\n</html>",
               "fallbackMarkdown": "# Learning Goal\\n\\n[Teach the same learningGoal in prose]\\n\\n...",
               "insertAfterHeading": "## Section Name",
               "assets": {
@@ -125,7 +173,7 @@ class DemoWriterService: DemoWriterRole {
         - demoId: unique kebab-case within lesson
         - title: concise demo purpose
         - learningGoal: REQUIRED one-line string (what learner gains through interaction)
-        - kit: MUST be "three-v0"
+        - kit: MUST be "three-v0" or "ui-v0"
         - entry: MUST be "index.html"
         - fallback: MUST be "fallback.md"
         - entryHTML: complete HTML file (ES modules, kit-only imports)
@@ -134,14 +182,15 @@ class DemoWriterService: DemoWriterRole {
         - assets: optional dict of filename->content for additional JS/JSON files
         
         ENTRY HTML REQUIREMENTS:
-        - Use stable kit import placeholder: import * as THREE from 'kit:three-v0/three.module.min.js'
-        - This is a placeholder convention; live Three.js requires Reader kit injection (not yet implemented)
-        - NO static canvas in HTML body - create canvas in JS ONLY AFTER successful kit import
-        - NO decorative chrome (#info divs, loading text, or painted UI elements) before kit success
+        - For three-v0: import * as THREE from 'kit:three-v0/three.module.min.js'
+        - For ui-v0: import 'kit:ui-v0/kit.js' then use window.DepthcraftUIKit
+        - NO static canvas in HTML body for three-v0 demos - create in JS AFTER kit import
+        - For ui-v0: include container div with unique id, then call primitives
+        - NO decorative chrome before kit success
         - If kit import fails, body must remain blank so Reader fallback triggers automatically
         - NO CDN URLs, NO external fetch calls
         - Self-contained scene in HTML or split into assets
-        - Touch-first: large hit targets, no hover-only
+        - Touch-first: large hit targets (44pt min), no hover-only
         
         FALLBACK REQUIREMENTS:
         - Brief markdown teaching the SAME learningGoal if demo unavailable
@@ -239,8 +288,8 @@ class DemoWriterService: DemoWriterRole {
             throw GenerationError.validationFailed("Demo '\(demo.demoId)' missing required learningGoal field")
         }
         
-        guard demo.kit == "three-v0" else {
-            throw GenerationError.validationFailed("Demo '\(demo.demoId)' uses unsupported kit '\(demo.kit)'. Only 'three-v0' is allowed")
+        guard demo.kit == "three-v0" || demo.kit == "ui-v0" else {
+            throw GenerationError.validationFailed("Demo '\(demo.demoId)' uses unsupported kit '\(demo.kit)'. Only 'three-v0' and 'ui-v0' are allowed")
         }
         
         guard demo.entry == "index.html" else {
