@@ -380,27 +380,30 @@ class GenerationOrchestrator: ObservableObject {
         // Use a semaphore to limit concurrency
         let semaphore = AsyncSemaphore(maxCount: maxConcurrentLessons)
         
-        do {
-            try await withThrowingTaskGroup(of: LessonGenerationResult?.self) { group in
-                // Spawn tasks for all lessons (they check partial state internally)
-                for lesson in lessonsToGenerate {
-                    group.addTask {
-                        // Wait for semaphore slot
-                        await semaphore.wait()
-                        defer { await semaphore.signal() }
-                        
-                        // Check if this lesson is fully complete (all stages done)
-                        let hasLesson = lessons[lesson.id] != nil
-                        let hasQuiz = quizzes[lesson.id] != nil
-                        let hasDemo = demos[lesson.id] != nil
-                        
-                        if hasLesson && hasQuiz && hasDemo {
-                            // All stages complete, nothing to do
-                            return nil
-                        }
-                        
-                        // Generate missing stages for this lesson
-                        return try await self.generateSingleLesson(
+        // Use Result to collect all completed work even if some tasks fail
+        var firstError: Error?
+        
+        await withTaskGroup(of: Result<LessonGenerationResult?, Error>.self) { group in
+            // Spawn tasks for all lessons (they check partial state internally)
+            for lesson in lessonsToGenerate {
+                group.addTask {
+                    // Wait for semaphore slot
+                    await semaphore.wait()
+                    defer { await semaphore.signal() }
+                    
+                    // Check if this lesson is fully complete (all stages done)
+                    let hasLesson = lessons[lesson.id] != nil
+                    let hasQuiz = quizzes[lesson.id] != nil
+                    let hasDemo = demos[lesson.id] != nil
+                    
+                    if hasLesson && hasQuiz && hasDemo {
+                        // All stages complete, nothing to do
+                        return .success(nil)
+                    }
+                    
+                    // Generate missing stages for this lesson
+                    do {
+                        let result = try await self.generateSingleLesson(
                             lesson: lesson,
                             curriculum: curriculum,
                             request: request,
@@ -415,28 +418,44 @@ class GenerationOrchestrator: ObservableObject {
                             existingDemo: demos[lesson.id],
                             completedCount: completedCount
                         )
+                        return .success(result)
+                    } catch {
+                        return .failure(error)
                     }
                 }
-                
-                // Collect results as they complete and save incrementally
-                for try await result in group {
-                    guard let result = result else { continue }
+            }
+            
+            // Collect all results (success and failure) to preserve completed work
+            for await result in group {
+                switch result {
+                case .success(let lessonResult):
+                    guard let lessonResult = lessonResult else { continue }
                     
-                    lessons[result.lessonId] = (result.markdown, result.meta)
-                    quizzes[result.lessonId] = result.quiz
-                    demos[result.lessonId] = result.demo
+                    // Save successful result immediately
+                    lessons[lessonResult.lessonId] = (lessonResult.markdown, lessonResult.meta)
+                    quizzes[lessonResult.lessonId] = lessonResult.quiz
+                    demos[lessonResult.lessonId] = lessonResult.demo
                     
-                    // Save partial progress incrementally (retry resume)
+                    // Persist partials incrementally (critical for retry)
                     partialLessons = lessons
                     partialQuizzes = quizzes
                     partialDemos = demos
+                    
+                case .failure(let error):
+                    // Capture first error but continue collecting completed work
+                    if firstError == nil {
+                        firstError = error
+                    }
                 }
             }
-        } catch {
-            // Save partial progress on failure (critical for retry)
-            partialLessons = lessons
-            partialQuizzes = quizzes
-            partialDemos = demos
+        }
+        
+        // After collecting all results, save final partial state and throw if any failed
+        partialLessons = lessons
+        partialQuizzes = quizzes
+        partialDemos = demos
+        
+        if let error = firstError {
             throw error
         }
     }
