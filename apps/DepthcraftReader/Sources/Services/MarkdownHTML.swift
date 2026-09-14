@@ -12,11 +12,12 @@ struct LessonRenderResult {
 }
 
 enum MarkdownHTML {
-    /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr).
+    /// Minimal markdown→HTML for lesson study typography (headings, paragraphs, bold/italic, code, lists, hr, tables).
     /// Also extracts :::demo id="...":::  directives.
     /// Injects warm ink underlines for tap-to-explain terms when anchors are provided.
     static func render(_ markdown: String, title: String, estimatedMinutes: Int?, anchors: [LessonMeta.Anchor] = []) -> LessonRenderResult {
-        let (body, demos) = convert(markdown)
+        let normalizedMarkdown = normalizeTableBlankLines(markdown)
+        let (body, demos) = convert(normalizedMarkdown)
         let minutesLabel = estimatedMinutes.map { " · \($0) min" } ?? ""
         let html = """
         <!DOCTYPE html>
@@ -120,6 +121,26 @@ enum MarkdownHTML {
             border-left: 3px solid var(--accent);
             color: var(--muted);
           }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+          }
+          th, td {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid var(--rule);
+          }
+          th {
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            font-weight: 600;
+            color: var(--fg);
+            border-bottom: 2px solid var(--rule);
+          }
+          tr:last-child td {
+            border-bottom: none;
+          }
           .explain-term {
             text-decoration: underline;
             text-decoration-color: rgba(120, 113, 108, 0.35);
@@ -169,7 +190,8 @@ enum MarkdownHTML {
     /// Render markdown for demo fallback without lesson chrome or eyebrow.
     /// Keeps the leading H1 (unlike lesson render which drops it) for fallback context.
     static func renderDemoFallback(_ markdown: String) -> String {
-        let (body, _) = convertSimple(markdown)
+        let normalizedMarkdown = normalizeTableBlankLines(markdown)
+        let (body, _) = convertSimple(normalizedMarkdown)
         let html = """
         <!DOCTYPE html>
         <html lang="en">
@@ -245,11 +267,89 @@ enum MarkdownHTML {
         return html
     }
 
+    /// Normalize blank lines inside table blocks (collapse them to make tables render correctly)
+    private static func normalizeTableBlankLines(_ markdown: String) -> String {
+        let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        var result: [String] = []
+        var inTable = false
+        
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            // Check if this line starts a table (has pipe characters and next line is separator)
+            if !inTable && trimmed.contains("|") && i + 1 < lines.count {
+                let nextLine = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                // GFM table separator: |---|---|---| or |:---|:---:|---:|
+                if isTableSeparator(nextLine) {
+                    inTable = true
+                    result.append(line)
+                    i += 1
+                    continue
+                }
+            }
+            
+            // If we're in a table
+            if inTable {
+                // Check if this line continues the table (has pipes) or is blank
+                if trimmed.isEmpty {
+                    // Skip blank lines inside tables
+                    i += 1
+                    continue
+                } else if trimmed.contains("|") {
+                    // Continue table
+                    result.append(line)
+                } else {
+                    // End of table
+                    inTable = false
+                    result.append(line)
+                }
+            } else {
+                result.append(line)
+            }
+            
+            i += 1
+        }
+        
+        return result.joined(separator: "\n")
+    }
+    
+    /// Check if a line is a GFM table separator (e.g., |---|---|---| or |:---:|:---|---:|)
+    private static func isTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if !trimmed.contains("|") { return false }
+        
+        // Remove leading/trailing pipes and split
+        let withoutPipes = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        let cells = withoutPipes.components(separatedBy: "|")
+        
+        // Each cell should be all dashes with optional colons for alignment
+        for cell in cells {
+            let cellTrimmed = cell.trimmingCharacters(in: .whitespaces)
+            if cellTrimmed.isEmpty { continue }
+            
+            // Valid separator cell: one or more dashes, optionally surrounded by colons
+            let validChars = CharacterSet(charactersIn: "-: ")
+            if cellTrimmed.rangeOfCharacter(from: validChars.inverted) != nil {
+                return false
+            }
+            
+            // Must contain at least one dash
+            if !cellTrimmed.contains("-") {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
     /// Simple markdown conversion for demo fallback (no demo extraction, keeps leading H1)
     private static func convertSimple(_ markdown: String) -> (String, [DemoReference]) {
         let lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         var html: [String] = []
         var inList = false
+        var inTable = false
         var i = 0
         
         while i < lines.count {
@@ -261,8 +361,43 @@ enum MarkdownHTML {
                     html.append("</ul>")
                     inList = false
                 }
+                if inTable {
+                    html.append("</tbody></table>")
+                    inTable = false
+                }
                 i += 1
                 continue
+            }
+            
+            // Check for table start
+            if !inTable && trimmed.contains("|") && i + 1 < lines.count {
+                let nextLine = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                if isTableSeparator(nextLine) {
+                    if inList { html.append("</ul>"); inList = false }
+                    
+                    // Start table
+                    html.append("<table>")
+                    html.append("<thead>")
+                    html.append(renderTableRow(line, isHeader: true))
+                    html.append("</thead>")
+                    html.append("<tbody>")
+                    inTable = true
+                    i += 2
+                    continue
+                }
+            }
+            
+            // If in table, continue rendering rows
+            if inTable {
+                if trimmed.contains("|") {
+                    html.append(renderTableRow(line, isHeader: false))
+                    i += 1
+                    continue
+                } else {
+                    // End table
+                    html.append("</tbody></table>")
+                    inTable = false
+                }
             }
 
             if trimmed.hasPrefix("### ") {
@@ -287,6 +422,7 @@ enum MarkdownHTML {
             i += 1
         }
         if inList { html.append("</ul>") }
+        if inTable { html.append("</tbody></table>") }
         return (html.joined(separator: "\n"), [])
     }
     
@@ -304,6 +440,7 @@ enum MarkdownHTML {
 
         var html: [String] = []
         var inList = false
+        var inTable = false
         var i = 0
         while i < lines.count {
             let line = lines[i]
@@ -314,6 +451,10 @@ enum MarkdownHTML {
                     html.append("</ul>")
                     inList = false
                 }
+                if inTable {
+                    html.append("</tbody></table>")
+                    inTable = false
+                }
                 i += 1
                 continue
             }
@@ -321,6 +462,7 @@ enum MarkdownHTML {
             // Handle :::demo id="...":::
             if trimmed.hasPrefix(":::demo") && trimmed.hasSuffix(":::") {
                 if inList { html.append("</ul>"); inList = false }
+                if inTable { html.append("</tbody></table>"); inTable = false }
                 if let demoId = extractDemoId(from: trimmed) {
                     // Escape demo ID for safe HTML insertion (defense in depth)
                     let safeDemoId = escape(demoId)
@@ -334,6 +476,7 @@ enum MarkdownHTML {
 
             if trimmed.hasPrefix("```") {
                 if inList { html.append("</ul>"); inList = false }
+                if inTable { html.append("</tbody></table>"); inTable = false }
                 var code: [String] = []
                 i += 1
                 while i < lines.count, !lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
@@ -347,9 +490,41 @@ enum MarkdownHTML {
 
             if trimmed == "---" || trimmed == "***" {
                 if inList { html.append("</ul>"); inList = false }
+                if inTable { html.append("</tbody></table>"); inTable = false }
                 html.append("<hr />")
                 i += 1
                 continue
+            }
+            
+            // Check for table start
+            if !inTable && trimmed.contains("|") && i + 1 < lines.count {
+                let nextLine = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                if isTableSeparator(nextLine) {
+                    if inList { html.append("</ul>"); inList = false }
+                    
+                    // Start table
+                    html.append("<table>")
+                    html.append("<thead>")
+                    html.append(renderTableRow(line, isHeader: true))
+                    html.append("</thead>")
+                    html.append("<tbody>")
+                    inTable = true
+                    i += 2
+                    continue
+                }
+            }
+            
+            // If in table, continue rendering rows
+            if inTable {
+                if trimmed.contains("|") {
+                    html.append(renderTableRow(line, isHeader: false))
+                    i += 1
+                    continue
+                } else {
+                    // End table
+                    html.append("</tbody></table>")
+                    inTable = false
+                }
             }
 
             if trimmed.hasPrefix("### ") {
@@ -377,7 +552,28 @@ enum MarkdownHTML {
             i += 1
         }
         if inList { html.append("</ul>") }
+        if inTable { html.append("</tbody></table>") }
         return (html.joined(separator: "\n"), demos)
+    }
+    
+    /// Render a single table row as HTML
+    private static func renderTableRow(_ line: String, isHeader: Bool) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        
+        // Remove leading/trailing pipes
+        let withoutPipes = trimmed
+            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+        
+        // Split by pipes
+        let cells = withoutPipes.components(separatedBy: "|")
+        
+        let tag = isHeader ? "th" : "td"
+        let cellsHTML = cells.map { cell in
+            let content = inline(cell.trimmingCharacters(in: .whitespaces))
+            return "<\(tag)>\(content)</\(tag)>"
+        }.joined(separator: "")
+        
+        return "<tr>\(cellsHTML)</tr>"
     }
 
     private static func extractDemoId(from directive: String) -> String? {

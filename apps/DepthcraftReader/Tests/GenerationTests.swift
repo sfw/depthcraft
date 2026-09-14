@@ -346,6 +346,7 @@ final class PackageValidationTests: XCTestCase {
             entryHTML: "<html><body>Test</body></html>",
             fallbackMarkdown: "# Fallback",
             insertAfterHeading: "## Test Section",
+            learningGoal: nil,
             assets: nil
         )
         
@@ -381,6 +382,7 @@ final class PackageValidationTests: XCTestCase {
             entryHTML: "<script src=\"https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js\"></script>",
             fallbackMarkdown: "# Fallback",
             insertAfterHeading: "## Test Section",
+            learningGoal: nil,
             assets: nil
         )
         
@@ -416,6 +418,7 @@ final class PackageValidationTests: XCTestCase {
             entryHTML: "<html><body><script>const data = await fetch('/local/data.json'); console.log(data);</script></body></html>",
             fallbackMarkdown: "# Fallback",
             insertAfterHeading: "## Test Section",
+            learningGoal: nil,
             assets: nil
         )
         
@@ -451,6 +454,7 @@ final class PackageValidationTests: XCTestCase {
             entryHTML: "<html><body>Test</body></html>",
             fallbackMarkdown: "",
             insertAfterHeading: "## Test Section",
+            learningGoal: nil,
             assets: nil
         )
         
@@ -503,6 +507,7 @@ final class PackageValidationTests: XCTestCase {
             - Rotation transforms
             """,
             insertAfterHeading: "## Test Section",
+            learningGoal: nil,
             assets: ["scene.js": "// Scene configuration"]
         )
         
