@@ -271,7 +271,7 @@ struct CourseShelfCover: View {
                         color: Color(hex: "#1C1917").opacity(0.92),
                         lineSpacing: 4,
                         tracking: 0.3,
-                        maxLines: 9,
+                        maxLines: 10,
                         maxWidth: 224
                     )
                     
