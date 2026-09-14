@@ -14,7 +14,9 @@ struct DepthcraftReaderApp: App {
                 .environmentObject(networkMonitor)
                 .environmentObject(orchestrator)
                 .onAppear {
-                    store.loadBundledCourseIfNeeded()
+                    if store.availablePackages.count < 2 {
+                        store.loadBundledCourseIfNeeded()
+                    }
                     orchestrator.backgroundManager.clearNotificationBadge()
                 }
         }

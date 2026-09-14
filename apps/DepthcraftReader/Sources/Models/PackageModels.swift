@@ -166,6 +166,7 @@ struct DeviceProgress: Codable, Hashable {
     var units: [String: UnitProgress]
     var lastLessonId: String?
     var lastUnitId: String?
+    var lastOpenedAt: String?
 
     static func blank(packageId: String, lessonIds: [String], unitIds: [String]) -> DeviceProgress {
         DeviceProgress(
@@ -174,7 +175,8 @@ struct DeviceProgress: Codable, Hashable {
             lessons: Dictionary(uniqueKeysWithValues: lessonIds.map { ($0, .empty) }),
             units: Dictionary(uniqueKeysWithValues: unitIds.map { ($0, UnitProgress(completed: false, completedAt: nil)) }),
             lastLessonId: nil,
-            lastUnitId: nil
+            lastUnitId: nil,
+            lastOpenedAt: nil
         )
     }
 }
@@ -183,4 +185,13 @@ struct LoadedCourse: Hashable {
     let rootURL: URL
     let manifest: PackageManifest
     let curriculum: Curriculum
+}
+
+struct LibraryPackageMetadata: Identifiable, Hashable {
+    let id: String
+    let packageId: String
+    let title: String
+    let lessonCount: Int
+    let lastOpenedAt: Date?
+    let url: URL
 }

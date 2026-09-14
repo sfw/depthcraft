@@ -27,9 +27,12 @@ final class ProgressStore {
            existing.packageId == packageId {
             return merge(existing, lessonIds: lessonIds, unitIds: unitIds)
         }
-        let blank = DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
-        save(blank)
-        return blank
+        return DeviceProgress.blank(packageId: packageId, lessonIds: lessonIds, unitIds: unitIds)
+    }
+    
+    func markPackageOpened(_ progress: inout DeviceProgress) {
+        progress.lastOpenedAt = ISO8601DateFormatter().string(from: Date())
+        save(progress)
     }
 
     /// Merge new lesson/unit ids without clobbering existing completions.
