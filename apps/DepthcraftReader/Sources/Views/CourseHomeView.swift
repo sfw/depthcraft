@@ -13,8 +13,10 @@ struct CourseHomeView: View {
                         // Restrained home brand mark
                         Image("HomeMark")
                             .resizable()
-                            .frame(width: 28, height: 28)
-                            .padding(.bottom, 8)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 28)
+                            .accessibilityHidden(true)
+                            .padding(.top, 16)
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text(course.manifest.title)

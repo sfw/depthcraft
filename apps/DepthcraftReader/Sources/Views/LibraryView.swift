@@ -12,7 +12,9 @@ struct LibraryView: View {
                 // Restrained home brand mark
                 Image("HomeMark")
                     .resizable()
-                    .frame(width: 28, height: 28)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 28)
+                    .accessibilityHidden(true)
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
                 
