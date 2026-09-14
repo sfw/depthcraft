@@ -177,7 +177,8 @@ class GenerationOrchestrator: ObservableObject {
                 knowledgeLevel: request.knowledgeLevel,
                 depthLevel: request.depthLevel,
                 provider: request.lessonWriterConfig.provider,
-                model: request.lessonWriterConfig.model
+                model: request.lessonWriterConfig.model,
+                timingLogger: timingLogger
             )
             
             // Skip lessons that are already generated (retry resume)
