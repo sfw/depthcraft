@@ -299,6 +299,23 @@ struct GenerationView: View {
                 // Sticky header with summary
                 VStack(alignment: .leading, spacing: 16) {
                     progressHeaderView
+                    
+                    // Retry all failed button if there are failures
+                    if !orchestrator.failedLessonIds.isEmpty {
+                        Button {
+                            Task {
+                                await orchestrator.retryAllFailedLessons()
+                            }
+                        } label: {
+                            Label("Retry all failed (\(orchestrator.failedLessonIds.count))", systemImage: "arrow.clockwise")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.orange)
+                    }
+                    
                     Divider()
                 }
                 .padding(.horizontal)
@@ -379,24 +396,47 @@ struct GenerationView: View {
             stageIcon(for: lessonProgress.stage)
                 .frame(width: 20)
             
-            // Lesson title
+            // Lesson title and error
             VStack(alignment: .leading, spacing: 2) {
                 Text(lessonProgress.lessonTitle)
                     .font(.body)
                     .lineLimit(2)
                 
                 if let error = lessonProgress.error {
-                    Text(error)
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                        .lineLimit(1)
+                    Button {
+                        // Show error reason
+                    } label: {
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             
             Spacer()
             
-            // Stage label
-            stageChip(for: lessonProgress.stage)
+            // Retry button for failed lessons
+            if lessonProgress.isFailed {
+                Button {
+                    Task {
+                        await orchestrator.retryFailedLesson(lessonId: lessonProgress.lessonId)
+                    }
+                } label: {
+                    Text("Retry")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.teal)
+                        .foregroundStyle(.white)
+                        .cornerRadius(4)
+                }
+            } else {
+                // Stage label for non-failed lessons
+                stageChip(for: lessonProgress.stage)
+            }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
@@ -467,17 +507,25 @@ struct GenerationView: View {
     private var completedSection: some View {
         Group {
             if let output = orchestrator.output {
-                Section("Generation Complete") {
+                let failedCount = orchestrator.failedLessonIds.count
+                let hasFailures = failedCount > 0
+                
+                Section(hasFailures ? "Generation Completed (Partial)" : "Generation Complete") {
                     LabeledContent("Title", value: output.manifest.title)
                     LabeledContent("Units", value: "\(output.curriculum.units.count)")
-                    LabeledContent("Lessons", value: "\(output.curriculum.lessons.count)")
+                    LabeledContent("Lessons", value: "\(output.curriculum.lessons.count) succeeded")
+                    
+                    if hasFailures {
+                        LabeledContent("Failed", value: "\(failedCount) lesson(s)")
+                            .foregroundStyle(.red)
+                    }
                     
                     if let log = orchestrator.timingLogger.currentLog,
                        let totalDuration = log.effectiveTotalDurationMs {
                         LabeledContent("Duration", value: formatDuration(totalDuration))
                     }
                     
-                    Text("Saved on this iPad")
+                    Text(hasFailures ? "Partial package saved on this iPad" : "Saved on this iPad")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -509,8 +557,35 @@ struct GenerationView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.teal)
                     
+                    if hasFailures {
+                        Button {
+                            Task {
+                                await orchestrator.retryAllFailedLessons()
+                            }
+                        } label: {
+                            Label("Retry Failed Lessons", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.orange)
+                    }
+                    
                     Button("Generate Another") {
                         orchestrator.reset()
+                    }
+                }
+                
+                if hasFailures {
+                    Section {
+                        DisclosureGroup("Failed Lessons") {
+                            if let curriculum = orchestrator.draftCurriculum {
+                                ForEach(orchestrator.failedLessonIds, id: \.self) { lessonId in
+                                    if let lessonProgress = orchestrator.progress.lessonProgress[lessonId] {
+                                        lessonRow(lessonProgress: lessonProgress)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

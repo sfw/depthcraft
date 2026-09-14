@@ -673,26 +673,153 @@ class GenerationOrchestrator: ObservableObject {
                 error: nil
             )
         } catch {
-            timingLogger.failRun()
-            backgroundManager.endBackgroundTask()
+            // Check if we have any completed lessons (partial success)
+            let completedLessonsCount = lessons.count
+            let failedLessonsCount = actualTotalLessons - completedLessonsCount
+            let hasPartialSuccess = completedLessonsCount > 0
             
-            // Save checkpoint on failure (enables retry from partial progress)
-            saveCheckpoint()
-            
-            // Post failure notification
-            if let request = activeRequest {
-                backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
+            if hasPartialSuccess {
+                // Partial success - package what we have and mark as completed with failures
+                progress.phase = .packaging
+                progress.currentItem = "Packaging \(completedLessonsCount) successful lessons"
+                progress.completedItems = completedLessonsCount
+                
+                // Package only successful lessons
+                do {
+                    // Slice curriculum to only selected units before packaging
+                    let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+                    let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
+                    let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+                    
+                    let slicedCurriculum = Curriculum(
+                        schemaVersion: curriculum.schemaVersion,
+                        status: curriculum.status,
+                        approvedAt: curriculum.approvedAt,
+                        units: selectedUnits,
+                        lessons: selectedLessons
+                    )
+                    
+                    let packager = PackagerService()
+                    let plannerRun = RoleRun(
+                        provider: request.plannerConfig.provider.rawValue,
+                        model: request.plannerConfig.model,
+                        ranAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                    let lessonRun = RoleRun(
+                        provider: request.lessonWriterConfig.provider.rawValue,
+                        model: request.lessonWriterConfig.model,
+                        ranAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                    let quizRun = RoleRun(
+                        provider: request.quizWriterConfig.provider.rawValue,
+                        model: request.quizWriterConfig.model,
+                        ranAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                    let totalDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
+                    let demoRun = DemoRun(
+                        provider: request.demoWriterConfig.provider.rawValue,
+                        model: request.demoWriterConfig.model,
+                        ranAt: ISO8601DateFormatter().string(from: Date()),
+                        demosEmitted: totalDemosEmitted
+                    )
+                    let packagerRun = RoleRun(
+                        provider: "anthropic",
+                        model: "packager-v1",
+                        ranAt: ISO8601DateFormatter().string(from: Date())
+                    )
+                    
+                    let metadata = GeneratorMetadata(
+                        planner: plannerRun,
+                        lessonWriter: lessonRun,
+                        quizWriter: quizRun,
+                        demoWriter: demoRun,
+                        packager: packagerRun
+                    )
+                    
+                    let packageURL = try await timingLogger.timeStage(
+                        .packager,
+                        provider: nil,
+                        model: nil
+                    ) {
+                        try await packager.packageCourse(
+                            topic: request.topic,
+                            locale: request.locale,
+                            curriculum: slicedCurriculum,
+                            lessons: lessons,
+                            quizzes: quizzes,
+                            demos: demos,
+                            roleRuns: metadata,
+                            extendFrom: request.extendFromPackageURL
+                        )
+                    }
+                    
+                    let manifestURL = packageURL.appendingPathComponent("manifest.json")
+                    let manifestData = try Data(contentsOf: manifestURL)
+                    let manifest = try JSONDecoder().decode(PackageManifest.self, from: manifestData)
+                    
+                    let curriculumURL = packageURL.appendingPathComponent("curriculum.json")
+                    let curriculumData = try Data(contentsOf: curriculumURL)
+                    let finalCurriculum = try JSONDecoder().decode(Curriculum.self, from: curriculumData)
+                    
+                    output = GenerationOutput(
+                        packageURL: packageURL,
+                        manifest: manifest,
+                        curriculum: finalCurriculum
+                    )
+                    
+                    // Mark as completed (with failures) - keep lesson progress to show failed lessons
+                    progress = GenerationProgress(
+                        phase: .completed,
+                        currentItem: nil,
+                        completedItems: completedLessonsCount,
+                        totalItems: actualTotalLessons,
+                        error: failedLessonsCount > 0 ? "\(failedLessonsCount) lesson(s) failed" : nil,
+                        lessonProgress: progress.lessonProgress
+                    )
+                    
+                    // Don't clear checkpoint - user can still retry failed lessons
+                    saveCheckpoint()
+                    
+                    // End background task but don't post notification yet (user may retry)
+                    backgroundManager.endBackgroundTask()
+                } catch {
+                    // Packaging failed even with partial success
+                    timingLogger.failRun()
+                    backgroundManager.endBackgroundTask()
+                    saveCheckpoint()
+                    
+                    if let request = activeRequest {
+                        backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
+                    }
+                    
+                    progress = GenerationProgress(
+                        phase: .failed,
+                        currentItem: nil,
+                        completedItems: progress.completedItems,
+                        totalItems: actualTotalLessons,
+                        error: "Packaging failed: \(error.localizedDescription)",
+                        lessonProgress: progress.lessonProgress
+                    )
+                }
+            } else {
+                // Complete failure - no lessons succeeded
+                timingLogger.failRun()
+                backgroundManager.endBackgroundTask()
+                saveCheckpoint()
+                
+                if let request = activeRequest {
+                    backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
+                }
+                
+                progress = GenerationProgress(
+                    phase: .failed,
+                    currentItem: nil,
+                    completedItems: progress.completedItems,
+                    totalItems: actualTotalLessons,
+                    error: error.localizedDescription,
+                    lessonProgress: progress.lessonProgress
+                )
             }
-            
-            progress = GenerationProgress(
-                phase: .failed,
-                currentItem: nil,
-                completedItems: progress.completedItems,
-                totalItems: actualTotalLessons,
-                error: error.localizedDescription
-            )
-            
-            // Keep partial progress for retry (don't clear checkpoint)
         }
     }
     
@@ -797,13 +924,19 @@ class GenerationOrchestrator: ObservableObject {
             }
         }
         
-        // After collecting all results, save final partial state and throw if any failed
+        // After collecting all results, save final partial state
         partialLessons = lessons
         partialQuizzes = quizzes
         partialDemos = demos
         
-        if let error = firstError {
-            throw error
+        // Only throw if NO lessons succeeded (complete failure)
+        // If some succeeded, we'll package partial success
+        let successfulLessonsCount = lessonsToGenerate.filter { lesson in
+            lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+        }.count
+        
+        if successfulLessonsCount == 0 && firstError != nil {
+            throw firstError!
         }
     }
     
@@ -1027,6 +1160,145 @@ class GenerationOrchestrator: ObservableObject {
         timingLogger.reset()
         activeRequest = nil
         generationStartedAt = nil
+    }
+    
+    /// Get list of failed lesson IDs
+    var failedLessonIds: [String] {
+        progress.lessonProgress.values
+            .filter { $0.isFailed }
+            .map { $0.lessonId }
+    }
+    
+    /// Retry a specific failed lesson
+    func retryFailedLesson(lessonId: String) async {
+        guard let request = activeRequest,
+              let curriculum = draftCurriculum,
+              let lessonProgress = progress.lessonProgress[lessonId],
+              lessonProgress.isFailed,
+              let lesson = curriculum.lessons[lessonId] else {
+            return
+        }
+        
+        // Reset lesson stage to queued
+        await updateLessonStage(lessonId: lessonId, stage: .queued, error: nil)
+        
+        // Ensure background task is active
+        backgroundManager.beginBackgroundTask(name: "lesson-retry")
+        
+        // Remove failed lesson's partial data (force regeneration)
+        partialLessons.removeValue(forKey: lessonId)
+        partialQuizzes.removeValue(forKey: lessonId)
+        partialDemos.removeValue(forKey: lessonId)
+        
+        // Regenerate the lesson
+        do {
+            let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
+            let lessonWriter = LessonWriterService(
+                client: lessonClient,
+                temperature: request.lessonWriterConfig.temperature,
+                topic: request.topic,
+                locale: request.locale,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model,
+                timingLogger: timingLogger
+            )
+            
+            let lessonMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model
+            )
+            
+            let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
+            let quizWriter = QuizWriterService(
+                client: quizClient,
+                temperature: request.quizWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let quizMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)
+            let demoWriter = DemoWriterService(
+                client: demoClient,
+                temperature: request.demoWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let demoMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let completedCount = ThreadSafeCounter(initialValue: progress.completedItems)
+            
+            let result = await generateSingleLesson(
+                lesson: lesson,
+                curriculum: curriculum,
+                request: request,
+                lessonWriter: lessonWriter,
+                lessonMaxTokens: lessonMaxTokens,
+                quizWriter: quizWriter,
+                quizMaxTokens: quizMaxTokens,
+                demoWriter: demoWriter,
+                demoMaxTokens: demoMaxTokens,
+                existingLesson: nil,
+                existingQuiz: nil,
+                existingDemo: nil,
+                completedCount: completedCount
+            )
+            
+            // Merge result
+            if let (markdown, meta) = result.lesson {
+                partialLessons[lessonId] = (markdown, meta)
+            }
+            if let quiz = result.quiz {
+                partialQuizzes[lessonId] = quiz
+            }
+            if let demo = result.demo {
+                partialDemos[lessonId] = demo
+            }
+            
+            // Update progress
+            progress.completedItems = await completedCount.value
+            
+            // Save checkpoint
+            saveCheckpoint()
+            
+            if result.error != nil {
+                // Still failed after retry
+                await updateLessonStage(lessonId: lessonId, stage: .failed, error: result.error?.localizedDescription)
+            } else {
+                // Success!
+                await updateLessonStage(lessonId: lessonId, stage: .done)
+            }
+        } catch {
+            await updateLessonStage(lessonId: lessonId, stage: .failed, error: error.localizedDescription)
+        }
+        
+        backgroundManager.endBackgroundTask()
+    }
+    
+    /// Retry all failed lessons
+    func retryAllFailedLessons() async {
+        let failedIds = failedLessonIds
+        guard !failedIds.isEmpty else { return }
+        
+        for lessonId in failedIds {
+            await retryFailedLesson(lessonId: lessonId)
+        }
     }
     
     /// Handle app entering background (called from app lifecycle)
