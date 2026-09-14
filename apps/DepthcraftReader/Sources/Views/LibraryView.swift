@@ -6,23 +6,22 @@ struct LibraryView: View {
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     let onSelectCourse: () -> Void
     
-    private var isLandscape: Bool {
-        // Landscape when vertical size class is compact (reliable for iPad)
-        verticalSizeClass == .compact
-    }
-    
-    private var gridColumns: [GridItem] {
+    private func gridColumns(for width: CGFloat, height: CGFloat) -> [GridItem] {
+        let isLandscape = width > height
         let spacing: CGFloat = isLandscape ? 18 : 22
-        let columnCount = isLandscape ? 4 : 2
+        let columnCount = isLandscape ? 3 : 2
         return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
     }
     
+    private func gridSpacing(for width: CGFloat, height: CGFloat) -> CGFloat {
+        return width > height ? 18 : 22
+    }
+    
     var body: some View {
-        ScrollView {
+        GeometryReader { geometry in
+            ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // Restrained home brand mark + wordmark
                     HStack(spacing: 10) {
@@ -68,8 +67,8 @@ struct LibraryView: View {
                     
                     // Vertical shelf with LazyVGrid
                     LazyVGrid(
-                        columns: gridColumns,
-                        spacing: isLandscape ? 18 : 22
+                        columns: gridColumns(for: geometry.size.width, height: geometry.size.height),
+                        spacing: gridSpacing(for: geometry.size.width, height: geometry.size.height)
                     ) {
                         ForEach(packages) { package in
                             CourseShelfCover(
@@ -117,6 +116,19 @@ struct LibraryView: View {
             }
             .background(Color(hex: "#EDE6D9"))
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if store.course != nil {
+                        Button {
+                            onSelectCourse()
+                        } label: {
+                            Label("Course", systemImage: "arrow.left")
+                                .font(.subheadline)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                }
+                
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -147,6 +159,7 @@ struct LibraryView: View {
         }
         .onChange(of: store.availablePackages) { _ in
             refreshPackages()
+        }
         }
     }
     
