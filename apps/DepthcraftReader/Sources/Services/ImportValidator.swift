@@ -35,6 +35,62 @@ enum ImportValidatorError: LocalizedError {
 
 enum ImportValidator {
     
+    /// Safely unzips a file with zip-slip protection
+    static func unzipSafely(from zipURL: URL, to destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        
+        // Create destination directory
+        try fileManager.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        
+        // Use shell command to unzip with safety checks
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = [
+            "-q",  // quiet
+            "-d", destinationURL.path,  // destination
+            zipURL.path  // source zip
+        ]
+        
+        let pipe = Pipe()
+        process.standardError = pipe
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        if process.terminationStatus != 0 {
+            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown unzip error"
+            throw ImportValidatorError.invalidPackageStructure("Failed to unzip: \(errorMessage)")
+        }
+        
+        // Validate all extracted paths for zip-slip
+        try validateExtractedPaths(at: destinationURL)
+    }
+    
+    private static func validateExtractedPaths(at directoryURL: URL) throws {
+        let fileManager = FileManager.default
+        let enumerator = fileManager.enumerator(atPath: directoryURL.path)
+        
+        while let relativePath = enumerator?.nextObject() as? String {
+            // Check for path traversal attempts
+            if relativePath.contains("..") {
+                throw ImportValidatorError.zipSlipDetected(relativePath)
+            }
+            
+            if relativePath.hasPrefix("/") {
+                throw ImportValidatorError.zipSlipDetected(relativePath)
+            }
+            
+            // Verify the full path is within the directory
+            let fullPath = directoryURL.appendingPathComponent(relativePath).standardizedFileURL.path
+            let basePath = directoryURL.standardizedFileURL.path
+            
+            if !fullPath.hasPrefix(basePath) {
+                throw ImportValidatorError.zipSlipDetected(relativePath)
+            }
+        }
+    }
+    
     /// Validates an imported package before it's loaded
     static func validateImportedPackage(at packageURL: URL) throws {
         let fileManager = FileManager.default

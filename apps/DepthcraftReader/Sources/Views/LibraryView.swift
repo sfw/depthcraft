@@ -6,124 +6,131 @@ struct LibraryView: View {
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let onSelectCourse: () -> Void
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Restrained home brand mark + wordmark
-                HStack(spacing: 10) {
-                    Image("HomeMark")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 28)
-                        .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    // Restrained home brand mark + wordmark
+                    HStack(spacing: 10) {
+                        Image("HomeMark")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 28)
+                            .accessibilityHidden(true)
+                        
+                        Text("Depthcraft")
+                            .font(.system(size: 16, weight: .semibold, design: .default))
+                            .foregroundStyle(Color(hex: "#1C1917"))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
                     
-                    Text("Depthcraft")
-                        .font(.system(size: 16, weight: .semibold, design: .default))
-                        .foregroundStyle(Color(hex: "#1C1917"))
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Library")
-                        .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Library")
+                            .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                        
+                        if let mostRecent = packages.first {
+                            Button {
+                                store.loadPackage(from: mostRecent.url)
+                                onSelectCourse()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text("Continue")
+                                        .font(.subheadline.weight(.medium))
+                                    Text("·")
+                                        .foregroundStyle(.secondary)
+                                    Text(mostRecent.title)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.teal)
+                            .controlSize(.regular)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
                     
-                    if let mostRecent = packages.first {
-                        Button {
-                            store.loadPackage(from: mostRecent.url)
-                            onSelectCourse()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("Continue")
-                                    .font(.subheadline.weight(.medium))
-                                Text("·")
-                                    .foregroundStyle(.secondary)
-                                Text(mostRecent.title)
-                                    .font(.subheadline)
-                                    .lineLimit(1)
+                    // Vertical shelf with LazyVGrid
+                    LazyVGrid(
+                        columns: horizontalSizeClass == .regular ? [
+                            GridItem(.flexible(), spacing: 22),
+                            GridItem(.flexible(), spacing: 22)
+                        ] : [
+                            GridItem(.flexible(), spacing: 22)
+                        ],
+                        spacing: 22
+                    ) {
+                        ForEach(packages) { package in
+                            CourseShelfCover(
+                                package: package,
+                                isMostRecent: package.id == packages.first?.id
+                            )
+                            .onTapGesture {
+                                store.loadPackage(from: package.url)
+                                onSelectCourse()
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.teal)
-                        .controlSize(.regular)
                     }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                
-                // Vertical shelf with LazyVGrid
-                LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: 160, maximum: 300), spacing: 22)
-                    ],
-                    spacing: 22
-                ) {
-                    ForEach(packages) { package in
-                        CourseShelfCover(
-                            package: package,
-                            isMostRecent: package.id == packages.first?.id
-                        )
-                        .onTapGesture {
-                            store.loadPackage(from: package.url)
-                            onSelectCourse()
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 28)
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Create")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 28)
                     
-                    HStack(spacing: 12) {
-                        NavigationLink {
-                            GenerationView()
-                        } label: {
-                            Label("Generate", systemImage: "sparkles")
-                                .font(.subheadline)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Create")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
                         
-                        Button {
-                            showingImporter = true
-                        } label: {
-                            Label("Import", systemImage: "square.and.arrow.down")
-                                .font(.subheadline)
+                        HStack(spacing: 12) {
+                            NavigationLink {
+                                GenerationView()
+                            } label: {
+                                Label("Generate", systemImage: "sparkles")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
+                            
+                            Button {
+                                showingImporter = true
+                            } label: {
+                                Label("Import", systemImage: "square.and.arrow.down")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.regular)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                }
+                .padding(.vertical, 16)
+            }
+            .background(Color(hex: "#F5F0E6"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
             }
-            .padding(.vertical, 16)
-        }
-        .background(Color(hex: "#F5F0E6"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gearshape")
+            .alert("Import Failed", isPresented: $showingImportError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                if let error = importError {
+                    Text(error.userFriendlyDescription)
                 }
             }
-        }
-        .alert("Import Failed", isPresented: $showingImportError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            if let error = importError {
-                Text(error.userFriendlyDescription)
-            }
-        }
-        .fileImporter(
+            .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.init(filenameExtension: "depthcraft")].compactMap { $0 },
+            allowedContentTypes: [
+                .init(filenameExtension: "depthcraft"),
+                .zip
+            ].compactMap { $0 },
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -149,19 +156,56 @@ struct LibraryView: View {
             }
             
             do {
-                // Validate the imported package before copying
-                try ImportValidator.validateImportedPackage(at: sourceURL)
+                let fileManager = FileManager.default
+                var isDirectory: ObjCBool = false
+                fileManager.fileExists(atPath: sourceURL.path, isDirectory: &isDirectory)
                 
-                let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+                let packageURL: URL
                 
-                if FileManager.default.fileExists(atPath: destinationURL.path) {
-                    try FileManager.default.removeItem(at: destinationURL)
+                if isDirectory.boolValue {
+                    // Already a directory package - validate and copy
+                    try ImportValidator.validateImportedPackage(at: sourceURL)
+                    
+                    let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    packageURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+                    
+                    if fileManager.fileExists(atPath: packageURL.path) {
+                        try fileManager.removeItem(at: packageURL)
+                    }
+                    try fileManager.copyItem(at: sourceURL, to: packageURL)
+                } else {
+                    // It's a file (zip) - unzip with zip-slip protection, then validate
+                    let tempDir = fileManager.temporaryDirectory
+                    let tempExtractDir = tempDir.appendingPathComponent(UUID().uuidString)
+                    try fileManager.createDirectory(at: tempExtractDir, withIntermediateDirectories: true)
+                    
+                    // Unzip with zip-slip-safe extraction
+                    try ImportValidator.unzipSafely(from: sourceURL, to: tempExtractDir)
+                    
+                    // Find the .depthcraft package directory in the extracted content
+                    let extractedContents = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
+                    guard let extractedPackage = extractedContents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) else {
+                        throw ImportValidatorError.invalidPackageStructure("No .depthcraft package found in zip")
+                    }
+                    
+                    // Validate the extracted package
+                    try ImportValidator.validateImportedPackage(at: extractedPackage)
+                    
+                    // Move to Documents
+                    let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    packageURL = documentsURL.appendingPathComponent(extractedPackage.lastPathComponent)
+                    
+                    if fileManager.fileExists(atPath: packageURL.path) {
+                        try fileManager.removeItem(at: packageURL)
+                    }
+                    try fileManager.moveItem(at: extractedPackage, to: packageURL)
+                    
+                    // Clean up temp directory
+                    try? fileManager.removeItem(at: tempExtractDir)
                 }
-                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
                 
                 store.refreshAvailablePackages()
-                store.loadPackage(from: destinationURL)
+                store.loadPackage(from: packageURL)
                 onSelectCourse()
             } catch let error as ImportValidatorError {
                 importError = error
@@ -205,6 +249,7 @@ struct CourseShelfCover: View {
                         .font(.system(size: 21, weight: .semibold, design: .default))
                         .foregroundStyle(Color(hex: "#1C1917"))
                         .lineLimit(3)
+                        .truncationMode(.tail)
                         .minimumScaleFactor(1.0)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,3 +294,4 @@ struct CourseShelfCover: View {
         }
     }
 }
+

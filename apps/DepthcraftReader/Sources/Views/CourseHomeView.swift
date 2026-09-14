@@ -231,7 +231,11 @@ struct CourseHomeView: View {
         }
         .fileImporter(
             isPresented: $showingImporter,
-            allowedContentTypes: [.init(filenameExtension: "depthcraft")].compactMap { $0 },
+            allowedContentTypes: [
+                .init(filenameExtension: "depthcraft"),
+                .zip
+            ].compactMap { $0 },
+
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
@@ -244,36 +248,6 @@ struct CourseHomeView: View {
                     Image(systemName: "gearshape")
                 }
             }
-        }
-    }
-    
-    private func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let sourceURL = urls.first else { return }
-            
-            let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
-            defer {
-                if didStartAccess {
-                    sourceURL.stopAccessingSecurityScopedResource()
-                }
-            }
-            
-            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
-            
-            do {
-                if FileManager.default.fileExists(atPath: destinationURL.path) {
-                    try FileManager.default.removeItem(at: destinationURL)
-                }
-                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-                store.refreshAvailablePackages()
-                store.loadPackage(from: destinationURL)
-            } catch {
-                print("Import error: \(error)")
-            }
-        case .failure(let error):
-            print("File importer error: \(error)")
         }
     }
     
@@ -305,20 +279,43 @@ struct CourseHomeView: View {
         guard let course = store.course else { return }
         
         let sourceURL = course.rootURL
-        let fileName = sourceURL.lastPathComponent
+        let packageName = sourceURL.deletingPathExtension().lastPathComponent
         let tempDirectory = FileManager.default.temporaryDirectory
-        let exportURL = tempDirectory.appendingPathComponent(fileName)
+        let zipURL = tempDirectory.appendingPathComponent("\(packageName).depthcraft")
         
         do {
-            if FileManager.default.fileExists(atPath: exportURL.path) {
-                try FileManager.default.removeItem(at: exportURL)
+            // Remove existing temp file if present
+            if FileManager.default.fileExists(atPath: zipURL.path) {
+                try FileManager.default.removeItem(at: zipURL)
             }
-            try FileManager.default.copyItem(at: sourceURL, to: exportURL)
             
-            self.exportURL = exportURL
+            // Create zip archive of the package directory
+            try zipDirectory(at: sourceURL, to: zipURL)
+            
+            // Wait for write to complete before presenting share sheet
+            self.exportURL = zipURL
             showingShareSheet = true
         } catch {
             print("Export error: \(error)")
+        }
+    }
+    
+    private func zipDirectory(at sourceURL: URL, to destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        let coordinator = NSFileCoordinator()
+        var error: NSError?
+        
+        coordinator.coordinate(readingItemAt: sourceURL, options: [.forUploading], error: &error) { zipURL in
+            do {
+                // The coordinator creates a zip for us when using .forUploading
+                try fileManager.copyItem(at: zipURL, to: destinationURL)
+            } catch {
+                print("Zip copy error: \(error)")
+            }
+        }
+        
+        if let error = error {
+            throw error
         }
     }
 }
@@ -332,3 +329,76 @@ struct ShareSheet: UIViewControllerRepresentable {
     
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+
+// Extension for import handling
+extension CourseHomeView {
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let sourceURL = urls.first else { return }
+            
+            let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            
+            do {
+                let fileManager = FileManager.default
+                var isDirectory: ObjCBool = false
+                fileManager.fileExists(atPath: sourceURL.path, isDirectory: &isDirectory)
+                
+                let packageURL: URL
+                
+                if isDirectory.boolValue {
+                    // Already a directory package - validate and copy
+                    try ImportValidator.validateImportedPackage(at: sourceURL)
+                    
+                    let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    packageURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+                    
+                    if fileManager.fileExists(atPath: packageURL.path) {
+                        try fileManager.removeItem(at: packageURL)
+                    }
+                    try fileManager.copyItem(at: sourceURL, to: packageURL)
+                } else {
+                    // It's a file (zip) - unzip with zip-slip protection, then validate
+                    let tempDir = fileManager.temporaryDirectory
+                    let tempExtractDir = tempDir.appendingPathComponent(UUID().uuidString)
+                    try fileManager.createDirectory(at: tempExtractDir, withIntermediateDirectories: true)
+                    
+                    // Unzip with zip-slip-safe extraction
+                    try ImportValidator.unzipSafely(from: sourceURL, to: tempExtractDir)
+                    
+                    // Find the .depthcraft package directory in the extracted content
+                    let extractedContents = try fileManager.contentsOfDirectory(at: tempExtractDir, includingPropertiesForKeys: nil)
+                    guard let extractedPackage = extractedContents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) else {
+                        throw ImportValidatorError.invalidPackageStructure("No .depthcraft package found in zip")
+                    }
+                    
+                    // Validate the extracted package
+                    try ImportValidator.validateImportedPackage(at: extractedPackage)
+                    
+                    // Move to Documents
+                    let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    packageURL = documentsURL.appendingPathComponent(extractedPackage.lastPathComponent)
+                    
+                    if fileManager.fileExists(atPath: packageURL.path) {
+                        try fileManager.removeItem(at: packageURL)
+                    }
+                    try fileManager.moveItem(at: extractedPackage, to: packageURL)
+                    
+                    // Clean up temp directory
+                    try? fileManager.removeItem(at: tempExtractDir)
+                }
+                
+                store.refreshAvailablePackages()
+                store.loadPackage(from: packageURL)
+            } catch {
+                print("Import error: \(error)")
+            }
+        case .failure(let error):
+            print("File importer error: \(error)")
+        }
+    }
