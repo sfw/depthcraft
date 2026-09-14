@@ -15,6 +15,7 @@ struct LessonContentView: View {
     @EnvironmentObject private var networkMonitor: NetworkMonitor
     @EnvironmentObject private var store: CourseStore
     @StateObject private var apiKeyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
     
     private var lessonContext: ExplainSheet.LessonContext {
         ExplainSheet.LessonContext(
@@ -26,7 +27,7 @@ struct LessonContentView: View {
     }
     
     private var configService: LLMConfigService {
-        LLMConfigService(apiKeyStore: apiKeyStore)
+        LLMConfigService(apiKeyStore: apiKeyStore, customEndpointsStore: customEndpointsStore)
     }
     
     private var glossService: GlossService {

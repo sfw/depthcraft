@@ -4,8 +4,18 @@ import SwiftUI
 struct DepthcraftReaderApp: App {
     @StateObject private var store = CourseStore()
     @StateObject private var networkMonitor = NetworkMonitor()
-    @StateObject private var orchestrator = GenerationOrchestrator(keyStore: APIKeyStore())
+    @StateObject private var apiKeyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
+    @StateObject private var orchestrator: GenerationOrchestrator
     @Environment(\.scenePhase) private var scenePhase
+    
+    init() {
+        let apiStore = APIKeyStore()
+        let customStore = CustomEndpointsStore()
+        _apiKeyStore = StateObject(wrappedValue: apiStore)
+        _customEndpointsStore = StateObject(wrappedValue: customStore)
+        _orchestrator = StateObject(wrappedValue: GenerationOrchestrator(keyStore: apiStore, customEndpointsStore: customStore))
+    }
 
     var body: some Scene {
         WindowGroup {

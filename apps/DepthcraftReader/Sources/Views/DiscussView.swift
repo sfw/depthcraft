@@ -8,13 +8,14 @@ struct DiscussView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: CourseStore
     @StateObject private var apiKeyStore = APIKeyStore()
+    @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var isGenerating = false
     @State private var error: String?
     
     private var configService: LLMConfigService {
-        LLMConfigService(apiKeyStore: apiKeyStore)
+        LLMConfigService(apiKeyStore: apiKeyStore, customEndpointsStore: customEndpointsStore)
     }
     
     var body: some View {
