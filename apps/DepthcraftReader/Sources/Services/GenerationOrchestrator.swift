@@ -561,125 +561,248 @@ class GenerationOrchestrator: ObservableObject {
                 demos: &demos
             )
             
-            progress.phase = .packaging
-            progress.currentItem = "Packaging course"
-            progress.completedItems = actualTotalLessons
+            // Check if we have mixed Done/Failed lessons after generation
+            let completedLessonIds = Set(lessonsToGenerate.compactMap { lesson in
+                let hasAll = lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+                return hasAll ? lesson.id : nil
+            })
+            let completedCount = completedLessonIds.count
+            let failedCount = actualTotalLessons - completedCount
             
-            // Slice curriculum to only selected units before packaging
-            // Product lock: built package = only what learner can study (no draft stubs)
-            // If generateUnitIds is subset, unselected units are NOT in the package at all
-            let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
-            let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
-            let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
-            
-            let slicedCurriculum = Curriculum(
-                schemaVersion: curriculum.schemaVersion,
-                status: curriculum.status,
-                approvedAt: curriculum.approvedAt,
-                units: selectedUnits,
-                lessons: selectedLessons
-            )
-            
-            let packager = PackagerService()
-            let plannerRun = RoleRun(
-                provider: request.plannerConfig.provider.rawValue,
-                model: request.plannerConfig.model,
-                ranAt: ISO8601DateFormatter().string(from: Date())
-            )
-            let lessonRun = RoleRun(
-                provider: request.lessonWriterConfig.provider.rawValue,
-                model: request.lessonWriterConfig.model,
-                ranAt: ISO8601DateFormatter().string(from: Date())
-            )
-            let quizRun = RoleRun(
-                provider: request.quizWriterConfig.provider.rawValue,
-                model: request.quizWriterConfig.model,
-                ranAt: ISO8601DateFormatter().string(from: Date())
-            )
-            let totalDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
-            let demoRun = DemoRun(
-                provider: request.demoWriterConfig.provider.rawValue,
-                model: request.demoWriterConfig.model,
-                ranAt: ISO8601DateFormatter().string(from: Date()),
-                demosEmitted: totalDemosEmitted
-            )
-            let packagerRun = RoleRun(
-                provider: "anthropic",
-                model: "packager-v1",
-                ranAt: ISO8601DateFormatter().string(from: Date())
-            )
-            
-            let metadata = GeneratorMetadata(
-                planner: plannerRun,
-                lessonWriter: lessonRun,
-                quizWriter: quizRun,
-                demoWriter: demoRun,
-                packager: packagerRun
-            )
-            
-            let packageURL = try await timingLogger.timeStage(
-                .packager,
-                provider: nil,
-                model: nil
-            ) {
-                try await packager.packageCourse(
-                    topic: request.topic,
-                    locale: request.locale,
-                    curriculum: slicedCurriculum,
-                    lessons: lessons,
-                    quizzes: quizzes,
-                    demos: demos,
-                    roleRuns: metadata,
-                    extendFrom: request.extendFromPackageURL
+            // Explicit branch for mixed Done/Failed (happy-path with some failures)
+            if failedCount > 0 {
+                // Package partial success - filter to only completed lessons
+                progress.phase = .packaging
+                progress.currentItem = "Packaging \(completedCount) successful lessons"
+                progress.completedItems = completedCount
+                
+                let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+                
+                // Filter units to only include completed lesson IDs and remove empty units
+                let filteredUnits = selectedUnits.compactMap { unit -> CurriculumUnit? in
+                    let completedLessonIdsInUnit = unit.lessonIds.filter { completedLessonIds.contains($0) }
+                    guard !completedLessonIdsInUnit.isEmpty else { return nil }
+                    return CurriculumUnit(
+                        id: unit.id,
+                        title: unit.title,
+                        order: unit.order,
+                        lessonIds: completedLessonIdsInUnit
+                    )
+                }
+                
+                let completedLessons = curriculum.lessons.filter { completedLessonIds.contains($0.key) }
+                
+                let slicedCurriculum = Curriculum(
+                    schemaVersion: curriculum.schemaVersion,
+                    status: curriculum.status,
+                    approvedAt: curriculum.approvedAt,
+                    units: filteredUnits,
+                    lessons: completedLessons
+                )
+                
+                let packager = PackagerService()
+                let plannerRun = RoleRun(
+                    provider: request.plannerConfig.provider.rawValue,
+                    model: request.plannerConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let lessonRun = RoleRun(
+                    provider: request.lessonWriterConfig.provider.rawValue,
+                    model: request.lessonWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let quizRun = RoleRun(
+                    provider: request.quizWriterConfig.provider.rawValue,
+                    model: request.quizWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let totalDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
+                let demoRun = DemoRun(
+                    provider: request.demoWriterConfig.provider.rawValue,
+                    model: request.demoWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date()),
+                    demosEmitted: totalDemosEmitted
+                )
+                let packagerRun = RoleRun(
+                    provider: "anthropic",
+                    model: "packager-v1",
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                
+                let metadata = GeneratorMetadata(
+                    planner: plannerRun,
+                    lessonWriter: lessonRun,
+                    quizWriter: quizRun,
+                    demoWriter: demoRun,
+                    packager: packagerRun
+                )
+                
+                let packageURL = try await timingLogger.timeStage(
+                    .packager,
+                    provider: nil,
+                    model: nil
+                ) {
+                    try await packager.packageCourse(
+                        topic: request.topic,
+                        locale: request.locale,
+                        curriculum: slicedCurriculum,
+                        lessons: lessons,
+                        quizzes: quizzes,
+                        demos: demos,
+                        roleRuns: metadata,
+                        extendFrom: request.extendFromPackageURL
+                    )
+                }
+                
+                let manifestURL = packageURL.appendingPathComponent("manifest.json")
+                let manifestData = try Data(contentsOf: manifestURL)
+                let manifest = try JSONDecoder().decode(PackageManifest.self, from: manifestData)
+                
+                let curriculumURL = packageURL.appendingPathComponent("curriculum.json")
+                let curriculumData = try Data(contentsOf: curriculumURL)
+                let finalCurriculum = try JSONDecoder().decode(Curriculum.self, from: curriculumData)
+                
+                output = GenerationOutput(
+                    packageURL: packageURL,
+                    manifest: manifest,
+                    curriculum: finalCurriculum
+                )
+                
+                // Mark as completed with failures - keep lessonProgress to show failed lessons
+                progress = GenerationProgress(
+                    phase: .completed,
+                    currentItem: nil,
+                    completedItems: completedCount,
+                    totalItems: actualTotalLessons,
+                    error: "\(failedCount) lesson(s) failed",
+                    lessonProgress: progress.lessonProgress
+                )
+                
+                // Don't clear checkpoint - user can still retry failed lessons
+                saveCheckpoint()
+                
+                // End background task
+                backgroundManager.endBackgroundTask()
+            } else {
+                // All lessons succeeded - normal happy path
+                progress.phase = .packaging
+                progress.currentItem = "Packaging course"
+                progress.completedItems = actualTotalLessons
+                
+                // Slice curriculum to only selected units before packaging
+                // Product lock: built package = only what learner can study (no draft stubs)
+                // If generateUnitIds is subset, unselected units are NOT in the package at all
+                let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+                let selectedLessonIds = Set(selectedUnits.flatMap { $0.lessonIds })
+                let selectedLessons = curriculum.lessons.filter { selectedLessonIds.contains($0.key) }
+                
+                let slicedCurriculum = Curriculum(
+                    schemaVersion: curriculum.schemaVersion,
+                    status: curriculum.status,
+                    approvedAt: curriculum.approvedAt,
+                    units: selectedUnits,
+                    lessons: selectedLessons
+                )
+                
+                let packager = PackagerService()
+                let plannerRun = RoleRun(
+                    provider: request.plannerConfig.provider.rawValue,
+                    model: request.plannerConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let lessonRun = RoleRun(
+                    provider: request.lessonWriterConfig.provider.rawValue,
+                    model: request.lessonWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let quizRun = RoleRun(
+                    provider: request.quizWriterConfig.provider.rawValue,
+                    model: request.quizWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                let totalDemosEmitted = demos.values.reduce(0) { $0 + $1.demos.count }
+                let demoRun = DemoRun(
+                    provider: request.demoWriterConfig.provider.rawValue,
+                    model: request.demoWriterConfig.model,
+                    ranAt: ISO8601DateFormatter().string(from: Date()),
+                    demosEmitted: totalDemosEmitted
+                )
+                let packagerRun = RoleRun(
+                    provider: "anthropic",
+                    model: "packager-v1",
+                    ranAt: ISO8601DateFormatter().string(from: Date())
+                )
+                
+                let metadata = GeneratorMetadata(
+                    planner: plannerRun,
+                    lessonWriter: lessonRun,
+                    quizWriter: quizRun,
+                    demoWriter: demoRun,
+                    packager: packagerRun
+                )
+                
+                let packageURL = try await timingLogger.timeStage(
+                    .packager,
+                    provider: nil,
+                    model: nil
+                ) {
+                    try await packager.packageCourse(
+                        topic: request.topic,
+                        locale: request.locale,
+                        curriculum: slicedCurriculum,
+                        lessons: lessons,
+                        quizzes: quizzes,
+                        demos: demos,
+                        roleRuns: metadata,
+                        extendFrom: request.extendFromPackageURL
+                    )
+                }
+                
+                let manifestURL = packageURL.appendingPathComponent("manifest.json")
+                let manifestData = try Data(contentsOf: manifestURL)
+                let manifest = try JSONDecoder().decode(PackageManifest.self, from: manifestData)
+                
+                let curriculumURL = packageURL.appendingPathComponent("curriculum.json")
+                let curriculumData = try Data(contentsOf: curriculumURL)
+                let finalCurriculum = try JSONDecoder().decode(Curriculum.self, from: curriculumData)
+                
+                output = GenerationOutput(
+                    packageURL: packageURL,
+                    manifest: manifest,
+                    curriculum: finalCurriculum
+                )
+                
+                timingLogger.completeRun()
+                backgroundManager.endBackgroundTask()
+                
+                // Clear checkpoint on successful completion
+                checkpointManager.clearCheckpoint()
+                hasCheckpointAvailable = false
+                
+                // Post completion notification
+                if let request = activeRequest {
+                    let durationMs = timingLogger.currentLog?.effectiveTotalDurationMs
+                    backgroundManager.postCompletionNotification(
+                        topic: request.topic,
+                        totalLessons: actualTotalLessons,
+                        durationMs: durationMs
+                    )
+                }
+                
+                progress = GenerationProgress(
+                    phase: .completed,
+                    currentItem: nil,
+                    completedItems: actualTotalLessons,
+                    totalItems: actualTotalLessons,
+                    error: nil
                 )
             }
-            
-            let manifestURL = packageURL.appendingPathComponent("manifest.json")
-            let manifestData = try Data(contentsOf: manifestURL)
-            let manifest = try JSONDecoder().decode(PackageManifest.self, from: manifestData)
-            
-            let curriculumURL = packageURL.appendingPathComponent("curriculum.json")
-            let curriculumData = try Data(contentsOf: curriculumURL)
-            let finalCurriculum = try JSONDecoder().decode(Curriculum.self, from: curriculumData)
-            
-            output = GenerationOutput(
-                packageURL: packageURL,
-                manifest: manifest,
-                curriculum: finalCurriculum
-            )
-            
-            timingLogger.completeRun()
-            backgroundManager.endBackgroundTask()
-            
-            // Clear checkpoint on successful completion
-            checkpointManager.clearCheckpoint()
-            hasCheckpointAvailable = false
-            
-            // Post completion notification
-            if let request = activeRequest {
-                let durationMs = timingLogger.currentLog?.effectiveTotalDurationMs
-                backgroundManager.postCompletionNotification(
-                    topic: request.topic,
-                    totalLessons: actualTotalLessons,
-                    durationMs: durationMs
-                )
-            }
-            
-            progress = GenerationProgress(
-                phase: .completed,
-                currentItem: nil,
-                completedItems: actualTotalLessons,
-                totalItems: actualTotalLessons,
-                error: nil
-            )
         } catch {
+            // Complete failure - no lessons succeeded (generateLessonsInParallel threw)
             timingLogger.failRun()
             backgroundManager.endBackgroundTask()
-            
-            // Save checkpoint on failure (enables retry from partial progress)
             saveCheckpoint()
             
-            // Post failure notification
             if let request = activeRequest {
                 backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
             }
@@ -689,10 +812,9 @@ class GenerationOrchestrator: ObservableObject {
                 currentItem: nil,
                 completedItems: progress.completedItems,
                 totalItems: actualTotalLessons,
-                error: error.localizedDescription
+                error: error.localizedDescription,
+                lessonProgress: progress.lessonProgress
             )
-            
-            // Keep partial progress for retry (don't clear checkpoint)
         }
     }
     
@@ -797,13 +919,19 @@ class GenerationOrchestrator: ObservableObject {
             }
         }
         
-        // After collecting all results, save final partial state and throw if any failed
+        // After collecting all results, save final partial state
         partialLessons = lessons
         partialQuizzes = quizzes
         partialDemos = demos
         
-        if let error = firstError {
-            throw error
+        // Only throw if NO lessons succeeded (complete failure)
+        // If some succeeded, we'll package partial success
+        let successfulLessonsCount = lessonsToGenerate.filter { lesson in
+            lessons[lesson.id] != nil && quizzes[lesson.id] != nil && demos[lesson.id] != nil
+        }.count
+        
+        if successfulLessonsCount == 0 && firstError != nil {
+            throw firstError!
         }
     }
     
@@ -1003,8 +1131,10 @@ class GenerationOrchestrator: ObservableObject {
     /// Update per-lesson stage in progress dictionary
     private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
         await MainActor.run {
-            // Only update if we're still in a generation phase (not failed/cancelled)
-            if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .writingDemos {
+            // Only update if we're in an active phase where lessonProgress is valid
+            // Allow updates during generation (.writingLessons/Quizzes/Demos) and after partial completion (.completed with failures)
+            let allowedPhases: Set<GenerationPhase> = [.writingLessons, .writingQuizzes, .writingDemos, .completed]
+            if allowedPhases.contains(progress.phase) {
                 if var lessonProgress = progress.lessonProgress[lessonId] {
                     lessonProgress.stage = stage
                     lessonProgress.error = error
@@ -1027,6 +1157,422 @@ class GenerationOrchestrator: ObservableObject {
         timingLogger.reset()
         activeRequest = nil
         generationStartedAt = nil
+    }
+    
+    /// Repackage current completed lessons (called after retry completes)
+    private func repackageCompletedLessons() async throws {
+        guard let request = activeRequest,
+              let curriculum = draftCurriculum else {
+            return
+        }
+        
+        let selectedUnitIds: Set<String>
+        if let generateUnitIds = request.generateUnitIds {
+            selectedUnitIds = Set(generateUnitIds)
+        } else {
+            selectedUnitIds = Set(curriculum.units.map { $0.id })
+        }
+        
+        let unitsToGenerate = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+        let lessonsToGenerate = unitsToGenerate.flatMap { unit in
+            unit.lessonIds.compactMap { lessonId in
+                curriculum.lessons[lessonId]
+            }
+        }
+        
+        // Determine completed lessons
+        let completedLessonIds = Set(lessonsToGenerate.compactMap { lesson in
+            let hasAll = partialLessons[lesson.id] != nil && partialQuizzes[lesson.id] != nil && partialDemos[lesson.id] != nil
+            return hasAll ? lesson.id : nil
+        })
+        
+        let completedCount = completedLessonIds.count
+        let totalCount = lessonsToGenerate.count
+        let failedCount = totalCount - completedCount
+        
+        // Filter to only completed lessons
+        let selectedUnits = curriculum.units.filter { selectedUnitIds.contains($0.id) }
+        let filteredUnits = selectedUnits.compactMap { unit -> CurriculumUnit? in
+            let completedLessonIdsInUnit = unit.lessonIds.filter { completedLessonIds.contains($0) }
+            guard !completedLessonIdsInUnit.isEmpty else { return nil }
+            return CurriculumUnit(
+                id: unit.id,
+                title: unit.title,
+                order: unit.order,
+                lessonIds: completedLessonIdsInUnit
+            )
+        }
+        
+        let completedLessons = curriculum.lessons.filter { completedLessonIds.contains($0.key) }
+        
+        let slicedCurriculum = Curriculum(
+            schemaVersion: curriculum.schemaVersion,
+            status: curriculum.status,
+            approvedAt: curriculum.approvedAt,
+            units: filteredUnits,
+            lessons: completedLessons
+        )
+        
+        let packager = PackagerService()
+        let plannerRun = RoleRun(
+            provider: request.plannerConfig.provider.rawValue,
+            model: request.plannerConfig.model,
+            ranAt: ISO8601DateFormatter().string(from: Date())
+        )
+        let lessonRun = RoleRun(
+            provider: request.lessonWriterConfig.provider.rawValue,
+            model: request.lessonWriterConfig.model,
+            ranAt: ISO8601DateFormatter().string(from: Date())
+        )
+        let quizRun = RoleRun(
+            provider: request.quizWriterConfig.provider.rawValue,
+            model: request.quizWriterConfig.model,
+            ranAt: ISO8601DateFormatter().string(from: Date())
+        )
+        let totalDemosEmitted = partialDemos.values.reduce(0) { $0 + $1.demos.count }
+        let demoRun = DemoRun(
+            provider: request.demoWriterConfig.provider.rawValue,
+            model: request.demoWriterConfig.model,
+            ranAt: ISO8601DateFormatter().string(from: Date()),
+            demosEmitted: totalDemosEmitted
+        )
+        let packagerRun = RoleRun(
+            provider: "anthropic",
+            model: "packager-v1",
+            ranAt: ISO8601DateFormatter().string(from: Date())
+        )
+        
+        let metadata = GeneratorMetadata(
+            planner: plannerRun,
+            lessonWriter: lessonRun,
+            quizWriter: quizRun,
+            demoWriter: demoRun,
+            packager: packagerRun
+        )
+        
+        let packageURL = try await timingLogger.timeStage(
+            .packager,
+            provider: nil,
+            model: nil
+        ) {
+            try await packager.packageCourse(
+                topic: request.topic,
+                locale: request.locale,
+                curriculum: slicedCurriculum,
+                lessons: partialLessons,
+                quizzes: partialQuizzes,
+                demos: partialDemos,
+                roleRuns: metadata,
+                extendFrom: request.extendFromPackageURL
+            )
+        }
+        
+        let manifestURL = packageURL.appendingPathComponent("manifest.json")
+        let manifestData = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PackageManifest.self, from: manifestData)
+        
+        let curriculumURL = packageURL.appendingPathComponent("curriculum.json")
+        let curriculumData = try Data(contentsOf: curriculumURL)
+        let finalCurriculum = try JSONDecoder().decode(Curriculum.self, from: curriculumData)
+        
+        output = GenerationOutput(
+            packageURL: packageURL,
+            manifest: manifest,
+            curriculum: finalCurriculum
+        )
+        
+        // Update progress to reflect current state
+        await MainActor.run {
+            progress.completedItems = completedCount
+            progress.totalItems = totalCount
+            if failedCount > 0 {
+                progress.error = "\(failedCount) lesson(s) failed"
+            } else {
+                progress.error = nil
+            }
+        }
+    }
+    
+    /// Get list of failed lesson IDs
+    var failedLessonIds: [String] {
+        progress.lessonProgress.values
+            .filter { $0.isFailed }
+            .map { $0.lessonId }
+    }
+    
+    /// Retry a specific failed lesson
+    func retryFailedLesson(lessonId: String) async {
+        guard let request = activeRequest,
+              let curriculum = draftCurriculum,
+              let lessonProgress = progress.lessonProgress[lessonId],
+              lessonProgress.isFailed,
+              let lesson = curriculum.lessons[lessonId] else {
+            return
+        }
+        
+        // Reset lesson stage to queued
+        await updateLessonStage(lessonId: lessonId, stage: .queued, error: nil)
+        
+        // Ensure background task is active
+        backgroundManager.beginBackgroundTask(name: "lesson-retry")
+        
+        // Remove failed lesson's partial data (force regeneration)
+        partialLessons.removeValue(forKey: lessonId)
+        partialQuizzes.removeValue(forKey: lessonId)
+        partialDemos.removeValue(forKey: lessonId)
+        
+        // Regenerate the lesson
+        do {
+            let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
+            let lessonWriter = LessonWriterService(
+                client: lessonClient,
+                temperature: request.lessonWriterConfig.temperature,
+                topic: request.topic,
+                locale: request.locale,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model,
+                timingLogger: timingLogger
+            )
+            
+            let lessonMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model
+            )
+            
+            let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
+            let quizWriter = QuizWriterService(
+                client: quizClient,
+                temperature: request.quizWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let quizMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)
+            let demoWriter = DemoWriterService(
+                client: demoClient,
+                temperature: request.demoWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let demoMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let completedCount = ThreadSafeCounter(initialValue: progress.completedItems)
+            
+            let result = await generateSingleLesson(
+                lesson: lesson,
+                curriculum: curriculum,
+                request: request,
+                lessonWriter: lessonWriter,
+                lessonMaxTokens: lessonMaxTokens,
+                quizWriter: quizWriter,
+                quizMaxTokens: quizMaxTokens,
+                demoWriter: demoWriter,
+                demoMaxTokens: demoMaxTokens,
+                existingLesson: nil,
+                existingQuiz: nil,
+                existingDemo: nil,
+                completedCount: completedCount
+            )
+            
+            // Merge result
+            if let (markdown, meta) = result.lesson {
+                partialLessons[lessonId] = (markdown, meta)
+            }
+            if let quiz = result.quiz {
+                partialQuizzes[lessonId] = quiz
+            }
+            if let demo = result.demo {
+                partialDemos[lessonId] = demo
+            }
+            
+            // Update progress
+            progress.completedItems = await completedCount.value
+            
+            // Save checkpoint
+            saveCheckpoint()
+            
+            if result.error != nil {
+                // Still failed after retry
+                await updateLessonStage(lessonId: lessonId, stage: .failed, error: result.error?.localizedDescription)
+            } else {
+                // Success! Mark as done and repackage to include newly completed lesson
+                await updateLessonStage(lessonId: lessonId, stage: .done)
+                
+                // Repackage to include newly completed lesson
+                do {
+                    try await repackageCompletedLessons()
+                } catch {
+                    // Repackaging failed - lesson succeeded but package not updated
+                    print("⚠️ Repackaging failed after retry: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            await updateLessonStage(lessonId: lessonId, stage: .failed, error: error.localizedDescription)
+        }
+        
+        backgroundManager.endBackgroundTask()
+    }
+    
+    /// Retry all failed lessons in parallel (respects concurrency cap)
+    func retryAllFailedLessons() async {
+        let failedIds = failedLessonIds
+        guard !failedIds.isEmpty else { return }
+        
+        guard let request = activeRequest,
+              let curriculum = draftCurriculum else {
+            return
+        }
+        
+        // Ensure background task is active
+        backgroundManager.beginBackgroundTask(name: "lesson-retry-all")
+        
+        // Prepare services once
+        do {
+            let lessonClient = try LLMClientFactory.createClient(config: request.lessonWriterConfig)
+            let lessonWriter = LessonWriterService(
+                client: lessonClient,
+                temperature: request.lessonWriterConfig.temperature,
+                topic: request.topic,
+                locale: request.locale,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model,
+                timingLogger: timingLogger
+            )
+            
+            let lessonMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.lessonWriterConfig.provider,
+                model: request.lessonWriterConfig.model
+            )
+            
+            let quizClient = try LLMClientFactory.createClient(config: request.quizWriterConfig)
+            let quizWriter = QuizWriterService(
+                client: quizClient,
+                temperature: request.quizWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let quizMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.quizWriterConfig.provider,
+                model: request.quizWriterConfig.model
+            )
+            
+            let demoClient = try LLMClientFactory.createClient(config: request.demoWriterConfig)
+            let demoWriter = DemoWriterService(
+                client: demoClient,
+                temperature: request.demoWriterConfig.temperature,
+                topic: request.topic,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel,
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let demoMaxTokens = ModelCapabilities.maxOutputTokens(
+                provider: request.demoWriterConfig.provider,
+                model: request.demoWriterConfig.model
+            )
+            
+            let completedCount = ThreadSafeCounter(initialValue: progress.completedItems)
+            
+            // Use semaphore to limit concurrency (same as main generation)
+            let semaphore = AsyncSemaphore(maxCount: maxConcurrentLessons)
+            
+            await withTaskGroup(of: (String, LessonGenerationResult).self) { group in
+                for lessonId in failedIds {
+                    guard let lesson = curriculum.lessons[lessonId] else { continue }
+                    
+                    // Reset to queued
+                    await updateLessonStage(lessonId: lessonId, stage: .queued, error: nil)
+                    
+                    // Remove partial data
+                    partialLessons.removeValue(forKey: lessonId)
+                    partialQuizzes.removeValue(forKey: lessonId)
+                    partialDemos.removeValue(forKey: lessonId)
+                    
+                    group.addTask {
+                        await semaphore.wait()
+                        
+                        let result = await self.generateSingleLesson(
+                            lesson: lesson,
+                            curriculum: curriculum,
+                            request: request,
+                            lessonWriter: lessonWriter,
+                            lessonMaxTokens: lessonMaxTokens,
+                            quizWriter: quizWriter,
+                            quizMaxTokens: quizMaxTokens,
+                            demoWriter: demoWriter,
+                            demoMaxTokens: demoMaxTokens,
+                            existingLesson: nil,
+                            existingQuiz: nil,
+                            existingDemo: nil,
+                            completedCount: completedCount
+                        )
+                        
+                        await semaphore.signal()
+                        return (lessonId, result)
+                    }
+                }
+                
+                // Collect results
+                for await (lessonId, result) in group {
+                    if let (markdown, meta) = result.lesson {
+                        partialLessons[lessonId] = (markdown, meta)
+                    }
+                    if let quiz = result.quiz {
+                        partialQuizzes[lessonId] = quiz
+                    }
+                    if let demo = result.demo {
+                        partialDemos[lessonId] = demo
+                    }
+                    
+                    // Update progress and save checkpoint
+                    progress.completedItems = await completedCount.value
+                    saveCheckpoint()
+                    
+                    if result.error != nil {
+                        await updateLessonStage(lessonId: lessonId, stage: .failed, error: result.error?.localizedDescription)
+                    } else {
+                        await updateLessonStage(lessonId: lessonId, stage: .done)
+                    }
+                }
+            }
+            
+            // Repackage after all retries complete
+            if progress.phase == .completed {
+                do {
+                    try await repackageCompletedLessons()
+                } catch {
+                    print("⚠️ Repackaging failed after retry-all: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            print("⚠️ Failed to initialize retry-all: \(error.localizedDescription)")
+        }
+        
+        backgroundManager.endBackgroundTask()
     }
     
     /// Handle app entering background (called from app lifecycle)
