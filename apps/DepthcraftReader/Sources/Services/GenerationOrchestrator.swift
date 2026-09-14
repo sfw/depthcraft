@@ -383,25 +383,29 @@ class GenerationOrchestrator: ObservableObject {
         // Use Result to collect all completed work even if some tasks fail
         var firstError: Error?
         
-        await withTaskGroup(of: Result<LessonGenerationResult?, Error>.self) { group in
+        await withTaskGroup(of: Result<LessonGenerationResult, Error>.self) { group in
             // Spawn tasks for all lessons (they check partial state internally)
             for lesson in lessonsToGenerate {
+                // Snapshot existing state BEFORE addTask to avoid reading inout from child task
+                let existingLesson = lessons[lesson.id]
+                let existingQuiz = quizzes[lesson.id]
+                let existingDemo = demos[lesson.id]
+                
+                // Check if this lesson is fully complete (all stages done)
+                let isFullyComplete = existingLesson != nil && existingQuiz != nil && existingDemo != nil
+                
+                if isFullyComplete {
+                    // All stages complete, nothing to do - skip task entirely
+                    continue
+                }
+                
                 group.addTask {
                     // Wait for semaphore slot
                     await semaphore.wait()
                     defer { await semaphore.signal() }
                     
-                    // Check if this lesson is fully complete (all stages done)
-                    let hasLesson = lessons[lesson.id] != nil
-                    let hasQuiz = quizzes[lesson.id] != nil
-                    let hasDemo = demos[lesson.id] != nil
-                    
-                    if hasLesson && hasQuiz && hasDemo {
-                        // All stages complete, nothing to do
-                        return .success(nil)
-                    }
-                    
                     // Generate missing stages for this lesson
+                    // Returns partial result even if mid-lesson failure occurs
                     do {
                         let result = try await self.generateSingleLesson(
                             lesson: lesson,
@@ -413,9 +417,9 @@ class GenerationOrchestrator: ObservableObject {
                             quizMaxTokens: quizMaxTokens,
                             demoWriter: demoWriter,
                             demoMaxTokens: demoMaxTokens,
-                            existingLesson: lessons[lesson.id],
-                            existingQuiz: quizzes[lesson.id],
-                            existingDemo: demos[lesson.id],
+                            existingLesson: existingLesson,
+                            existingQuiz: existingQuiz,
+                            existingDemo: existingDemo,
                             completedCount: completedCount
                         )
                         return .success(result)
@@ -429,12 +433,16 @@ class GenerationOrchestrator: ObservableObject {
             for await result in group {
                 switch result {
                 case .success(let lessonResult):
-                    guard let lessonResult = lessonResult else { continue }
-                    
-                    // Save successful result immediately
-                    lessons[lessonResult.lessonId] = (lessonResult.markdown, lessonResult.meta)
-                    quizzes[lessonResult.lessonId] = lessonResult.quiz
-                    demos[lessonResult.lessonId] = lessonResult.demo
+                    // Merge any newly generated stages (partial or complete)
+                    if let (markdown, meta) = lessonResult.lesson {
+                        lessons[lessonResult.lessonId] = (markdown, meta)
+                    }
+                    if let quiz = lessonResult.quiz {
+                        quizzes[lessonResult.lessonId] = quiz
+                    }
+                    if let demo = lessonResult.demo {
+                        demos[lessonResult.lessonId] = demo
+                    }
                     
                     // Persist partials incrementally (critical for retry)
                     partialLessons = lessons
@@ -462,6 +470,7 @@ class GenerationOrchestrator: ObservableObject {
     
     /// Generate a single lesson's complete content (lesson write → quiz → demo)
     /// Retry-friendly: skips stages that already exist in partial state
+    /// Persists each stage to partials immediately after completion (mid-lesson failure safe)
     /// Respects dependencies: lesson before quiz/demo
     private func generateSingleLesson(
         lesson: CurriculumLesson,
@@ -482,6 +491,10 @@ class GenerationOrchestrator: ObservableObject {
             throw GenerationError.validationFailed("Unit not found for lesson \(lesson.id)")
         }
         
+        var newLesson: (markdown: String, meta: LessonMeta)? = nil
+        var newQuiz: QuizDocument? = nil
+        var newDemo: DemoWriterOutput? = nil
+        
         // 1. Write lesson (or reuse existing)
         let (markdown, meta): (String, LessonMeta)
         if let existing = existingLesson {
@@ -490,7 +503,7 @@ class GenerationOrchestrator: ObservableObject {
         } else {
             await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
             
-            (markdown, meta) = try await timingLogger.timeStage(
+            let generated = try await timingLogger.timeStage(
                 .lessonWrite,
                 lessonId: lesson.id,
                 provider: request.lessonWriterConfig.provider.rawValue,
@@ -503,6 +516,13 @@ class GenerationOrchestrator: ObservableObject {
                     curriculum: curriculum
                 )
             }
+            
+            markdown = generated.0
+            meta = generated.1
+            newLesson = (markdown, meta)
+            
+            // Persist lesson immediately to partials (critical for mid-lesson failure)
+            partialLessons[lesson.id] = (markdown, meta)
         }
         
         // 2. Write quiz (or reuse existing) - needs lesson markdown
@@ -512,7 +532,7 @@ class GenerationOrchestrator: ObservableObject {
         } else {
             await updateProgress(phase: .writingQuizzes, item: "Quiz for: \(lesson.title)", completed: completedCount.value)
             
-            quiz = try await timingLogger.timeStage(
+            let generated = try await timingLogger.timeStage(
                 .quiz,
                 lessonId: lesson.id,
                 provider: request.quizWriterConfig.provider.rawValue,
@@ -525,6 +545,12 @@ class GenerationOrchestrator: ObservableObject {
                     unit: unit
                 )
             }
+            
+            quiz = generated
+            newQuiz = quiz
+            
+            // Persist quiz immediately to partials (critical for mid-lesson failure)
+            partialQuizzes[lesson.id] = quiz
         }
         
         // 3. Write demo (or reuse existing) - needs lesson markdown
@@ -549,19 +575,23 @@ class GenerationOrchestrator: ObservableObject {
             }
             
             demo = demoOutput ?? DemoWriterOutput(demos: [])
+            newDemo = demo
+            
+            // Persist demo immediately to partials (critical for mid-lesson failure)
+            partialDemos[lesson.id] = demo
         }
         
         // Increment completed count only if we did actual work
-        if existingLesson == nil || existingQuiz == nil || existingDemo == nil {
+        if newLesson != nil || newQuiz != nil || newDemo != nil {
             await completedCount.increment()
         }
         
+        // Return only newly generated stages (collector merges into main dictionaries)
         return LessonGenerationResult(
             lessonId: lesson.id,
-            markdown: markdown,
-            meta: meta,
-            quiz: quiz,
-            demo: demo
+            lesson: newLesson,
+            quiz: newQuiz,
+            demo: newDemo
         )
     }
     
@@ -590,13 +620,13 @@ class GenerationOrchestrator: ObservableObject {
 
 // MARK: - Helper Types for Parallel Generation
 
-/// Result of generating a single lesson's complete content
+/// Result of generating a single lesson's content (may be partial if mid-lesson failure)
+/// Only newly generated stages are non-nil; existing stages remain nil in result
 private struct LessonGenerationResult {
     let lessonId: String
-    let markdown: String
-    let meta: LessonMeta
-    let quiz: QuizDocument
-    let demo: DemoWriterOutput
+    let lesson: (markdown: String, meta: LessonMeta)?
+    let quiz: QuizDocument?
+    let demo: DemoWriterOutput?
 }
 
 /// Thread-safe counter for tracking completion across parallel tasks
