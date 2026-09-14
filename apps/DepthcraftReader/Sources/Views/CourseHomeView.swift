@@ -81,6 +81,7 @@ struct CourseHomeView: View {
                                     .font(.subheadline)
                             }
                             .buttonStyle(.bordered)
+                            .tint(.teal)
                             .controlSize(.regular)
                         }
                     }
