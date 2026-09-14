@@ -7,7 +7,19 @@ struct LibraryView: View {
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     let onSelectCourse: () -> Void
+    
+    private var isLandscape: Bool {
+        // Landscape when vertical size class is compact (reliable for iPad)
+        verticalSizeClass == .compact
+    }
+    
+    private var gridColumns: [GridItem] {
+        let spacing: CGFloat = isLandscape ? 18 : 22
+        let columnCount = isLandscape ? 4 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: spacing), count: columnCount)
+    }
     
     var body: some View {
         ScrollView {
@@ -56,11 +68,8 @@ struct LibraryView: View {
                     
                     // Vertical shelf with LazyVGrid
                     LazyVGrid(
-                        columns: [
-                            GridItem(.adaptive(minimum: 220, maximum: 260), spacing: 18, alignment: .top)
-                        ],
-                        alignment: .leading,
-                        spacing: 18
+                        columns: gridColumns,
+                        spacing: isLandscape ? 18 : 22
                     ) {
                         ForEach(packages) { package in
                             CourseShelfCover(
@@ -73,7 +82,7 @@ struct LibraryView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 22)
                     .padding(.top, 28)
                     
                     VStack(alignment: .leading, spacing: 12) {
@@ -254,44 +263,52 @@ struct CourseShelfCover: View {
     let isMostRecent: Bool
     
     var body: some View {
-        HStack(spacing: 0) {
-            if isMostRecent {
-                Rectangle()
-                    .fill(Color(hex: "#0D9488"))
-                    .frame(width: 3)
-            }
+        GeometryReader { geometry in
+            let cardWidth = geometry.size.width
+            let textMaxWidth = cardWidth - (isMostRecent ? 3 : 0) - 36
             
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 12) {
-                    WordBoundaryText(
-                        text: package.title,
-                        size: 19,
-                        weight: .medium,
-                        design: .serif,
-                        color: Color(hex: "#1C1917").opacity(0.92),
-                        lineSpacing: 4,
-                        tracking: 0.3,
-                        maxLines: 10,
-                        maxWidth: 224
-                    )
-                    
-                    Text(packageMeta)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
+            HStack(spacing: 0) {
+                if isMostRecent {
+                    Rectangle()
+                        .fill(Color(hex: "#0D9488"))
+                        .frame(width: 3)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 18)
-                .padding(.horizontal, 18)
+                
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        WordBoundaryText(
+                            text: package.title,
+                            size: 19,
+                            weight: .medium,
+                            design: .serif,
+                            color: Color(hex: "#1C1917").opacity(0.92),
+                            lineSpacing: 4,
+                            tracking: 0.3,
+                            maxLines: 10,
+                            maxWidth: textMaxWidth
+                        )
+                        
+                        Text(packageMeta)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color(hex: "#1C1917").opacity(0.57))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 18)
+                    .padding(.horizontal, 18)
+                    
+                    Spacer(minLength: 0)
+                }
                 .padding(.bottom, 18)
             }
+            .frame(width: cardWidth, height: 310)
+            .background(Color(hex: "#F5F0E6"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .frame(minHeight: 200)
-        .background(Color(hex: "#F5F0E6"))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(hex: "#E8E0D2"), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(height: 310)
     }
     
     private var packageMeta: String {
