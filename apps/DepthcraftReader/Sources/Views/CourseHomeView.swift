@@ -329,6 +329,7 @@ struct CourseHomeView: View {
         let coordinator = NSFileCoordinator()
         var coordinatorError: NSError?
         var zipCreated = false
+        var copyError: NSError?
         
         coordinator.coordinate(readingItemAt: sourceURL, options: [.forUploading], error: &coordinatorError) { zipURL in
             do {
@@ -336,11 +337,12 @@ struct CourseHomeView: View {
                 try fileManager.copyItem(at: zipURL, to: destinationURL)
                 zipCreated = true
             } catch {
-                coordinatorError = error as NSError
+                copyError = error as NSError
             }
         }
         
-        if let error = coordinatorError {
+        // Check for errors from coordinate or copy
+        if let error = coordinatorError ?? copyError {
             throw error
         }
         
