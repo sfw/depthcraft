@@ -34,6 +34,10 @@ class LessonRetryService {
         let quizConfig = try roleConfig.getLLMConfig(for: .quizzes)
         let demoConfig = try roleConfig.getLLMConfig(for: .demos)
         
+        // Get knowledge/depth levels from manifest (original generation params)
+        let knowledgeLevel = KnowledgeLevel(rawValue: manifest.knowledgeLevel ?? KnowledgeLevel.some.rawValue) ?? .some
+        let depthLevel = DepthLevel(rawValue: manifest.depthLevel ?? DepthLevel.standard.rawValue) ?? .standard
+        
         // Create generation services
         let lessonClient = try LLMClientFactory.createClient(config: lessonConfig)
         let lessonWriter = LessonWriterService(
@@ -41,8 +45,8 @@ class LessonRetryService {
             temperature: lessonConfig.temperature,
             topic: manifest.topic,
             locale: manifest.locale,
-            knowledgeLevel: .some,  // Default - could be stored in manifest in future
-            depthLevel: .standard,   // Default - could be stored in manifest in future
+            knowledgeLevel: knowledgeLevel,
+            depthLevel: depthLevel,
             provider: lessonConfig.provider,
             model: lessonConfig.model,
             timingLogger: nil  // No timing for retry
@@ -53,8 +57,8 @@ class LessonRetryService {
             client: quizClient,
             temperature: quizConfig.temperature,
             topic: manifest.topic,
-            knowledgeLevel: .some,
-            depthLevel: .standard,
+            knowledgeLevel: knowledgeLevel,
+            depthLevel: depthLevel,
             provider: quizConfig.provider,
             model: quizConfig.model
         )
@@ -64,8 +68,8 @@ class LessonRetryService {
             client: demoClient,
             temperature: demoConfig.temperature,
             topic: manifest.topic,
-            knowledgeLevel: .some,
-            depthLevel: .standard,
+            knowledgeLevel: knowledgeLevel,
+            depthLevel: depthLevel,
             provider: demoConfig.provider,
             model: demoConfig.model
         )
@@ -246,10 +250,18 @@ class LessonRetryService {
         
         // Add unit if it doesn't exist (in case the lesson was part of a new unit)
         if !curriculum.units.contains(where: { $0.id == unit.id }) {
-            // Check if unit should be added (has at least one built lesson)
-            let unitHasBuiltLesson = unit.lessonIds.contains { curriculum.lessons[$0] != nil }
-            if unitHasBuiltLesson {
-                curriculum.units.append(unit)
+            // Filter unit.lessonIds to only built lessons (previously built + just retried)
+            let builtLessonIds = unit.lessonIds.filter { curriculum.lessons[$0] != nil }
+            
+            // Only add unit if it has at least one built lesson
+            if !builtLessonIds.isEmpty {
+                let filteredUnit = CurriculumUnit(
+                    id: unit.id,
+                    title: unit.title,
+                    order: unit.order,
+                    lessonIds: builtLessonIds
+                )
+                curriculum.units.append(filteredUnit)
                 curriculum.units.sort { $0.order < $1.order }
             }
         } else {
@@ -278,7 +290,7 @@ class LessonRetryService {
     private func updateManifest(packageURL: URL, manifest: PackageManifest) async throws {
         let manifestURL = packageURL.appendingPathComponent("manifest.json")
         
-        // Increment content version
+        // Increment content version, preserve knowledge/depth levels
         let updatedManifest = PackageManifest(
             schemaVersion: manifest.schemaVersion,
             packageId: manifest.packageId,
@@ -289,7 +301,9 @@ class LessonRetryService {
             locale: manifest.locale,
             generator: manifest.generator,
             extendedFrom: manifest.extendedFrom,
-            plannedCurriculum: manifest.plannedCurriculum
+            plannedCurriculum: manifest.plannedCurriculum,
+            knowledgeLevel: manifest.knowledgeLevel,
+            depthLevel: manifest.depthLevel
         )
         
         let encoder = JSONEncoder()

@@ -651,7 +651,9 @@ class GenerationOrchestrator: ObservableObject {
                         demos: demos,
                         roleRuns: metadata,
                         extendFrom: request.extendFromPackageURL,
-                        plannedCurriculum: curriculum
+                        plannedCurriculum: curriculum,
+                        knowledgeLevel: request.knowledgeLevel,
+                        depthLevel: request.depthLevel
                     )
                 }
                 
@@ -756,7 +758,9 @@ class GenerationOrchestrator: ObservableObject {
                         demos: demos,
                         roleRuns: metadata,
                         extendFrom: request.extendFromPackageURL,
-                        plannedCurriculum: nil
+                        plannedCurriculum: nil,
+                        knowledgeLevel: request.knowledgeLevel,
+                        depthLevel: request.depthLevel
                     )
                 }
                 
@@ -1266,7 +1270,9 @@ class GenerationOrchestrator: ObservableObject {
                 demos: partialDemos,
                 roleRuns: metadata,
                 extendFrom: request.extendFromPackageURL,
-                plannedCurriculum: curriculum
+                plannedCurriculum: curriculum,
+                knowledgeLevel: request.knowledgeLevel,
+                depthLevel: request.depthLevel
             )
         }
         

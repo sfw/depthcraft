@@ -11,6 +11,8 @@ struct PackageManifest: Codable, Hashable {
     let generator: GeneratorMetadata?
     let extendedFrom: ExtensionMetadata?
     let plannedCurriculum: Curriculum?
+    let knowledgeLevel: Int?
+    let depthLevel: Int?
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -24,9 +26,11 @@ struct PackageManifest: Codable, Hashable {
         generator = try container.decodeIfPresent(GeneratorMetadata.self, forKey: .generator)
         extendedFrom = try container.decodeIfPresent(ExtensionMetadata.self, forKey: .extendedFrom)
         plannedCurriculum = try container.decodeIfPresent(Curriculum.self, forKey: .plannedCurriculum)
+        knowledgeLevel = try container.decodeIfPresent(Int.self, forKey: .knowledgeLevel)
+        depthLevel = try container.decodeIfPresent(Int.self, forKey: .depthLevel)
     }
     
-    init(schemaVersion: String, packageId: String, contentVersion: Int, title: String, topic: String, createdAt: String, locale: String, generator: GeneratorMetadata?, extendedFrom: ExtensionMetadata?, plannedCurriculum: Curriculum? = nil) {
+    init(schemaVersion: String, packageId: String, contentVersion: Int, title: String, topic: String, createdAt: String, locale: String, generator: GeneratorMetadata?, extendedFrom: ExtensionMetadata?, plannedCurriculum: Curriculum? = nil, knowledgeLevel: Int? = nil, depthLevel: Int? = nil) {
         self.schemaVersion = schemaVersion
         self.packageId = packageId
         self.contentVersion = contentVersion
@@ -37,6 +41,8 @@ struct PackageManifest: Codable, Hashable {
         self.generator = generator
         self.extendedFrom = extendedFrom
         self.plannedCurriculum = plannedCurriculum
+        self.knowledgeLevel = knowledgeLevel
+        self.depthLevel = depthLevel
     }
 }
 

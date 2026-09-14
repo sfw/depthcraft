@@ -261,7 +261,9 @@ protocol PackagerRole {
         demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata,
         extendFrom: URL?,
-        plannedCurriculum: Curriculum?
+        plannedCurriculum: Curriculum?,
+        knowledgeLevel: KnowledgeLevel?,
+        depthLevel: DepthLevel?
     ) async throws -> URL
 }
 
