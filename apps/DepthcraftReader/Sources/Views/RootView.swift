@@ -30,8 +30,8 @@ struct RootView: View {
                             }
                     }
                 }
-                .navigationTitle(showingLibrary ? "" : "Depthcraft")
-                .navigationBarTitleDisplayMode(.large)
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: NavigationDestination.self) { destination in
                     switch destination {
                     case .unit(let unitId):

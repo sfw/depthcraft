@@ -3,7 +3,8 @@ import SwiftUI
 struct CourseHomeView: View {
     @EnvironmentObject private var store: CourseStore
     @Environment(\.navigationPath) private var navigationPath
-    @State private var showingMore = false
+    @State private var showingMoreMenu = false
+    @State private var showingImporter = false
 
     var body: some View {
         List {
@@ -150,46 +151,114 @@ struct CourseHomeView: View {
                     }
                 }
             } else if store.course == nil && !store.isLoading {
-                // Editorial empty state with Generate CTA
-                ContentUnavailableView {
-                    Text("Approve curriculum to unlock the spine")
-                        .font(.system(.body, design: .serif))
-                } actions: {
-                    NavigationLink {
-                        GenerationView()
-                    } label: {
-                        Text("Generate a course")
-                            .font(.subheadline.weight(.medium))
+                VStack(spacing: 20) {
+                    Spacer()
+                    
+                    VStack(spacing: 16) {
+                        // Restrained home brand mark + wordmark
+                        HStack(spacing: 10) {
+                            Image("HomeMark")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 28)
+                                .accessibilityHidden(true)
+                            
+                            Text("Depthcraft")
+                                .font(.system(size: 16, weight: .semibold, design: .default))
+                                .foregroundStyle(Color(hex: "#1C1917"))
+                        }
+                        
+                        Text("No Course")
+                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .padding(.top, 8)
+                        
+                        Text("Set API keys in Settings, then Generate")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.teal)
-                    .controlSize(.regular)
+                    
+                    HStack(spacing: 12) {
+                        NavigationLink {
+                            GenerationView()
+                        } label: {
+                            Text("Generate")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
+                        .controlSize(.regular)
+                        
+                        Button {
+                            showingImporter = true
+                        } label: {
+                            Text("Import")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
+                    }
+                    
+                    Spacer()
                 }
+                .frame(maxWidth: .infinity)
             }
         }
         .listStyle(.insetGrouped)
         .toolbar {
-            if store.course != nil {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingMore = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingMoreMenu = true
+                } label: {
+                    Image(systemName: "gearshape")
                 }
             }
         }
-        .sheet(isPresented: $showingMore) {
+        .sheet(isPresented: $showingMoreMenu) {
             NavigationStack {
                 MoreMenuView()
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") {
-                                showingMore = false
+                                showingMoreMenu = false
                             }
                         }
                     }
             }
+        }
+        .fileImporter(
+            isPresented: $showingImporter,
+            allowedContentTypes: [.init(filenameExtension: "depthcraft")].compactMap { $0 },
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+    }
+    
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let sourceURL = urls.first else { return }
+            
+            let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
+            
+            do {
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                store.refreshAvailablePackages()
+                store.loadPackage(from: destinationURL)
+            } catch {
+                print("Import error: \(error)")
+            }
+        case .failure(let error):
+            print("File importer error: \(error)")
         }
     }
     
