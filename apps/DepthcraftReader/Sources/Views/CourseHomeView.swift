@@ -6,6 +6,10 @@ struct CourseHomeView: View {
     @State private var showingShareSheet = false
     @State private var exportURL: URL?
     @State private var showingImporter = false
+    @State private var exportError: String?
+    @State private var showingExportError = false
+    @State private var importError: ImportValidatorError?
+    @State private var showingImportError = false
 
     var body: some View {
         List {
@@ -229,6 +233,20 @@ struct CourseHomeView: View {
                 ShareSheet(activityItems: [url])
             }
         }
+        .alert("Export Failed", isPresented: $showingExportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let error = exportError {
+                Text(error)
+            }
+        }
+        .alert("Import Failed", isPresented: $showingImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let error = importError {
+                Text(error.userFriendlyDescription)
+            }
+        }
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [
@@ -292,30 +310,42 @@ struct CourseHomeView: View {
             // Create zip archive of the package directory
             try zipDirectory(at: sourceURL, to: zipURL)
             
-            // Wait for write to complete before presenting share sheet
+            // Verify the zip was created successfully
+            guard FileManager.default.fileExists(atPath: zipURL.path) else {
+                throw NSError(domain: "ExportError", code: 1, userInfo: [NSLocalizedDescriptionKey: "ZIP file was not created"])
+            }
+            
+            // Only present share sheet after confirmed bytes on disk
             self.exportURL = zipURL
             showingShareSheet = true
         } catch {
-            print("Export error: \(error)")
+            exportError = "Failed to export course: \(error.localizedDescription)"
+            showingExportError = true
         }
     }
     
     private func zipDirectory(at sourceURL: URL, to destinationURL: URL) throws {
         let fileManager = FileManager.default
         let coordinator = NSFileCoordinator()
-        var error: NSError?
+        var coordinatorError: NSError?
+        var zipCreated = false
         
-        coordinator.coordinate(readingItemAt: sourceURL, options: [.forUploading], error: &error) { zipURL in
+        coordinator.coordinate(readingItemAt: sourceURL, options: [.forUploading], error: &coordinatorError) { zipURL in
             do {
                 // The coordinator creates a zip for us when using .forUploading
                 try fileManager.copyItem(at: zipURL, to: destinationURL)
+                zipCreated = true
             } catch {
-                print("Zip copy error: \(error)")
+                coordinatorError = error as NSError
             }
         }
         
-        if let error = error {
+        if let error = coordinatorError {
             throw error
+        }
+        
+        if !zipCreated {
+            throw NSError(domain: "ExportError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create ZIP file"])
         }
     }
 }
@@ -395,10 +425,18 @@ extension CourseHomeView {
                 
                 store.refreshAvailablePackages()
                 store.loadPackage(from: packageURL)
+            } catch let error as ImportValidatorError {
+                importError = error
+                showingImportError = true
+                print("Import validation error: \(error.localizedDescription)")
             } catch {
+                importError = ImportValidatorError.invalidPackageStructure("An unexpected error occurred during import")
+                showingImportError = true
                 print("Import error: \(error)")
             }
         case .failure(let error):
+            importError = ImportValidatorError.invalidPackageStructure("File selection failed")
+            showingImportError = true
             print("File importer error: \(error)")
         }
     }

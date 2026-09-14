@@ -33,63 +33,202 @@ enum ImportValidatorError: LocalizedError {
     }
 }
 
+import Compression
+
 enum ImportValidator {
     
-    /// Safely unzips a file with zip-slip protection
+    /// Safely unzips a file with zip-slip protection (iOS-safe, in-process)
     static func unzipSafely(from zipURL: URL, to destinationURL: URL) throws {
         let fileManager = FileManager.default
         
         // Create destination directory
         try fileManager.createDirectory(at: destinationURL, withIntermediateDirectories: true)
         
-        // Use shell command to unzip with safety checks
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = [
-            "-q",  // quiet
-            "-d", destinationURL.path,  // destination
-            zipURL.path  // source zip
-        ]
+        // Read the zip file
+        let zipData = try Data(contentsOf: zipURL)
         
-        let pipe = Pipe()
-        process.standardError = pipe
-        
-        try process.run()
-        process.waitUntilExit()
-        
-        if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown unzip error"
-            throw ImportValidatorError.invalidPackageStructure("Failed to unzip: \(errorMessage)")
+        // Parse and extract ZIP using Foundation
+        guard let archive = Archive(data: zipData, accessMode: .read) else {
+            throw ImportValidatorError.invalidPackageStructure("Not a valid ZIP archive")
         }
         
-        // Validate all extracted paths for zip-slip
-        try validateExtractedPaths(at: destinationURL)
+        // Extract each entry with zip-slip protection BEFORE writing
+        for entry in archive {
+            let entryPath = entry.path
+            
+            // REFUSE paths with .. or absolute paths BEFORE writing
+            if entryPath.contains("..") {
+                throw ImportValidatorError.zipSlipDetected(entryPath)
+            }
+            
+            if entryPath.hasPrefix("/") {
+                throw ImportValidatorError.zipSlipDetected(entryPath)
+            }
+            
+            // Build destination path and verify it's within destinationURL
+            let destinationPath = destinationURL.appendingPathComponent(entryPath).standardizedFileURL
+            let basePath = destinationURL.standardizedFileURL.path
+            
+            if !destinationPath.path.hasPrefix(basePath) {
+                throw ImportValidatorError.zipSlipDetected(entryPath)
+            }
+            
+            // Create parent directory if needed
+            let parentDir = destinationPath.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: parentDir.path) {
+                try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
+            }
+            
+            // Extract the entry
+            if entry.type == .directory {
+                try fileManager.createDirectory(at: destinationPath, withIntermediateDirectories: true)
+            } else {
+                // Extract file data
+                var extractedData = Data()
+                _ = try archive.extract(entry) { data in
+                    extractedData.append(data)
+                }
+                try extractedData.write(to: destinationPath)
+            }
+        }
+    }
+}
+
+// Minimal ZIP archive reader using Foundation
+private struct Archive {
+    let data: Data
+    let entries: [Entry]
+    
+    init?(data: Data, accessMode: AccessMode) {
+        guard data.count >= 22 else { return nil } // Minimum ZIP size
+        self.data = data
+        
+        // Find End of Central Directory (EOCD)
+        guard let eocdOffset = Self.findEOCD(in: data) else { return nil }
+        
+        // Parse EOCD to get central directory location
+        let centralDirOffset = Int(data.uint32(at: eocdOffset + 16))
+        let entryCount = Int(data.uint16(at: eocdOffset + 10))
+        
+        // Parse central directory entries
+        var parsedEntries: [Entry] = []
+        var offset = centralDirOffset
+        
+        for _ in 0..<entryCount {
+            guard let entry = Entry.parse(from: data, at: offset) else { break }
+            parsedEntries.append(entry)
+            offset = entry.nextOffset
+        }
+        
+        self.entries = parsedEntries
     }
     
-    private static func validateExtractedPaths(at directoryURL: URL) throws {
-        let fileManager = FileManager.default
-        let enumerator = fileManager.enumerator(atPath: directoryURL.path)
+    private static func findEOCD(in data: Data) -> Int? {
+        // EOCD signature: 0x06054b50
+        let signature: UInt32 = 0x06054b50
         
-        while let relativePath = enumerator?.nextObject() as? String {
-            // Check for path traversal attempts
-            if relativePath.contains("..") {
-                throw ImportValidatorError.zipSlipDetected(relativePath)
-            }
-            
-            if relativePath.hasPrefix("/") {
-                throw ImportValidatorError.zipSlipDetected(relativePath)
-            }
-            
-            // Verify the full path is within the directory
-            let fullPath = directoryURL.appendingPathComponent(relativePath).standardizedFileURL.path
-            let basePath = directoryURL.standardizedFileURL.path
-            
-            if !fullPath.hasPrefix(basePath) {
-                throw ImportValidatorError.zipSlipDetected(relativePath)
+        // Search backwards from end (EOCD is usually at the end)
+        for i in stride(from: data.count - 22, through: max(0, data.count - 65557), by: -1) {
+            if data.uint32(at: i) == signature {
+                return i
             }
         }
+        return nil
     }
+    
+    func extract(_ entry: Entry, consumer: (Data) throws -> Void) throws {
+        // Read local file header to get actual data offset
+        let localHeaderOffset = entry.localHeaderOffset
+        let fileNameLength = Int(data.uint16(at: localHeaderOffset + 26))
+        let extraFieldLength = Int(data.uint16(at: localHeaderOffset + 28))
+        let dataOffset = localHeaderOffset + 30 + fileNameLength + extraFieldLength
+        
+        let compressedData = data.subdata(in: dataOffset..<(dataOffset + entry.compressedSize))
+        
+        if entry.compressionMethod == 0 {
+            // Stored (no compression)
+            try consumer(compressedData)
+        } else if entry.compressionMethod == 8 {
+            // Deflate
+            let decompressed = try compressedData.decompress()
+            try consumer(decompressed)
+        } else {
+            throw ImportValidatorError.invalidPackageStructure("Unsupported compression method: \(entry.compressionMethod)")
+        }
+    }
+    
+    enum AccessMode {
+        case read
+    }
+    
+    struct Entry {
+        let path: String
+        let type: EntryType
+        let compressedSize: Int
+        let uncompressedSize: Int
+        let compressionMethod: UInt16
+        let localHeaderOffset: Int
+        let nextOffset: Int
+        
+        enum EntryType {
+            case file
+            case directory
+        }
+        
+        static func parse(from data: Data, at offset: Int) -> Entry? {
+            guard offset + 46 <= data.count else { return nil }
+            
+            // Verify central directory header signature
+            let signature = data.uint32(at: offset)
+            guard signature == 0x02014b50 else { return nil }
+            
+            let compressionMethod = data.uint16(at: offset + 10)
+            let compressedSize = Int(data.uint32(at: offset + 20))
+            let uncompressedSize = Int(data.uint32(at: offset + 24))
+            let fileNameLength = Int(data.uint16(at: offset + 28))
+            let extraFieldLength = Int(data.uint16(at: offset + 30))
+            let commentLength = Int(data.uint16(at: offset + 32))
+            let localHeaderOffset = Int(data.uint32(at: offset + 42))
+            
+            let pathData = data.subdata(in: (offset + 46)..<(offset + 46 + fileNameLength))
+            guard let path = String(data: pathData, encoding: .utf8) else { return nil }
+            
+            let type: EntryType = path.hasSuffix("/") ? .directory : .file
+            let nextOffset = offset + 46 + fileNameLength + extraFieldLength + commentLength
+            
+            return Entry(
+                path: path,
+                type: type,
+                compressedSize: compressedSize,
+                uncompressedSize: uncompressedSize,
+                compressionMethod: compressionMethod,
+                localHeaderOffset: localHeaderOffset,
+                nextOffset: nextOffset
+            )
+        }
+    }
+}
+
+// Data extensions for ZIP parsing
+private extension Data {
+    func uint16(at offset: Int) -> UInt16 {
+        guard offset + 2 <= count else { return 0 }
+        return UInt16(self[offset]) | (UInt16(self[offset + 1]) << 8)
+    }
+    
+    func uint32(at offset: Int) -> UInt32 {
+        guard offset + 4 <= count else { return 0 }
+        return UInt32(self[offset]) |
+               (UInt32(self[offset + 1]) << 8) |
+               (UInt32(self[offset + 2]) << 16) |
+               (UInt32(self[offset + 3]) << 24)
+    }
+    
+    func decompress() throws -> Data {
+        let decompressed = try (self as NSData).decompressed(using: .zlib) as Data
+        return decompressed
+    }
+}
     
     /// Validates an imported package before it's loaded
     static func validateImportedPackage(at packageURL: URL) throws {
@@ -159,8 +298,8 @@ enum ImportValidator {
     private static func validateRequiredFiles(at packageURL: URL, curriculum: Curriculum) throws {
         let fileManager = FileManager.default
         
-        // Check for required files
-        let requiredFiles = ["manifest.json", "curriculum.json", "progress.json"]
+        // Check for required files (progress.json is optional - device-local ProgressStore is authoritative)
+        let requiredFiles = ["manifest.json", "curriculum.json"]
         for file in requiredFiles {
             let fileURL = packageURL.appendingPathComponent(file)
             if !fileManager.fileExists(atPath: fileURL.path) {
