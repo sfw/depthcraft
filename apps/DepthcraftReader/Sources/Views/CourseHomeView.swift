@@ -15,6 +15,9 @@ struct CourseHomeView: View {
     @State private var showingExportError = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
+    @State private var retryingLesson: CurriculumLesson?
+    @State private var showingRetryError = false
+    @State private var retryError: String?
 
     var body: some View {
         List {
@@ -130,6 +133,48 @@ struct CourseHomeView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .padding(.vertical, 6)
+                        }
+                    }
+                    
+                    // Failed lessons section (if any)
+                    let failedLessonsList = store.failedLessons()
+                    if !failedLessonsList.isEmpty {
+                        DisclosureGroup {
+                            ForEach(failedLessonsList, id: \.lesson.id) { item in
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                        .font(.caption)
+                                        .frame(minWidth: 20, alignment: .trailing)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.lesson.title)
+                                            .font(.body)
+                                        Text(item.unit.title)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    
+                                    Button {
+                                        retryLesson(item.lesson)
+                                    } label: {
+                                        Text("Retry")
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.teal)
+                                    .controlSize(.small)
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        } label: {
+                            HStack {
+                                Text("Failed Lessons (\(failedLessonsList.count))")
+                                    .font(.body)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }
                 } header: {
@@ -253,6 +298,13 @@ struct CourseHomeView: View {
         } message: {
             if let error = importError {
                 Text(error.userFriendlyDescription)
+            }
+        }
+        .alert("Retry Failed", isPresented: $showingRetryError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let error = retryError {
+                Text(error)
             }
         }
         .fileImporter(
@@ -470,6 +522,31 @@ extension CourseHomeView {
             importError = ImportValidatorError.invalidPackageStructure("File selection failed")
             showingImportError = true
             print("File importer error: \(error)")
+        }
+    }
+    
+    private func retryLesson(_ lesson: CurriculumLesson) {
+        guard let course = store.course else { return }
+        
+        retryingLesson = lesson
+        
+        Task {
+            do {
+                let retryService = LessonRetryService()
+                try await retryService.retryLesson(
+                    lesson: lesson,
+                    packageURL: course.rootURL,
+                    manifest: course.manifest
+                )
+                
+                // Reload the package after successful retry
+                store.loadPackage(from: course.rootURL)
+                retryingLesson = nil
+            } catch {
+                retryError = error.localizedDescription
+                showingRetryError = true
+                retryingLesson = nil
+            }
         }
     }
 }

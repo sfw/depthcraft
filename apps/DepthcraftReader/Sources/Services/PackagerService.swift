@@ -96,7 +96,8 @@ class PackagerService: PackagerRole {
         quizzes: [String: QuizDocument],
         demos: [String: DemoWriterOutput],
         roleRuns: GeneratorMetadata,
-        extendFrom priorPackageURL: URL?
+        extendFrom priorPackageURL: URL?,
+        plannedCurriculum: Curriculum? = nil
     ) async throws -> URL {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         
@@ -123,7 +124,8 @@ class PackagerService: PackagerRole {
             createdAt: timestamp,
             locale: locale,
             generator: roleRuns,
-            extendedFrom: extendedFrom
+            extendedFrom: extendedFrom,
+            plannedCurriculum: plannedCurriculum
         )
         
         // Only include lessons that were actually generated (have content + quiz)

@@ -276,6 +276,26 @@ final class CourseStore: ObservableObject {
         return notesStore.allHighlights(for: notes)
     }
     
+    /// Get lessons that were planned but failed to generate (not in built curriculum)
+    func failedLessons() -> [(unit: CurriculumUnit, lesson: CurriculumLesson)] {
+        guard let course else { return [] }
+        guard let plannedCurriculum = course.manifest.plannedCurriculum else { return [] }
+        
+        let builtLessonIds = Set(course.curriculum.lessons.keys)
+        var failed: [(unit: CurriculumUnit, lesson: CurriculumLesson)] = []
+        
+        for unit in plannedCurriculum.units {
+            for lessonId in unit.lessonIds {
+                if let lesson = plannedCurriculum.lessons[lessonId],
+                   !builtLessonIds.contains(lessonId) {
+                    failed.append((unit: unit, lesson: lesson))
+                }
+            }
+        }
+        
+        return failed
+    }
+    
     func libraryPackages() -> [LibraryPackageMetadata] {
         var packages: [LibraryPackageMetadata] = []
         
