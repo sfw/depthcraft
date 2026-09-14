@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 enum ImportValidatorError: LocalizedError {
     case invalidPackageStructure(String)
@@ -33,8 +34,6 @@ enum ImportValidatorError: LocalizedError {
     }
 }
 
-import Compression
-
 enum ImportValidator {
     
     /// Safely unzips a file with zip-slip protection (iOS-safe, in-process)
@@ -47,13 +46,15 @@ enum ImportValidator {
         // Read the zip file
         let zipData = try Data(contentsOf: zipURL)
         
-        // Parse and extract ZIP using Foundation
-        guard let archive = Archive(data: zipData, accessMode: .read) else {
+        // Parse ZIP using Foundation
+        guard let archive = try? ZipArchive(data: zipData) else {
             throw ImportValidatorError.invalidPackageStructure("Not a valid ZIP archive")
         }
         
+        let basePathWithSlash = destinationURL.standardizedFileURL.path + "/"
+        
         // Extract each entry with zip-slip protection BEFORE writing
-        for entry in archive {
+        for entry in archive.entries {
             let entryPath = entry.path
             
             // REFUSE paths with .. or absolute paths BEFORE writing
@@ -66,169 +67,46 @@ enum ImportValidator {
             }
             
             // Build destination path and verify it's within destinationURL
-            let destinationPath = destinationURL.appendingPathComponent(entryPath).standardizedFileURL
-            let basePath = destinationURL.standardizedFileURL.path
+            let destinationPath = destinationURL.appendingPathComponent(entryPath).standardizedFileURL.path
             
-            if !destinationPath.path.hasPrefix(basePath) {
+            // Use path + "/" boundary check to prevent escapes
+            if !destinationPath.hasPrefix(basePathWithSlash) && destinationPath != destinationURL.standardizedFileURL.path {
                 throw ImportValidatorError.zipSlipDetected(entryPath)
             }
             
+            let destinationFileURL = URL(fileURLWithPath: destinationPath)
+            
             // Create parent directory if needed
-            let parentDir = destinationPath.deletingLastPathComponent()
+            let parentDir = destinationFileURL.deletingLastPathComponent()
             if !fileManager.fileExists(atPath: parentDir.path) {
                 try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true)
             }
             
             // Extract the entry
             if entry.type == .directory {
-                try fileManager.createDirectory(at: destinationPath, withIntermediateDirectories: true)
+                try fileManager.createDirectory(at: destinationFileURL, withIntermediateDirectories: true)
             } else {
                 // Extract file data
-                var extractedData = Data()
-                _ = try archive.extract(entry) { data in
-                    extractedData.append(data)
-                }
-                try extractedData.write(to: destinationPath)
+                let extractedData = try archive.extract(entry: entry, from: zipData)
+                try extractedData.write(to: destinationFileURL)
+            }
+        }
+        
+        // Strip progress.json if present (device-local ProgressStore is authoritative)
+        let progressURL = destinationURL.appendingPathComponent("progress.json")
+        if fileManager.fileExists(atPath: progressURL.path) {
+            try? fileManager.removeItem(at: progressURL)
+        }
+        
+        // Look for .depthcraft package in extracted content
+        let contents = try fileManager.contentsOfDirectory(at: destinationURL, includingPropertiesForKeys: nil)
+        for item in contents where item.lastPathComponent.hasSuffix(".depthcraft") {
+            let packageProgressURL = item.appendingPathComponent("progress.json")
+            if fileManager.fileExists(atPath: packageProgressURL.path) {
+                try? fileManager.removeItem(at: packageProgressURL)
             }
         }
     }
-}
-
-// Minimal ZIP archive reader using Foundation
-private struct Archive {
-    let data: Data
-    let entries: [Entry]
-    
-    init?(data: Data, accessMode: AccessMode) {
-        guard data.count >= 22 else { return nil } // Minimum ZIP size
-        self.data = data
-        
-        // Find End of Central Directory (EOCD)
-        guard let eocdOffset = Self.findEOCD(in: data) else { return nil }
-        
-        // Parse EOCD to get central directory location
-        let centralDirOffset = Int(data.uint32(at: eocdOffset + 16))
-        let entryCount = Int(data.uint16(at: eocdOffset + 10))
-        
-        // Parse central directory entries
-        var parsedEntries: [Entry] = []
-        var offset = centralDirOffset
-        
-        for _ in 0..<entryCount {
-            guard let entry = Entry.parse(from: data, at: offset) else { break }
-            parsedEntries.append(entry)
-            offset = entry.nextOffset
-        }
-        
-        self.entries = parsedEntries
-    }
-    
-    private static func findEOCD(in data: Data) -> Int? {
-        // EOCD signature: 0x06054b50
-        let signature: UInt32 = 0x06054b50
-        
-        // Search backwards from end (EOCD is usually at the end)
-        for i in stride(from: data.count - 22, through: max(0, data.count - 65557), by: -1) {
-            if data.uint32(at: i) == signature {
-                return i
-            }
-        }
-        return nil
-    }
-    
-    func extract(_ entry: Entry, consumer: (Data) throws -> Void) throws {
-        // Read local file header to get actual data offset
-        let localHeaderOffset = entry.localHeaderOffset
-        let fileNameLength = Int(data.uint16(at: localHeaderOffset + 26))
-        let extraFieldLength = Int(data.uint16(at: localHeaderOffset + 28))
-        let dataOffset = localHeaderOffset + 30 + fileNameLength + extraFieldLength
-        
-        let compressedData = data.subdata(in: dataOffset..<(dataOffset + entry.compressedSize))
-        
-        if entry.compressionMethod == 0 {
-            // Stored (no compression)
-            try consumer(compressedData)
-        } else if entry.compressionMethod == 8 {
-            // Deflate
-            let decompressed = try compressedData.decompress()
-            try consumer(decompressed)
-        } else {
-            throw ImportValidatorError.invalidPackageStructure("Unsupported compression method: \(entry.compressionMethod)")
-        }
-    }
-    
-    enum AccessMode {
-        case read
-    }
-    
-    struct Entry {
-        let path: String
-        let type: EntryType
-        let compressedSize: Int
-        let uncompressedSize: Int
-        let compressionMethod: UInt16
-        let localHeaderOffset: Int
-        let nextOffset: Int
-        
-        enum EntryType {
-            case file
-            case directory
-        }
-        
-        static func parse(from data: Data, at offset: Int) -> Entry? {
-            guard offset + 46 <= data.count else { return nil }
-            
-            // Verify central directory header signature
-            let signature = data.uint32(at: offset)
-            guard signature == 0x02014b50 else { return nil }
-            
-            let compressionMethod = data.uint16(at: offset + 10)
-            let compressedSize = Int(data.uint32(at: offset + 20))
-            let uncompressedSize = Int(data.uint32(at: offset + 24))
-            let fileNameLength = Int(data.uint16(at: offset + 28))
-            let extraFieldLength = Int(data.uint16(at: offset + 30))
-            let commentLength = Int(data.uint16(at: offset + 32))
-            let localHeaderOffset = Int(data.uint32(at: offset + 42))
-            
-            let pathData = data.subdata(in: (offset + 46)..<(offset + 46 + fileNameLength))
-            guard let path = String(data: pathData, encoding: .utf8) else { return nil }
-            
-            let type: EntryType = path.hasSuffix("/") ? .directory : .file
-            let nextOffset = offset + 46 + fileNameLength + extraFieldLength + commentLength
-            
-            return Entry(
-                path: path,
-                type: type,
-                compressedSize: compressedSize,
-                uncompressedSize: uncompressedSize,
-                compressionMethod: compressionMethod,
-                localHeaderOffset: localHeaderOffset,
-                nextOffset: nextOffset
-            )
-        }
-    }
-}
-
-// Data extensions for ZIP parsing
-private extension Data {
-    func uint16(at offset: Int) -> UInt16 {
-        guard offset + 2 <= count else { return 0 }
-        return UInt16(self[offset]) | (UInt16(self[offset + 1]) << 8)
-    }
-    
-    func uint32(at offset: Int) -> UInt32 {
-        guard offset + 4 <= count else { return 0 }
-        return UInt32(self[offset]) |
-               (UInt32(self[offset + 1]) << 8) |
-               (UInt32(self[offset + 2]) << 16) |
-               (UInt32(self[offset + 3]) << 24)
-    }
-    
-    func decompress() throws -> Data {
-        let decompressed = try (self as NSData).decompressed(using: .zlib) as Data
-        return decompressed
-    }
-}
     
     /// Validates an imported package before it's loaded
     static func validateImportedPackage(at packageURL: URL) throws {
@@ -354,8 +232,7 @@ private extension Data {
                     .appendingPathComponent("content/units/\(unit.id)/lessons/\(lessonId)")
                 
                 // Load and validate meta.json
-                let metaURL = lessonURL.appendingPathComponent("meta.json")
-                let _ : LessonMeta = try decode("meta.json", from: lessonURL)
+                let _: LessonMeta = try decode("meta.json", from: lessonURL)
                 
                 // Load and scan lesson.md for dangerous content
                 let markdownURL = lessonURL.appendingPathComponent("lesson.md")
@@ -372,8 +249,7 @@ private extension Data {
     }
     
     private static func validateMarkdownContent(_ markdown: String, lessonId: String) throws {
-        // Check for common XSS patterns (note: MarkdownHTML.render already escapes these,
-        // but we want to reject packages that contain them in the first place)
+        // Check for common XSS patterns
         let dangerousPatterns = [
             "<script",
             "javascript:",
@@ -482,6 +358,189 @@ private extension Data {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw ImportValidatorError.schemaValidationFailed("Could not decode \(name): \(error.localizedDescription)")
+        }
+    }
+}
+
+// Minimal ZIP archive reader using Foundation
+private struct ZipArchive {
+    let entries: [ZipEntry]
+    
+    init(data: Data) throws {
+        guard data.count >= 22 else {
+            throw ImportValidatorError.invalidPackageStructure("File too small to be a ZIP")
+        }
+        
+        // Find End of Central Directory (EOCD)
+        guard let eocdOffset = Self.findEOCD(in: data) else {
+            throw ImportValidatorError.invalidPackageStructure("Could not find ZIP central directory")
+        }
+        
+        // Parse EOCD to get central directory location
+        let centralDirOffset = Int(data.uint32(at: eocdOffset + 16))
+        let entryCount = Int(data.uint16(at: eocdOffset + 10))
+        
+        // Parse central directory entries
+        var parsedEntries: [ZipEntry] = []
+        var offset = centralDirOffset
+        
+        for _ in 0..<entryCount {
+            guard let entry = ZipEntry.parse(from: data, at: offset) else {
+                break
+            }
+            parsedEntries.append(entry)
+            offset = entry.nextCentralDirOffset
+        }
+        
+        self.entries = parsedEntries
+    }
+    
+    private static func findEOCD(in data: Data) -> Int? {
+        // EOCD signature: 0x06054b50
+        let signature: UInt32 = 0x06054b50
+        
+        // Search backwards from end (EOCD is usually at the end)
+        let searchStart = data.count - 22
+        let searchEnd = max(0, data.count - 65557)
+        
+        for i in stride(from: searchStart, through: searchEnd, by: -1) {
+            if data.uint32(at: i) == signature {
+                return i
+            }
+        }
+        return nil
+    }
+    
+    func extract(entry: ZipEntry, from data: Data) throws -> Data {
+        // Read local file header to get actual data offset
+        let localHeaderOffset = entry.localHeaderOffset
+        let fileNameLength = Int(data.uint16(at: localHeaderOffset + 26))
+        let extraFieldLength = Int(data.uint16(at: localHeaderOffset + 28))
+        let dataOffset = localHeaderOffset + 30 + fileNameLength + extraFieldLength
+        
+        guard dataOffset + entry.compressedSize <= data.count else {
+            throw ImportValidatorError.invalidPackageStructure("ZIP entry data out of bounds")
+        }
+        
+        let compressedData = data.subdata(in: dataOffset..<(dataOffset + entry.compressedSize))
+        
+        if entry.compressionMethod == 0 {
+            // Stored (no compression)
+            return compressedData
+        } else if entry.compressionMethod == 8 {
+            // Deflate (raw deflate, not zlib)
+            return try compressedData.inflateRawDeflate()
+        } else {
+            throw ImportValidatorError.invalidPackageStructure("Unsupported compression method: \(entry.compressionMethod)")
+        }
+    }
+}
+
+private struct ZipEntry {
+    let path: String
+    let type: EntryType
+    let compressedSize: Int
+    let uncompressedSize: Int
+    let compressionMethod: UInt16
+    let localHeaderOffset: Int
+    let nextCentralDirOffset: Int
+    
+    enum EntryType {
+        case file
+        case directory
+    }
+    
+    static func parse(from data: Data, at offset: Int) -> ZipEntry? {
+        guard offset + 46 <= data.count else { return nil }
+        
+        // Verify central directory header signature (0x02014b50)
+        let signature = data.uint32(at: offset)
+        guard signature == 0x02014b50 else { return nil }
+        
+        let compressionMethod = data.uint16(at: offset + 10)
+        let compressedSize = Int(data.uint32(at: offset + 20))
+        let uncompressedSize = Int(data.uint32(at: offset + 24))
+        let fileNameLength = Int(data.uint16(at: offset + 28))
+        let extraFieldLength = Int(data.uint16(at: offset + 30))
+        let commentLength = Int(data.uint16(at: offset + 32))
+        let localHeaderOffset = Int(data.uint32(at: offset + 42))
+        
+        guard offset + 46 + fileNameLength <= data.count else { return nil }
+        
+        let pathData = data.subdata(in: (offset + 46)..<(offset + 46 + fileNameLength))
+        guard let path = String(data: pathData, encoding: .utf8) else { return nil }
+        
+        let type: EntryType = path.hasSuffix("/") ? .directory : .file
+        let nextOffset = offset + 46 + fileNameLength + extraFieldLength + commentLength
+        
+        return ZipEntry(
+            path: path,
+            type: type,
+            compressedSize: compressedSize,
+            uncompressedSize: uncompressedSize,
+            compressionMethod: compressionMethod,
+            localHeaderOffset: localHeaderOffset,
+            nextCentralDirOffset: nextOffset
+        )
+    }
+}
+
+// Data extensions for ZIP parsing and decompression
+private extension Data {
+    func uint16(at offset: Int) -> UInt16 {
+        guard offset + 2 <= count else { return 0 }
+        return UInt16(self[offset]) | (UInt16(self[offset + 1]) << 8)
+    }
+    
+    func uint32(at offset: Int) -> UInt32 {
+        guard offset + 4 <= count else { return 0 }
+        return UInt32(self[offset]) |
+               (UInt32(self[offset + 1]) << 8) |
+               (UInt32(self[offset + 2]) << 16) |
+               (UInt32(self[offset + 3]) << 24)
+    }
+    
+    func inflateRawDeflate() throws -> Data {
+        // Use Compression framework with raw deflate
+        return try self.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) -> Data in
+            guard let baseAddress = rawBufferPointer.baseAddress else {
+                throw ImportValidatorError.invalidPackageStructure("Could not access compressed data")
+            }
+            
+            let sourceBuffer = baseAddress.assumingMemoryBound(to: UInt8.self)
+            let sourceSize = self.count
+            
+            // Allocate output buffer (use uncompressed size estimate)
+            var outputData = Data(count: sourceSize * 4) // Estimate 4x expansion
+            var outputSize = outputData.count
+            
+            let result = outputData.withUnsafeMutableBytes { outputBuffer -> compression_status in
+                guard let outputBaseAddress = outputBuffer.baseAddress else {
+                    return COMPRESSION_STATUS_ERROR
+                }
+                
+                let decompressedSize = compression_decode_buffer(
+                    outputBaseAddress.assumingMemoryBound(to: UInt8.self),
+                    outputSize,
+                    sourceBuffer,
+                    sourceSize,
+                    nil,
+                    COMPRESSION_ZLIB // Raw deflate in iOS uses COMPRESSION_ZLIB
+                )
+                
+                if decompressedSize == 0 {
+                    return COMPRESSION_STATUS_ERROR
+                }
+                
+                outputSize = decompressedSize
+                return COMPRESSION_STATUS_OK
+            }
+            
+            if result == COMPRESSION_STATUS_ERROR {
+                throw ImportValidatorError.invalidPackageStructure("Failed to decompress ZIP entry")
+            }
+            
+            return outputData.prefix(outputSize)
         }
     }
 }
