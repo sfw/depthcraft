@@ -154,7 +154,7 @@ class LessonWriterService: LessonWriterRole {
         
         let explainAnchors: [LessonMeta.Anchor]
         if let logger = timingLogger {
-            let timingId = logger.startStage(
+            let timingId = await logger.startStage(
                 .complexity,
                 lessonId: lesson.id,
                 provider: provider.rawValue,
@@ -171,7 +171,7 @@ class LessonWriterService: LessonWriterRole {
                 
                 // Complete timing with metadata
                 if let metadata = complexityAnalyzer.lastLLMMetadata {
-                    logger.completeStage(
+                    await logger.completeStage(
                         timingId,
                         tokensUsed: metadata.tokensUsed,
                         finishReason: metadata.finishReason,
@@ -179,10 +179,10 @@ class LessonWriterService: LessonWriterRole {
                         responseCharCount: metadata.responseCharCount
                     )
                 } else {
-                    logger.completeStage(timingId)
+                    await logger.completeStage(timingId)
                 }
             } catch {
-                logger.failStage(timingId, error: error.localizedDescription)
+                await logger.failStage(timingId, error: error.localizedDescription)
                 throw error
             }
         } else {
