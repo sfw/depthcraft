@@ -148,6 +148,54 @@ enum GenerationPhase: String, CaseIterable {
     }
 }
 
+/// Per-lesson generation stage for parallel progress tracking
+enum LessonStage: String, Equatable, Codable {
+    case queued
+    case writing
+    case complexity
+    case quiz
+    case demo
+    case done
+    case failed
+    
+    var displayName: String {
+        switch self {
+        case .queued: return "Queued"
+        case .writing: return "Writing"
+        case .complexity: return "Complexity"
+        case .quiz: return "Quiz"
+        case .demo: return "Demo"
+        case .done: return "Done"
+        case .failed: return "Failed"
+        }
+    }
+    
+    var isInProgress: Bool {
+        switch self {
+        case .writing, .complexity, .quiz, .demo:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// Per-lesson progress state
+struct LessonProgress: Equatable, Codable {
+    let lessonId: String
+    let lessonTitle: String
+    var stage: LessonStage
+    var error: String?
+    
+    var isComplete: Bool {
+        stage == .done
+    }
+    
+    var isFailed: Bool {
+        stage == .failed
+    }
+}
+
 struct GenerationProgress {
     var phase: GenerationPhase
     var currentItem: String?
@@ -155,13 +203,27 @@ struct GenerationProgress {
     var totalItems: Int
     var error: String?
     
+    /// Per-lesson progress (keyed by lessonId)
+    var lessonProgress: [String: LessonProgress] = [:]
+    
     var progressPercent: Double {
         guard totalItems > 0 else { return 0 }
         return Double(completedItems) / Double(totalItems)
     }
     
+    /// Count lessons currently in progress
+    var inProgressCount: Int {
+        lessonProgress.values.filter { $0.stage.isInProgress }.count
+    }
+    
+    /// Get curriculum-ordered lesson progress
+    func orderedLessons(for curriculum: Curriculum) -> [LessonProgress] {
+        let allLessonIds = curriculum.units.flatMap { $0.lessonIds }
+        return allLessonIds.compactMap { lessonProgress[$0] }
+    }
+    
     static var idle: GenerationProgress {
-        GenerationProgress(phase: .idle, currentItem: nil, completedItems: 0, totalItems: 0, error: nil)
+        GenerationProgress(phase: .idle, currentItem: nil, completedItems: 0, totalItems: 0, error: nil, lessonProgress: [:])
     }
 }
 

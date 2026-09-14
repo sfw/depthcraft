@@ -90,18 +90,20 @@ struct GenerationStatusBanner: View {
                         .font(.caption)
                         .fontWeight(.medium)
                     
-                    if let item = orchestrator.progress.currentItem {
-                        Text(item)
+                    HStack(spacing: 4) {
+                        Text("\(orchestrator.progress.completedItems)/\(orchestrator.progress.totalItems)")
                             .font(.caption2)
-                            .lineLimit(1)
+                        
+                        if orchestrator.progress.inProgressCount > 0 {
+                            Text("·")
+                            Text("\(orchestrator.progress.inProgressCount) running")
+                                .font(.caption2)
+                        }
                     }
+                    .lineLimit(1)
                 }
                 
                 Spacer()
-                
-                Text("\(orchestrator.progress.completedItems)/\(orchestrator.progress.totalItems)")
-                    .font(.caption2)
-                    .monospacedDigit()
                 
                 Image(systemName: "chevron.right")
                     .font(.caption2)
