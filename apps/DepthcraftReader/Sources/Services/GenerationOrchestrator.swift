@@ -21,12 +21,23 @@ class GenerationOrchestrator: ObservableObject {
     /// Product can tune this value to balance speed vs. API rate limits.
     private let maxConcurrentLessons = 3
     
+    /// Background generation support (Slice 3)
+    let backgroundManager = BackgroundGenerationManager()
+    
+    /// Store the last request for notifications
+    private var activeRequest: GenerationRequest?
+    
     init(keyStore: APIKeyStore) {
         self.keyStore = keyStore
     }
     
     func startGeneration(request: GenerationRequest) async {
+        activeRequest = request
         timingLogger.startRun(topic: request.topic)
+        
+        // Request notification permission and begin background task
+        await backgroundManager.requestNotificationPermission()
+        backgroundManager.beginBackgroundTask(name: "course-generation")
         
         progress = GenerationProgress(
             phase: .planning,
@@ -106,6 +117,13 @@ class GenerationOrchestrator: ObservableObject {
             )
         } catch {
             timingLogger.failRun()
+            backgroundManager.endBackgroundTask()
+            
+            // Post failure notification
+            if let request = activeRequest {
+                backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
+            }
+            
             progress = GenerationProgress(
                 phase: .failed,
                 currentItem: nil,
@@ -127,6 +145,11 @@ class GenerationOrchestrator: ObservableObject {
             progress.phase = .failed
             return
         }
+        
+        activeRequest = request
+        
+        // Ensure background task is active (may have been stopped if user returned to foreground)
+        backgroundManager.beginBackgroundTask(name: "course-generation")
         
         // Set phase immediately so UI updates even before any await
         let totalLessons = curriculum.units.flatMap { $0.lessonIds }.count
@@ -331,6 +354,17 @@ class GenerationOrchestrator: ObservableObject {
             )
             
             timingLogger.completeRun()
+            backgroundManager.endBackgroundTask()
+            
+            // Post completion notification
+            if let request = activeRequest {
+                let durationMs = timingLogger.currentLog?.totalDurationMs
+                backgroundManager.postCompletionNotification(
+                    topic: request.topic,
+                    totalLessons: actualTotalLessons,
+                    durationMs: durationMs
+                )
+            }
             
             progress = GenerationProgress(
                 phase: .completed,
@@ -341,6 +375,12 @@ class GenerationOrchestrator: ObservableObject {
             )
         } catch {
             timingLogger.failRun()
+            backgroundManager.endBackgroundTask()
+            
+            // Post failure notification
+            if let request = activeRequest {
+                backgroundManager.postFailureNotification(topic: request.topic, error: error.localizedDescription)
+            }
             
             progress = GenerationProgress(
                 phase: .failed,
@@ -631,6 +671,7 @@ class GenerationOrchestrator: ObservableObject {
     }
     
     func reset() {
+        backgroundManager.endBackgroundTask()
         progress = .idle
         draftCurriculum = nil
         output = nil
@@ -638,6 +679,25 @@ class GenerationOrchestrator: ObservableObject {
         partialQuizzes = [:]
         partialDemos = [:]
         timingLogger.reset()
+        activeRequest = nil
+    }
+    
+    /// Handle app entering background (called from app lifecycle)
+    func handleAppDidEnterBackground() {
+        // Background task already running - iOS will give us best-effort time
+        // Partial state is already being persisted incrementally
+    }
+    
+    /// Handle app returning to foreground (called from app lifecycle)
+    func handleAppWillEnterForeground() {
+        // If generation is still in progress, ensure background task continues
+        // (in case it was ended while we were backgrounded)
+        if progress.phase == .writingLessons || 
+           progress.phase == .writingQuizzes || 
+           progress.phase == .writingDemos || 
+           progress.phase == .packaging {
+            backgroundManager.beginBackgroundTask(name: "course-generation")
+        }
     }
 }
 
