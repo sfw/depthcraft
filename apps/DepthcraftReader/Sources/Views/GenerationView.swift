@@ -123,9 +123,15 @@ struct GenerationView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Generation Interrupted")
                             .font(.headline)
-                        Text("Previous generation was stopped. Resume from checkpoint?")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if orchestrator.progress.totalItems > 0 {
+                            Text("Resume from \(orchestrator.progress.completedItems)/\(orchestrator.progress.totalItems) lessons?")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Previous generation was stopped. Resume from checkpoint?")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -674,9 +680,15 @@ struct GenerationView: View {
             return
         }
         
-        // Continue generation from checkpoint
+        // Request notification permission and continue generation from checkpoint
         Task {
-            await orchestrator.continueGeneration(request: request)
+            await orchestrator.backgroundManager.requestNotificationPermission()
+            
+            // Only continue generation if checkpoint was mid-generation (not awaiting approval)
+            // If .awaitingApproval, UI will show editor and user must approve
+            if orchestrator.progress.phase != .awaitingApproval {
+                await orchestrator.continueGeneration(request: request)
+            }
         }
     }
     

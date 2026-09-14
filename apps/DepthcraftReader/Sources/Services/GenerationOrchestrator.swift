@@ -801,9 +801,16 @@ class GenerationOrchestrator: ObservableObject {
                 
                 newLesson = (markdown, meta)
             } catch {
+<<<<<<< HEAD
                 // Lesson write failed - mark timing as failed and update lesson stage
                 await timingLogger.failStage(timingId, error: error.localizedDescription)
                 await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
+=======
+                // Lesson write failed - mark timing and stage as failed
+                await timingLogger.failStage(timingId, error: error.localizedDescription)
+                await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
+                
+>>>>>>> bed2081 (Fix #54 regression + approval bypass + soft issues)
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: nil,
@@ -916,7 +923,11 @@ class GenerationOrchestrator: ObservableObject {
         }
     }
     
+<<<<<<< HEAD
     /// Update per-lesson stage safely from background tasks
+=======
+    /// Update per-lesson stage in progress dictionary
+>>>>>>> bed2081 (Fix #54 regression + approval bypass + soft issues)
     private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
         await MainActor.run {
             // Only update if we're still in a generation phase (not failed/cancelled)
