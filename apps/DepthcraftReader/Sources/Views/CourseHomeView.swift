@@ -230,7 +230,7 @@ struct CourseHomeView: View {
         .listStyle(.insetGrouped)
         .sheet(isPresented: $showingShareSheet) {
             if let url = exportURL {
-                ShareSheet(activityItems: [url])
+                PackageShareSheet(activityItems: [url])
             }
         }
         .alert("Export Failed", isPresented: $showingExportError) {
@@ -350,7 +350,7 @@ struct CourseHomeView: View {
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
+struct PackageShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
     
     func makeUIViewController(context: Context) -> UIActivityViewController {
