@@ -184,12 +184,40 @@ class GenerationOrchestrator: ObservableObject {
         
         let actualTotalLessons = lessonsToGenerate.count
         
+        // Initialize per-lesson progress tracking
+        var lessonProgressDict: [String: LessonGenerationProgress] = [:]
+        var initialCompletedCount = 0
+        
+        for lesson in lessonsToGenerate {
+            let existingLesson = partialLessons[lesson.id]
+            let existingQuiz = partialQuizzes[lesson.id]
+            let existingDemo = partialDemos[lesson.id]
+            
+            // Only fully complete lessons (all 3 stages done) are marked .done
+            // Incomplete lessons start as .queued until a worker claims them
+            let stage: LessonStage
+            if existingLesson != nil && existingQuiz != nil && existingDemo != nil {
+                stage = .done
+                initialCompletedCount += 1
+            } else {
+                stage = .queued
+            }
+            
+            lessonProgressDict[lesson.id] = LessonGenerationProgress(
+                lessonId: lesson.id,
+                lessonTitle: lesson.title,
+                stage: stage,
+                error: nil
+            )
+        }
+        
         progress = GenerationProgress(
             phase: .writingLessons,
             currentItem: "Writing lessons",
-            completedItems: 0,
+            completedItems: initialCompletedCount,
             totalItems: actualTotalLessons,
-            error: nil
+            error: nil,
+            lessonProgress: lessonProgressDict
         )
         
         // Resume from partial progress if available
@@ -543,6 +571,7 @@ class GenerationOrchestrator: ObservableObject {
             markdown = existing.markdown
             meta = existing.meta
         } else {
+            await updateLessonStage(lessonId: lesson.id, stage: .writing)
             await updateProgress(phase: .writingLessons, item: "Writing: \(lesson.title)", completed: completedCount.value)
             
             let timingId = await timingLogger.startStage(
@@ -578,9 +607,9 @@ class GenerationOrchestrator: ObservableObject {
                 
                 newLesson = (markdown, meta)
             } catch {
-                // Lesson write failed - mark timing as failed
+                // Lesson write failed - mark timing as failed and update lesson stage
                 await timingLogger.failStage(timingId, error: error.localizedDescription)
-                
+                await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: nil,
@@ -595,6 +624,7 @@ class GenerationOrchestrator: ObservableObject {
         if let existing = existingQuiz {
             newQuiz = nil // Reused, not newly generated
         } else {
+            await updateLessonStage(lessonId: lesson.id, stage: .quiz)
             await updateProgress(phase: .writingQuizzes, item: "Quiz for: \(lesson.title)", completed: completedCount.value)
             
             do {
@@ -614,7 +644,8 @@ class GenerationOrchestrator: ObservableObject {
                 
                 newQuiz = generated
             } catch {
-                // Quiz failed but lesson succeeded - return partial with error
+                // Quiz failed but lesson succeeded - mark as failed and return partial
+                await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: newLesson,
@@ -629,6 +660,7 @@ class GenerationOrchestrator: ObservableObject {
         if let existing = existingDemo {
             newDemo = nil // Reused, not newly generated
         } else {
+            await updateLessonStage(lessonId: lesson.id, stage: .demo)
             await updateProgress(phase: .writingDemos, item: "Checking: \(lesson.title)", completed: completedCount.value)
             
             do {
@@ -648,7 +680,8 @@ class GenerationOrchestrator: ObservableObject {
                 
                 newDemo = demoOutput ?? DemoWriterOutput(demos: [])
             } catch {
-                // Demo failed but lesson + quiz succeeded - return partial with error
+                // Demo failed but lesson + quiz succeeded - mark as failed and return partial
+                await updateLessonStage(lessonId: lesson.id, stage: .failed, error: error.localizedDescription)
                 return LessonGenerationResult(
                     lessonId: lesson.id,
                     lesson: newLesson,
@@ -663,6 +696,9 @@ class GenerationOrchestrator: ObservableObject {
         if newLesson != nil || newQuiz != nil || newDemo != nil {
             await completedCount.increment()
         }
+        
+        // Mark as done on success
+        await updateLessonStage(lessonId: lesson.id, stage: .done)
         
         // Success - return all newly generated stages (collector merges into main dictionaries)
         return LessonGenerationResult(
@@ -682,6 +718,20 @@ class GenerationOrchestrator: ObservableObject {
                 progress.phase = phase
                 progress.currentItem = item
                 progress.completedItems = completed
+            }
+        }
+    }
+    
+    /// Update per-lesson stage safely from background tasks
+    private func updateLessonStage(lessonId: String, stage: LessonStage, error: String? = nil) async {
+        await MainActor.run {
+            // Only update if we're still in a generation phase (not failed/cancelled)
+            if progress.phase == .writingLessons || progress.phase == .writingQuizzes || progress.phase == .writingDemos {
+                if var lessonProgress = progress.lessonProgress[lessonId] {
+                    lessonProgress.stage = stage
+                    lessonProgress.error = error
+                    progress.lessonProgress[lessonId] = lessonProgress
+                }
             }
         }
     }

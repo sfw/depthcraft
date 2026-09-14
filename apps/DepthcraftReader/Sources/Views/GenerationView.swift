@@ -232,78 +232,166 @@ struct GenerationView: View {
     
     private var progressSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                progressStep(
-                    label: "Curriculum",
-                    isActive: orchestrator.progress.phase == .planning,
-                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.planning.order
-                )
-                
-                progressStep(
-                    label: "Lessons",
-                    isActive: orchestrator.progress.phase == .writingLessons,
-                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingLessons.order
-                )
-                
-                progressStep(
-                    label: "Quizzes",
-                    isActive: orchestrator.progress.phase == .writingQuizzes,
-                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingQuizzes.order
-                )
-                
-                progressStep(
-                    label: "Demos",
-                    isActive: orchestrator.progress.phase == .writingDemos,
-                    isCompleted: orchestrator.progress.phase.order > GenerationPhase.writingDemos.order
-                )
-                
-                progressStep(
-                    label: "Package",
-                    isActive: orchestrator.progress.phase == .packaging,
-                    isCompleted: orchestrator.progress.phase == .completed
-                )
-                
-                if let item = orchestrator.progress.currentItem, orchestrator.progress.phase != .idle {
-                    DisclosureGroup {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(item)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            
-                            Text("\(orchestrator.progress.completedItems) of \(orchestrator.progress.totalItems)")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
-                    } label: {
-                        Text("Details")
-                            .font(.caption2)
+            if let curriculum = orchestrator.draftCurriculum {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Sticky header with summary
+                    progressHeaderView
+                    
+                    Divider()
+                    
+                    // Lesson list
+                    lessonListView(curriculum: curriculum)
+                }
+                .padding(.vertical, 8)
+            } else {
+                // Fallback if no curriculum (shouldn't happen during generation)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(orchestrator.progress.phase.displayName)
+                        .font(.headline)
+                    
+                    if let item = orchestrator.progress.currentItem {
+                        Text(item)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    
+                    ProgressView(value: orchestrator.progress.progressPercent)
+                        .tint(.teal)
                 }
+                .padding(.vertical, 8)
             }
-            .padding(.vertical, 8)
         }
     }
     
-    private func progressStep(label: String, isActive: Bool, isCompleted: Bool) -> some View {
-        HStack(spacing: 12) {
-            if isCompleted {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.caption)
-            } else if isActive {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Image(systemName: "circle")
-                    .foregroundStyle(.tertiary)
-                    .font(.caption)
+    private var progressHeaderView: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Generation Progress")
+                    .font(.headline)
+                
+                HStack(spacing: 8) {
+                    Text("\(orchestrator.progress.completedItems)/\(orchestrator.progress.totalItems) lessons")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    if orchestrator.progress.inProgressCount > 0 {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text("\(orchestrator.progress.inProgressCount) running")
+                            .font(.subheadline)
+                            .foregroundStyle(.teal)
+                    }
+                }
             }
             
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(isActive ? .teal : .secondary)
+            Spacer()
+            
+            if orchestrator.progress.phase != .packaging {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+    }
+    
+    private func lessonListView(curriculum: Curriculum) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                ForEach(orchestrator.progress.orderedLessons(for: curriculum), id: \.lessonId) { lessonProgress in
+                    lessonRow(lessonProgress: lessonProgress)
+                }
+            }
+        }
+        .frame(maxHeight: 400)
+    }
+    
+    private func lessonRow(lessonProgress: LessonGenerationProgress) -> some View {
+        HStack(spacing: 12) {
+            // Stage icon
+            stageIcon(for: lessonProgress.stage)
+                .frame(width: 20)
+            
+            // Lesson title
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lessonProgress.lessonTitle)
+                    .font(.body)
+                    .lineLimit(2)
+                
+                if let error = lessonProgress.error {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer()
+            
+            // Stage label
+            stageChip(for: lessonProgress.stage)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(
+            lessonProgress.stage.isInProgress ? Color.teal.opacity(0.05) : Color.clear
+        )
+        .cornerRadius(6)
+    }
+    
+    @ViewBuilder
+    private func stageIcon(for stage: LessonStage) -> some View {
+        switch stage {
+        case .queued:
+            Image(systemName: "circle")
+                .foregroundStyle(.tertiary)
+                .font(.caption)
+        case .writing, .quiz, .demo:
+            ProgressView()
+                .controlSize(.mini)
+        case .done:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.body)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+                .font(.body)
+        }
+    }
+    
+    private func stageChip(for stage: LessonStage) -> some View {
+        Text(stage.displayName)
+            .font(.caption2)
+            .fontWeight(.medium)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(stageChipColor(for: stage))
+            .foregroundStyle(stageChipTextColor(for: stage))
+            .cornerRadius(4)
+    }
+    
+    private func stageChipColor(for stage: LessonStage) -> Color {
+        switch stage {
+        case .queued:
+            return Color.gray.opacity(0.2)
+        case .writing, .quiz, .demo:
+            return Color.teal.opacity(0.2)
+        case .done:
+            return Color.green.opacity(0.2)
+        case .failed:
+            return Color.red.opacity(0.2)
+        }
+    }
+    
+    private func stageChipTextColor(for stage: LessonStage) -> Color {
+        switch stage {
+        case .queued:
+            return .secondary
+        case .writing, .quiz, .demo:
+            return .teal
+        case .done:
+            return .green
+        case .failed:
+            return .red
         }
     }
     
