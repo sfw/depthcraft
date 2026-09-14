@@ -16,25 +16,37 @@ final class CourseStore: ObservableObject {
     private let notesStore = NotesStore()
     private let fileManager = FileManager.default
     private let lastOpenedPackageKey = "lastOpenedPackageURL"
+    
+    init() {
+        refreshAvailablePackages()
+    }
 
     func loadBundledCourseIfNeeded() {
         guard course == nil else { return }
         isLoading = true
         defer { isLoading = false }
+        
+        refreshAvailablePackages()
+        
+        if availablePackages.count >= 2 {
+            return
+        }
+        
         do {
             let url = try determineStartupPackageURL()
             let loaded = try PackageLoader.load(from: url)
             course = loaded
             let lessonIds = Array(loaded.curriculum.lessons.keys)
             let unitIds = loaded.curriculum.units.map(\.id)
-            progress = progressStore.load(
+            var loadedProgress = progressStore.load(
                 packageId: loaded.manifest.packageId,
                 lessonIds: lessonIds,
                 unitIds: unitIds
             )
+            progressStore.markPackageOpened(&loadedProgress)
+            progress = loadedProgress
             notes = notesStore.load(packageId: loaded.manifest.packageId)
             errorMessage = nil
-            refreshAvailablePackages()
             
             // Persist last opened package URL if it's from Documents (not bundled fixture)
             let bundledURL = try? PackageLoader.bundledPackageURL()

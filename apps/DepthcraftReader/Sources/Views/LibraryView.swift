@@ -103,6 +103,13 @@ struct LibraryView: View {
         case .success(let urls):
             guard let sourceURL = urls.first else { return }
             
+            let didStartAccess = sourceURL.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccess {
+                    sourceURL.stopAccessingSecurityScopedResource()
+                }
+            }
+            
             let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let destinationURL = documentsURL.appendingPathComponent(sourceURL.lastPathComponent)
             
