@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.1.0",
+  "demoId": "ui-demo",
+  "title": "Interactive UI Pattern Demo",
+  "kit": "ui-v0",
+  "entry": "index.html",
+  "fallback": "fallback.md",
+  "learningGoal": "Experience touch-first interactive learning by progressing through sequential steps"
+}

@@ -1,5 +1,7 @@
 # Orchestration vs generation
 
+:::demo id="ui-demo":::
+
 ## Split the work
 
 **Generation** fills lesson markdown and quiz items. **Orchestration** sequences roles (planner → lesson → quiz → packager), passes only approved inputs, and stops on schema failure.
