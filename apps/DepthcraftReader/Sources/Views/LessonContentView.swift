@@ -423,7 +423,8 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 // Now activate viewport-relative height constraints (container is in hierarchy)
                 // Set demo container height to fill scrollView's visible frame
                 // This ensures demo expands to fill available lesson content area, not just >=400
-                let heightConstraint = container.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor, constant: -48)
+                // Use at-least semantics to allow demos with tall content (Stage 2 chips) to expand
+                let heightConstraint = container.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.heightAnchor, constant: -48)
                 heightConstraint.priority = .defaultHigh
                 
                 // Fallback minimum for very short viewports
