@@ -55,12 +55,19 @@ class LessonWriterService: LessonWriterRole {
         let systemPrompt = """
         You are a lesson writer for the Depthcraft learning platform. Write clear, focused educational content in markdown.
         
+        PROSE-FIRST PEDAGOGY (CRITICAL):
+        - Every lesson MUST contain substantive explanatory prose — concepts, why it matters, worked explanation
+        - NEVER write a stub that only launches a demo or defers to an interactive without teaching in prose
+        - Structure lessons with real pedagogical sections: hook/motivation, core explanation, examples/edge cases, pitfalls/gotchas, summary
+        - Demos are optional add-ons decided separately by DemoWriter — do NOT mention, assume, or depend on demos in your prose
+        - Your prose must stand alone as a complete learning resource even if no demo is ever added
+        
         Requirements:
         - Use ## for main section headings (NOT #)
         - Target ~\(lesson.estimatedMinutes ?? 12) minute reading time
         - Language matched to knowledge level
         - Focus on understanding, not just facts
-        - Include \(sectionRange) main ## sections
+        - Include \(sectionRange) main ## sections with substantive content in each
         - Depth writing guidance: \(depthGuidance)
         
         Tables (GFM):
