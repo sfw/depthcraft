@@ -387,9 +387,44 @@ final class SecurityValidationTests: XCTestCase {
     
     // MARK: - Regression: Scott's iPad Import Rejection
     
+    func testZipFileDetectionWithMagicBytes() throws {
+        // Routing proof: isZipFile detects ZIP despite .depthcraft extension
+        let bundle = Bundle(for: type(of: self))
+        guard let fixtureURL = bundle.url(forResource: "import-invalid-paths-dogfood", withExtension: "depthcraft") else {
+            XCTFail("Fixture not found - expected Tests/Fixtures/import-invalid-paths-dogfood.depthcraft")
+            return
+        }
+        
+        // Verify the fixture is detected as a ZIP by magic bytes
+        XCTAssertTrue(ImportValidator.isZipFile(at: fixtureURL),
+                      "Scott's fixture should be detected as ZIP by PK signature despite .depthcraft extension")
+    }
+    
+    func testZipFileDetectionFailOpen() throws {
+        // Fail-open proof: When magic bytes can't be read, .depthcraft extension
+        // triggers ZIP path (prefer unzip over directory validation)
+        
+        // Create a URL to a non-existent .depthcraft file
+        let nonExistentURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nonexistent-\(UUID().uuidString).depthcraft")
+        
+        // isZipFile should return true (fail-open) for .depthcraft when file can't be read
+        XCTAssertTrue(ImportValidator.isZipFile(at: nonExistentURL),
+                      "isZipFile should fail-open to true for .depthcraft when magic bytes unreadable")
+        
+        // Non-.depthcraft files should return false when unreadable (fail-closed)
+        let nonDepthcraftURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nonexistent-\(UUID().uuidString).txt")
+        
+        XCTAssertFalse(ImportValidator.isZipFile(at: nonDepthcraftURL),
+                       "isZipFile should fail-closed to false for non-.depthcraft when unreadable")
+    }
+    
     func testImportScottRejectedFixture() throws {
-        // Regression for: Export from Simulator rejected on iPad with "invalid file paths"
-        // Root cause: TBD - need to reproduce the actual rejection
+        // Regression: Export from Simulator rejected on iPad with "invalid file paths"
+        // Root cause: iOS treats .depthcraft ZIPs as packages (isDirectory=true),
+        // causing import code to validate ZIP as directory instead of extracting first.
+        
         // Fixture: novel-idea-generation-using-ai--llms-1789431687.depthcraft/
         // - 245 entries, all relative, zero "..", no abs paths, no backslashes, no __MACOSX
         // - Wrapper root ends with .depthcraft/ then content/manifests
@@ -403,12 +438,12 @@ final class SecurityValidationTests: XCTestCase {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         
         do {
-            // Step 1: unzipSafely should succeed (this is where rejection might happen on device)
+            // Step 1: unzipSafely should succeed (iPad rejection would happen here if isDirectory logic failed)
             do {
                 try ImportValidator.unzipSafely(from: fixtureURL, to: tempDir)
             } catch let error as ImportValidatorError {
-                // If this throws zipSlipDetected, that's the bug we're looking for
-                XCTFail("unzipSafely rejected Scott's fixture with: \(error.localizedDescription)")
+                // If this throws zipSlipDetected, the routing logic is broken
+                XCTFail("unzipSafely rejected Scott's fixture: \(error.localizedDescription)")
                 try? FileManager.default.removeItem(at: tempDir)
                 return
             }
@@ -421,21 +456,17 @@ final class SecurityValidationTests: XCTestCase {
                 return
             }
             
-            // Step 3: validateImportedPackage should succeed (or rejection might happen here)
+            // Step 3: validateImportedPackage should succeed on unpacked directory
             do {
                 try ImportValidator.validateImportedPackage(at: extractedPackage)
             } catch let error as ImportValidatorError {
-                // If this throws zipSlipDetected, that's the bug
-                XCTFail("validateImportedPackage rejected Scott's fixture with: \(error.localizedDescription)")
+                XCTFail("validateImportedPackage rejected unpacked fixture: \(error.localizedDescription)")
                 try? FileManager.default.removeItem(at: tempDir)
                 return
             }
             
             // Cleanup
             try? FileManager.default.removeItem(at: tempDir)
-            
-            // If we get here, the import succeeded
-            XCTAssert(true, "Scott's fixture imported successfully")
             
         } catch {
             try? FileManager.default.removeItem(at: tempDir)
