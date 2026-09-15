@@ -51,6 +51,10 @@ final class ProgressStore {
         guard let data = try? encoder.encode(progress) else { return }
         defaults.set(data, forKey: key(for: progress.packageId))
     }
+    
+    func delete(packageId: String) {
+        defaults.removeObject(forKey: key(for: packageId))
+    }
 
     func markRead(_ progress: inout DeviceProgress, lessonId: String, unitId: String, curriculum: Curriculum) {
         var lesson = progress.lessons[lessonId] ?? .empty

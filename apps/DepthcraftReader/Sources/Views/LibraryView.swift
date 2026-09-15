@@ -7,6 +7,8 @@ struct LibraryView: View {
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
+    @State private var packageToDelete: LibraryPackageMetadata?
+    @State private var showingDeleteConfirmation = false
     
     private func gridColumns(for width: CGFloat, height: CGFloat) -> [GridItem] {
         let isLandscape = width > height
@@ -79,6 +81,14 @@ struct LibraryView: View {
                                 store.loadPackage(from: package.url)
                                 navigationPath.wrappedValue.append(.courseHome)
                             }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    packageToDelete = package
+                                    showingDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete Course", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 22)
@@ -122,6 +132,17 @@ struct LibraryView: View {
                     } label: {
                         Image(systemName: "gearshape")
                     }
+                }
+            }
+            .sheet(isPresented: $showingDeleteConfirmation) {
+                if let package = packageToDelete {
+                    DeleteCourseConfirmationView(
+                        courseTitle: package.title,
+                        packageId: package.packageId,
+                        packageURL: package.url,
+                        isPresented: $showingDeleteConfirmation
+                    )
+                    .environmentObject(store)
                 }
             }
             .alert("Import Failed", isPresented: $showingImportError) {
