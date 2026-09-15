@@ -7,10 +7,12 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            if store.isLoading && store.course == nil {
-                ProgressView("Opening course…")
-            } else {
-                LibraryView()
+            Group {
+                if store.isLoading && store.course == nil {
+                    ProgressView("Opening course…")
+                } else {
+                    LibraryView()
+                }
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
