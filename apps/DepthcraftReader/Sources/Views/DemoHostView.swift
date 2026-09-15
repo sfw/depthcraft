@@ -247,10 +247,11 @@ struct DemoHostView: View {
                         }
                     )
                 }
-                .frame(minHeight: 400, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
             // Unified demo controls - single bottom band for all states
+            // Ensure control band is above content in z-order and receives taps
             VStack(spacing: 0) {
                 if let manifest = demoManifest {
                     HStack {
@@ -271,6 +272,7 @@ struct DemoHostView: View {
                         demoKey = UUID()
                     } label: {
                         Label("Reset", systemImage: "arrow.counterclockwise")
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(.bordered)
                     .foregroundStyle(.secondary)
@@ -281,6 +283,8 @@ struct DemoHostView: View {
                 .padding(.vertical, 10)
             }
             .background(.bar)
+            .allowsHitTesting(true)
+            .zIndex(1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(

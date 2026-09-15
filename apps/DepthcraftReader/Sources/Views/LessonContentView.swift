@@ -407,13 +407,31 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 container.translatesAutoresizingMaskIntoConstraints = false
                 demoHost.view.translatesAutoresizingMaskIntoConstraints = false
                 container.addSubview(demoHost.view)
+                
+                // Pin demo to container with margins
+                let topConstraint = demoHost.view.topAnchor.constraint(equalTo: container.topAnchor, constant: 24)
+                let leadingConstraint = demoHost.view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16)
+                let trailingConstraint = demoHost.view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16)
+                let bottomConstraint = demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24)
+                
+                // Set demo container height to fill scrollView's visible frame (viewport-relative)
+                // This ensures demo expands to fill available lesson content area, not just >=400
+                let heightConstraint = container.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor, constant: -48)
+                heightConstraint.priority = .defaultHigh
+                
+                // Fallback minimum for very short viewports
+                let minHeightConstraint = container.heightAnchor.constraint(greaterThanOrEqualToConstant: 448)
+                minHeightConstraint.priority = .required
+                
                 NSLayoutConstraint.activate([
-                    demoHost.view.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
-                    demoHost.view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-                    demoHost.view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-                    demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
-                    demoHost.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 400)
+                    topConstraint,
+                    leadingConstraint,
+                    trailingConstraint,
+                    bottomConstraint,
+                    heightConstraint,
+                    minHeightConstraint
                 ])
+                
                 stackView.addArrangedSubview(container)
                 demoHost.didMove(toParent: self)
             }
