@@ -176,8 +176,10 @@ enum ImportValidator {
             // Construct full path and verify it's within package directory
             let fullPath = packageURL.appendingPathComponent(relativePath).standardizedFileURL.path
             let packagePath = packageURL.standardizedFileURL.path
+            let packagePathWithSlash = packagePath + "/"
             
-            if !fullPath.hasPrefix(packagePath) {
+            // Use path + "/" boundary check (matches unzipSafely logic at line 56)
+            if !fullPath.hasPrefix(packagePathWithSlash) && fullPath != packagePath {
                 throw ImportValidatorError.zipSlipDetected(relativePath)
             }
         }

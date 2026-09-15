@@ -409,6 +409,46 @@ final class SecurityValidationTests: XCTestCase {
         }
     }
     
+    // MARK: - Regression: Scott's iPad Import Rejection
+    
+    func testImportScottRejectedFixture() throws {
+        // Regression for: Export from Simulator rejected on iPad with "invalid file paths"
+        // Root cause: validatePackagePaths used hasPrefix(packagePath) without trailing "/"
+        // Fixture: novel-idea-generation-using-ai--llms-1789431687.depthcraft/
+        // - 245 entries, all relative, zero "..", no abs paths, no backslashes, no __MACOSX
+        // - Wrapper root ends with .depthcraft/ then content/manifests
+        
+        let bundle = Bundle(for: type(of: self))
+        guard let fixtureURL = bundle.url(forResource: "import-invalid-paths-dogfood", withExtension: "depthcraft") else {
+            XCTFail("Fixture not found in test bundle - expected Tests/Fixtures/import-invalid-paths-dogfood.depthcraft")
+            return
+        }
+        
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        
+        do {
+            // Step 1: unzipSafely should succeed
+            try ImportValidator.unzipSafely(from: fixtureURL, to: tempDir)
+            
+            // Step 2: Find the .depthcraft package in extracted content
+            let contents = try FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+            guard let extractedPackage = contents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) else {
+                XCTFail("No .depthcraft package found in extracted fixture")
+                return
+            }
+            
+            // Step 3: validateImportedPackage should succeed (was failing at line 181 without trailing slash)
+            try ImportValidator.validateImportedPackage(at: extractedPackage)
+            
+            // Cleanup
+            try? FileManager.default.removeItem(at: tempDir)
+            
+        } catch {
+            try? FileManager.default.removeItem(at: tempDir)
+            XCTFail("Scott's rejected fixture should import successfully: \(error)")
+        }
+    }
+    
     // MARK: - Helper Functions
     
     private func createValidManifest() -> PackageManifest {
