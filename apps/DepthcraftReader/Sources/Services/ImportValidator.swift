@@ -57,8 +57,13 @@ enum ImportValidator {
         for entry in archive.entries {
             let entryPath = entry.path
             
-            // REFUSE paths with .. or absolute paths BEFORE writing
-            if entryPath.contains("..") {
+            // SKIP Apple metadata files that may be added during export/sharing
+            if shouldSkipAppleMetadata(entryPath) {
+                continue
+            }
+            
+            // REFUSE path traversal attempts (../ or /../) or absolute paths BEFORE writing
+            if hasPathTraversal(entryPath) {
                 throw ImportValidatorError.zipSlipDetected(entryPath)
             }
             
@@ -153,8 +158,13 @@ enum ImportValidator {
         let enumerator = fileManager.enumerator(atPath: packageURL.path)
         
         while let relativePath = enumerator?.nextObject() as? String {
+            // Skip Apple metadata files
+            if shouldSkipAppleMetadata(relativePath) {
+                continue
+            }
+            
             // Check for path traversal attempts
-            if relativePath.contains("..") {
+            if hasPathTraversal(relativePath) {
                 throw ImportValidatorError.zipSlipDetected(relativePath)
             }
             
@@ -359,6 +369,40 @@ enum ImportValidator {
         } catch {
             throw ImportValidatorError.schemaValidationFailed("Could not decode \(name): \(error.localizedDescription)")
         }
+    }
+    
+    /// Skip Apple metadata files that may be added during export/sharing
+    private static func shouldSkipAppleMetadata(_ path: String) -> Bool {
+        // Skip __MACOSX directory (macOS resource forks)
+        if path.hasPrefix("__MACOSX/") || path == "__MACOSX" {
+            return true
+        }
+        
+        // Skip .DS_Store files (Finder metadata)
+        let components = path.split(separator: "/")
+        if components.last == ".DS_Store" {
+            return true
+        }
+        
+        // Skip AppleDouble files (._filename)
+        if let lastComponent = components.last, lastComponent.hasPrefix("._") {
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Check for actual path traversal attempts (../ or /../), not just any ".." substring
+    private static func hasPathTraversal(_ path: String) -> Bool {
+        // Normalize path separators
+        let normalized = path.replacingOccurrences(of: "\\", with: "/")
+        
+        // Check for explicit traversal patterns
+        if normalized.hasPrefix("../") || normalized.contains("/../") || normalized.hasSuffix("/..") || normalized == ".." {
+            return true
+        }
+        
+        return false
     }
 }
 
