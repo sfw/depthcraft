@@ -37,6 +37,10 @@ final class NotesStore {
         defaults.set(data, forKey: key(for: notes.packageId))
     }
     
+    func delete(packageId: String) {
+        defaults.removeObject(forKey: key(for: packageId))
+    }
+    
     func addHighlight(_ notes: inout CourseNotes, highlight: HighlightNote) {
         notes.highlights[highlight.id] = highlight
         save(notes)

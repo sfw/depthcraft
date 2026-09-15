@@ -365,4 +365,19 @@ final class CourseStore: ObservableObject {
             return date1 > date2
         }
     }
+    
+    func deleteCourse(packageId: String, packageURL: URL) throws {
+        try fileManager.removeItem(at: packageURL)
+        progressStore.delete(packageId: packageId)
+        notesStore.delete(packageId: packageId)
+        
+        if course?.manifest.packageId == packageId {
+            course = nil
+            progress = nil
+            notes = nil
+            UserDefaults.standard.removeObject(forKey: lastOpenedPackageKey)
+        }
+        
+        refreshAvailablePackages()
+    }
 }
