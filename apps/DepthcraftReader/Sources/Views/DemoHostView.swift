@@ -583,8 +583,44 @@ struct DemoWebView: UIViewRepresentable {
                 // Set allowed directory for sandbox
                 allowedDirectory = demoDir
                 
+                // Load-time UTF-8 charset injection for existing demos
+                // Fixes mojibake in imported courses without rewriting original package
+                let finalEntryURL: URL
+                do {
+                    let entryHTML = try String(contentsOf: entryURL, encoding: .utf8)
+                    
+                    // Check if charset meta is missing
+                    if !entryHTML.contains("<meta charset") && !entryHTML.contains("charset=") {
+                        #if DEBUG
+                        print("⚠️ Demo missing charset meta, injecting UTF-8 at load-time")
+                        #endif
+                        
+                        // Inject charset meta into <head>
+                        var fixedHTML = entryHTML
+                        if let headEnd = fixedHTML.range(of: "<head>", options: .caseInsensitive) {
+                            let insertPoint = fixedHTML.index(headEnd.upperBound, offsetBy: 0)
+                            fixedHTML.insert(contentsOf: "\n<meta charset=\"UTF-8\">", at: insertPoint)
+                        }
+                        
+                        // Write to temp file in same demo directory (preserves allowingReadAccessTo for ES modules)
+                        let tempURL = demoDir.appendingPathComponent("._temp_\(manifest.entry)")
+                        try fixedHTML.write(to: tempURL, atomically: true, encoding: .utf8)
+                        
+                        finalEntryURL = tempURL
+                    } else {
+                        // Charset already present, use original
+                        finalEntryURL = entryURL
+                    }
+                } catch {
+                    // Fall back to original on any error
+                    #if DEBUG
+                    print("⚠️ Charset injection failed, using original: \(error)")
+                    #endif
+                    finalEntryURL = entryURL
+                }
+                
                 // Use loadFileURL for ES module support (avoids opaque origin issue with loadHTMLString)
-                webView.loadFileURL(entryURL, allowingReadAccessTo: demoDir)
+                webView.loadFileURL(finalEntryURL, allowingReadAccessTo: demoDir)
                 
             } catch {
                 onError(error.localizedDescription)
