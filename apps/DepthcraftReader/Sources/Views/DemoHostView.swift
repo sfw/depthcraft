@@ -247,7 +247,7 @@ struct DemoHostView: View {
                         }
                     )
                 }
-                .frame(minHeight: 400)
+                .frame(minHeight: 400, maxHeight: .infinity)
             }
             
             // Unified demo controls - single bottom band for all states
@@ -276,14 +276,6 @@ struct DemoHostView: View {
                     .foregroundStyle(.secondary)
                     
                     Spacer()
-                    
-                    Button {
-                        // Next step - for v0 this is a no-op placeholder
-                    } label: {
-                        Label("Next", systemImage: "arrow.right")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.teal)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)

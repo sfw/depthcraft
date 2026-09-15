@@ -412,7 +412,7 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                     demoHost.view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
                     demoHost.view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
                     demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
-                    demoHost.view.heightAnchor.constraint(equalToConstant: 400)
+                    demoHost.view.heightAnchor.constraint(greaterThanOrEqualToConstant: 400)
                 ])
                 stackView.addArrangedSubview(container)
                 demoHost.didMove(toParent: self)
