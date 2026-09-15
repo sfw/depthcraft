@@ -176,7 +176,17 @@ class LessonRetryService {
                 let demoManifestData = try encoder.encode(demoManifest)
                 try demoManifestData.write(to: demoURL.appendingPathComponent("demo.json"))
                 
-                try demo.entryHTML.write(
+                // Ensure UTF-8 meta charset is present to prevent mojibake
+                var entryHTML = demo.entryHTML
+                if !entryHTML.contains("<meta charset") && !entryHTML.contains("charset=") {
+                    // Insert charset meta tag if missing
+                    if let headEnd = entryHTML.range(of: "<head>", options: .caseInsensitive) {
+                        let insertPoint = entryHTML.index(headEnd.upperBound, offsetBy: 0)
+                        entryHTML.insert(contentsOf: "\n<meta charset=\"UTF-8\">", at: insertPoint)
+                    }
+                }
+                
+                try entryHTML.write(
                     to: demoURL.appendingPathComponent(demo.entry),
                     atomically: true,
                     encoding: .utf8
