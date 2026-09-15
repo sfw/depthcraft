@@ -17,6 +17,12 @@ class PlannerService: PlannerRole {
         let systemPrompt = """
         You are a curriculum planner for the Depthcraft learning platform. Your job is to create a structured curriculum map as JSON.
         
+        PROSE-FIRST PEDAGOGY (CRITICAL):
+        - Every lesson you plan must be a prose-based learning objective with substantive explanatory content
+        - NEVER plan a "demo lesson" or "interactive exploration" as a lesson type — demos are optional add-ons decided later
+        - Lesson titles and objectives should focus on concepts to learn and explain, not on activities or interactions
+        - Each lesson will receive full explanatory prose; demos (if any) are determined separately based on complexity
+        
         Output ONLY valid JSON matching this schema:
         {
           "schemaVersion": "0.1.0",
@@ -67,15 +73,15 @@ class PlannerService: PlannerRole {
         let depthGuidance: String
         switch depthLevel {
         case .brief:
-            depthGuidance = "Keep the curriculum BRIEF. Cover only the most essential topics. Aim for approximately 2-3 units with 6-9 lessons total. Estimate 8-12 minutes per lesson."
+            depthGuidance = "Keep the curriculum BRIEF. Cover only the most essential topics. Aim for approximately 2-3 units with 6-9 lessons total. Estimate 8-12 minutes per lesson. Focus on lean but substantive prose explanations."
         case .standard:
-            depthGuidance = "Create a STANDARD curriculum. Balance breadth and depth appropriately. Aim for approximately 3-4 units with 9-12 lessons total. Estimate 10-15 minutes per lesson."
+            depthGuidance = "Create a STANDARD curriculum. Balance breadth and depth appropriately. Aim for approximately 3-4 units with 9-12 lessons total. Estimate 10-15 minutes per lesson. Each lesson should have balanced explanatory content."
         case .deep:
-            depthGuidance = "Create a DEEP curriculum. Go deeper into important concepts with more comprehensive coverage. Aim for approximately 4-5 units with 12-18 lessons total. Estimate 12-18 minutes per lesson."
+            depthGuidance = "Create a DEEP curriculum. Go deeper into important concepts with more comprehensive coverage. Aim for approximately 4-5 units with 12-18 lessons total. Estimate 12-18 minutes per lesson. Lessons should include richer prose with worked examples and edge cases."
         case .thorough:
-            depthGuidance = "Create a THOROUGH curriculum. Cover the topic comprehensively with detailed exploration of key areas. Aim for approximately 5-6 units with 18-24 lessons total. Estimate 15-20 minutes per lesson."
+            depthGuidance = "Create a THOROUGH curriculum. Cover the topic comprehensively with detailed exploration of key areas. Aim for approximately 5-6 units with 18-24 lessons total. Estimate 15-20 minutes per lesson. Lessons should provide comprehensive prose with comparisons and pitfalls."
         case .exhaustive:
-            depthGuidance = "Create an EXHAUSTIVE curriculum. Provide extensive, comprehensive coverage with deep dives into all major aspects. Aim for approximately 6-8 units with 24-32 lessons total. Estimate 18-25 minutes per lesson."
+            depthGuidance = "Create an EXHAUSTIVE curriculum. Provide extensive, comprehensive coverage with deep dives into all major aspects. Aim for approximately 6-8 units with 24-32 lessons total. Estimate 18-25 minutes per lesson. Lessons should contain dense, nuanced prose exploration from multiple angles."
         }
         
         let extensionConstraint: String
