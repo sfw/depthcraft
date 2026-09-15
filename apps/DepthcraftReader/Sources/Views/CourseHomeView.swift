@@ -14,13 +14,11 @@ struct CourseHomeView: View {
     @State private var showingExportError = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
-    @State private var retryingLesson: CurriculumLesson?
     @State private var showingRetryError = false
     @State private var retryError: String?
 
     var body: some View {
-        ZStack {
-            List {
+        List {
                 if let course = store.course {
                     // Cover band: title, subtitle, colophon
                     Section {
@@ -139,10 +137,29 @@ struct CourseHomeView: View {
                         DisclosureGroup {
                             ForEach(failedLessonsList, id: \.lesson.id) { item in
                                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
-                                        .font(.caption)
-                                        .frame(minWidth: 20, alignment: .trailing)
+                                    // Stage icon: spinner if retrying, warning if failed/idle
+                                    if let stage = store.retryingLessons[item.lesson.id] {
+                                        if stage.isInProgress {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                                .frame(minWidth: 20)
+                                        } else if stage == .failed {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundStyle(.red)
+                                                .font(.caption)
+                                                .frame(minWidth: 20, alignment: .trailing)
+                                        } else if stage == .done {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.green)
+                                                .font(.caption)
+                                                .frame(minWidth: 20, alignment: .trailing)
+                                        }
+                                    } else {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundStyle(.orange)
+                                            .font(.caption)
+                                            .frame(minWidth: 20, alignment: .trailing)
+                                    }
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.lesson.title)
@@ -153,18 +170,29 @@ struct CourseHomeView: View {
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     
-                                    Button {
-                                        retryLesson(item.lesson)
-                                    } label: {
-                                        Text("Retry")
-                                            .font(.caption)
-                                            .fontWeight(.medium)
+                                    // Show stage chip if retrying, Retry button otherwise
+                                    if let stage = store.retryingLessons[item.lesson.id] {
+                                        stageChip(for: stage)
+                                    } else {
+                                        Button {
+                                            retryLesson(item.lesson)
+                                        } label: {
+                                            Text("Retry")
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(.teal)
+                                        .controlSize(.small)
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(.teal)
-                                    .controlSize(.small)
                                 }
                                 .padding(.vertical, 6)
+                                .background(
+                                    store.retryingLessons[item.lesson.id]?.isInProgress == true
+                                        ? Color.teal.opacity(0.05)
+                                        : Color.clear
+                                )
+                                .cornerRadius(6)
                             }
                         } label: {
                             HStack {
@@ -324,32 +352,44 @@ struct CourseHomeView: View {
                 }
             }
         }
-        .disabled(retryingLesson != nil)
-        
-        // Retry progress overlay
-        if let retryingLesson {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 16) {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(.teal)
-                
-                Text("Retrying Lesson")
-                    .font(.headline)
-                
-                Text(retryingLesson.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-            .padding(24)
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(radius: 10)
+    }
+    
+    // MARK: - Retry Stage UI Components
+    
+    private func stageChip(for stage: LessonStage) -> some View {
+        Text(stage.displayName)
+            .font(.caption2)
+            .fontWeight(.medium)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(stageChipColor(for: stage))
+            .foregroundStyle(stageChipTextColor(for: stage))
+            .cornerRadius(4)
+    }
+    
+    private func stageChipColor(for stage: LessonStage) -> Color {
+        switch stage {
+        case .queued:
+            return Color.gray.opacity(0.2)
+        case .writing, .quiz, .demo:
+            return Color.teal.opacity(0.2)
+        case .done:
+            return Color.green.opacity(0.2)
+        case .failed:
+            return Color.red.opacity(0.2)
         }
+    }
+    
+    private func stageChipTextColor(for stage: LessonStage) -> Color {
+        switch stage {
+        case .queued:
+            return .secondary
+        case .writing, .quiz, .demo:
+            return .teal
+        case .done:
+            return .green
+        case .failed:
+            return .red
         }
     }
     
@@ -552,7 +592,8 @@ extension CourseHomeView {
     private func retryLesson(_ lesson: CurriculumLesson) {
         guard let course = store.course else { return }
         
-        retryingLesson = lesson
+        // Mark as retrying with writing stage
+        store.updateRetryStage(lessonId: lesson.id, stage: .writing)
         
         Task { @MainActor in
             do {
@@ -561,6 +602,12 @@ extension CourseHomeView {
                 #endif
                 
                 let retryService = LessonRetryService()
+                
+                // Wire up stage callback
+                retryService.onStageUpdate = { [weak store] stage in
+                    store?.updateRetryStage(lessonId: lesson.id, stage: stage)
+                }
+                
                 try await retryService.retryLesson(
                     lesson: lesson,
                     packageURL: course.rootURL,
@@ -571,17 +618,29 @@ extension CourseHomeView {
                 print("✅ Retry completed, reloading package")
                 #endif
                 
+                // Mark as done
+                store.updateRetryStage(lessonId: lesson.id, stage: .done)
+                
                 // Reload the package after successful retry
                 store.reloadPackageInPlace(from: course.rootURL)
-                retryingLesson = nil
+                
+                // Clear retry state after a brief delay to show success
+                try? await Task.sleep(for: .milliseconds(500))
+                store.clearRetryStage(lessonId: lesson.id)
             } catch {
                 #if DEBUG
                 print("❌ Retry failed: \(error)")
                 #endif
                 
+                // Mark as failed
+                store.updateRetryStage(lessonId: lesson.id, stage: .failed)
+                
                 retryError = error.localizedDescription
                 showingRetryError = true
-                retryingLesson = nil
+                
+                // Clear retry state after showing error
+                try? await Task.sleep(for: .milliseconds(2000))
+                store.clearRetryStage(lessonId: lesson.id)
             }
         }
     }
