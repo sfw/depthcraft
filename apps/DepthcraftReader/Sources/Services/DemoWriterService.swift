@@ -140,6 +140,7 @@ class DemoWriterService: DemoWriterRole {
         7. ClassifyBins: Sort items into categorical bins (tap chip → tap bin pattern)
            - Use: Classification, categorization, sorting
            - Touch pattern: tap chip to select (shows selection), tap bin to place, tap chip-in-bin to remove
+           - CRITICAL: Each item MUST have a 'text' property (the human-readable label shown on the chip). Never omit item.text
            - Example: createClassifyBins({ containerId: 'demo', items: [...], bins: [...], correctBins: {...} })
         
         8. ChallengeLoop: Try → feedback → retry pattern (local validation only)
