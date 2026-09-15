@@ -949,6 +949,7 @@ window.DepthcraftUIKit = {
 
   // Primitive 7: ClassifyBins
   // Sort items into categorical bins
+  // Touch-first: tap chip to select, tap bin to place (no HTML5 DnD)
   createClassifyBins: function(config) {
     const {
       containerId,
@@ -960,6 +961,27 @@ window.DepthcraftUIKit = {
 
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
+
+    // Helper: Extract human-readable string label from item
+    // DEFENSE: Never allow object to reach textContent
+    const chipLabel = (item) => {
+      // If already a string, return it
+      if (typeof item === 'string') return item;
+      
+      // If object, try common label properties (one level deep only)
+      if (typeof item === 'object' && item !== null) {
+        // Try text, label, name, title properties
+        if (typeof item.text === 'string' && item.text) return item.text;
+        if (typeof item.label === 'string' && item.label) return item.label;
+        if (typeof item.name === 'string' && item.name) return item.name;
+        if (typeof item.title === 'string' && item.title) return item.title;
+        // Fallback to id if it's a string
+        if (typeof item.id === 'string' && item.id) return item.id;
+      }
+      
+      // Ultimate fallback if nothing worked
+      return '[No Label]';
+    };
 
     container.style.cssText = `
       display: flex;
@@ -988,46 +1010,64 @@ window.DepthcraftUIKit = {
     `;
 
     let classifications = {};
+    let selectedChip = null;
+
+    // Helper to deselect current chip
+    const deselectChip = () => {
+      if (selectedChip) {
+        selectedChip.style.background = this.tokens.colors.primary;
+        selectedChip.style.border = 'none';
+        selectedChip.style.transform = 'scale(1)';
+        selectedChip = null;
+      }
+    };
+
+    // Helper to select a chip
+    const selectChip = (chip) => {
+      deselectChip();
+      selectedChip = chip;
+      chip.style.background = this.tokens.colors.primaryDark;
+      chip.style.border = `3px solid ${this.tokens.colors.warning}`;
+      chip.style.transform = 'scale(1.05)';
+    };
 
     items.forEach(item => {
       const chip = document.createElement('div');
       chip.className = 'classify-item';
-      chip.dataset.id = item.id || item.text;
-      chip.draggable = true;
+      
+      // Use chipLabel for both display text and dataset.id (ensure strings only)
+      const label = chipLabel(item);
+      chip.dataset.id = typeof item === 'object' && item !== null && item.id 
+        ? String(item.id) 
+        : label;
+      
       chip.style.cssText = `
         background: ${this.tokens.colors.primary};
         color: #ffffff;
         padding: ${this.tokens.spacing.sm} ${this.tokens.spacing.md};
         border-radius: ${this.tokens.borderRadius.sm};
         font-size: ${this.tokens.fontSize.base};
-        cursor: move;
-        touch-action: none;
+        cursor: pointer;
         min-height: ${this.tokens.minTouchTarget};
         display: flex;
         align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        user-select: none;
       `;
-      chip.textContent = item.text || item;
+      
+      // CRITICAL: Only assign string to textContent
+      chip.textContent = label;
 
-      // Touch drag (simplified - similar to DragMatch)
-      let draggedChip = null;
-      chip.addEventListener('touchstart', () => {
-        draggedChip = chip;
-        chip.style.opacity = '0.6';
-      });
-
-      chip.addEventListener('touchend', (e) => {
-        if (!draggedChip) return;
-        const touch = e.changedTouches[0];
-        const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-        const bin = dropTarget?.closest('.classify-bin-content');
-        
-        if (bin) {
-          bin.appendChild(draggedChip);
-          classifications[chip.dataset.id] = bin.dataset.binId;
+      // Tap to select/deselect chip
+      chip.addEventListener('click', () => {
+        if (selectedChip === chip) {
+          // Tap selected chip again to deselect
+          deselectChip();
+        } else {
+          // Select this chip
+          selectChip(chip);
         }
-
-        chip.style.opacity = '1';
-        draggedChip = null;
       });
 
       itemsPool.appendChild(chip);
@@ -1039,6 +1079,7 @@ window.DepthcraftUIKit = {
         border: 2px solid ${this.tokens.colors.border};
         border-radius: ${this.tokens.borderRadius.md};
         padding: ${this.tokens.spacing.md};
+        transition: all 0.2s ease;
       `;
 
       const binLabel = document.createElement('div');
@@ -1061,12 +1102,57 @@ window.DepthcraftUIKit = {
         display: flex;
         flex-wrap: wrap;
         gap: ${this.tokens.spacing.xs};
+        cursor: pointer;
       `;
+
+      // Tap bin to place selected chip
+      const placeBinHandler = () => {
+        if (selectedChip) {
+          // Move chip to this bin
+          binContent.appendChild(selectedChip);
+          classifications[selectedChip.dataset.id] = bin.id;
+          
+          // Reset chip styling (now in bin)
+          selectedChip.style.background = this.tokens.colors.primary;
+          selectedChip.style.border = 'none';
+          selectedChip.style.transform = 'scale(1)';
+          
+          // Update click handler for chip-in-bin (tap to remove)
+          const chipToMove = selectedChip;
+          selectedChip = null;
+          
+          chipToMove.onclick = (e) => {
+            e.stopPropagation();
+            // Remove from bin back to pool
+            itemsPool.appendChild(chipToMove);
+            delete classifications[chipToMove.dataset.id];
+            
+            // Restore original tap behavior
+            chipToMove.onclick = function() {
+              if (selectedChip === chipToMove) {
+                deselectChip();
+              } else {
+                selectChip(chipToMove);
+              }
+            };
+          };
+        }
+      };
+
+      binLabel.addEventListener('click', placeBinHandler);
+      binContent.addEventListener('click', placeBinHandler);
 
       binDiv.appendChild(binLabel);
       binDiv.appendChild(binContent);
       binsArea.appendChild(binDiv);
     });
+
+    const controlsRow = document.createElement('div');
+    controlsRow.style.cssText = `
+      display: flex;
+      gap: ${this.tokens.spacing.md};
+      align-items: center;
+    `;
 
     const feedbackDiv = document.createElement('div');
     feedbackDiv.style.cssText = `
@@ -1074,6 +1160,7 @@ window.DepthcraftUIKit = {
       border-radius: ${this.tokens.borderRadius.md};
       font-size: ${this.tokens.fontSize.base};
       display: none;
+      flex: 1;
     `;
 
     const checkBtn = this.createButton('Check Classification', 'primary');
@@ -1088,7 +1175,7 @@ window.DepthcraftUIKit = {
       });
 
       feedbackDiv.style.display = 'block';
-      if (correct === total) {
+      if (correct === total && Object.keys(classifications).length === total) {
         feedbackDiv.style.background = this.tokens.colors.success;
         feedbackDiv.style.color = '#ffffff';
         feedbackDiv.textContent = '✓ All items classified correctly!';
@@ -1099,18 +1186,39 @@ window.DepthcraftUIKit = {
       }
     });
 
+    const clearBtn = this.createButton('Clear Selection', 'secondary');
+    clearBtn.addEventListener('click', () => {
+      deselectChip();
+    });
+
+    controlsRow.appendChild(checkBtn);
+    controlsRow.appendChild(clearBtn);
+
     container.appendChild(itemsPool);
     container.appendChild(binsArea);
-    container.appendChild(checkBtn);
+    container.appendChild(controlsRow);
     container.appendChild(feedbackDiv);
 
     return {
       reset: () => {
+        deselectChip();
         classifications = {};
         feedbackDiv.style.display = 'none';
-        // Move all items back to pool
+        // Move all items back to pool and restore handlers
         const allItems = container.querySelectorAll('.classify-item');
-        allItems.forEach(item => itemsPool.appendChild(item));
+        allItems.forEach(item => {
+          itemsPool.appendChild(item);
+          item.onclick = function() {
+            if (selectedChip === item) {
+              deselectChip();
+            } else {
+              selectChip(item);
+            }
+          };
+        });
+      },
+      clearSelection: () => {
+        deselectChip();
       }
     };
   },

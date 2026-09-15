@@ -109,6 +109,8 @@ class DemoWriterService: DemoWriterRole {
         - Platform: iPadOS/iOS touch-first (44pt minimum touch targets, no hover-only interactions)
         - Offline: No CDN, no fetch, no external fonts — fully self-contained
         - What Reader injects: 8 primitives + thin DOM escape
+        - CRITICAL: DO NOT use HTML5 Drag and Drop API (draggable, ondragstart, ondrop). iOS touch interaction is tap-based, not drag-based
+        - Interaction pattern: tap to select → tap to place (not drag). All ui-v0 primitives follow this model
         
         UI-V0 PRIMITIVES (all available):
         1. TapReveal: Tap to progressively reveal hidden content
@@ -119,11 +121,11 @@ class DemoWriterService: DemoWriterRole {
            - Use: Procedures, algorithms, walkthroughs
            - Example: createStepSequence({ containerId: 'demo', steps: [{title: '...', content: '...'}] })
         
-        3. OrderList: Drag to reorder items (touch-compatible)
+        3. OrderList: Reorder items by tapping (touch-compatible)
            - Use: Sequence ordering, ranking, priority
            - Example: createOrderList({ containerId: 'demo', items: [...], correctOrder: [...] })
         
-        4. DragMatch: Drag items to matching targets
+        4. DragMatch: Tap items to match with targets (touch-first, not HTML5 drag-drop)
            - Use: Vocabulary matching, concept pairing, classification
            - Example: createDragMatch({ containerId: 'demo', items: [...], targets: [...], matches: {...} })
         
@@ -135,8 +137,10 @@ class DemoWriterService: DemoWriterRole {
            - Use: Parameter exploration, formula visualization, config tuning
            - Example: createParamExplorer({ containerId: 'demo', params: [...], renderFn: (output, vals) => {...} })
         
-        7. ClassifyBins: Sort items into categorical bins
+        7. ClassifyBins: Sort items into categorical bins (tap chip → tap bin pattern)
            - Use: Classification, categorization, sorting
+           - Touch pattern: tap chip to select (shows selection), tap bin to place, tap chip-in-bin to remove
+           - CRITICAL: Each item MUST have a 'text' property (the human-readable label shown on the chip). Never omit item.text
            - Example: createClassifyBins({ containerId: 'demo', items: [...], bins: [...], correctBins: {...} })
         
         8. ChallengeLoop: Try → feedback → retry pattern (local validation only)
