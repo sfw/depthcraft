@@ -962,6 +962,27 @@ window.DepthcraftUIKit = {
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
 
+    // Helper: Extract human-readable string label from item
+    // DEFENSE: Never allow object to reach textContent
+    const chipLabel = (item) => {
+      // If already a string, return it
+      if (typeof item === 'string') return item;
+      
+      // If object, try common label properties (one level deep only)
+      if (typeof item === 'object' && item !== null) {
+        // Try text, label, name, title properties
+        if (typeof item.text === 'string' && item.text) return item.text;
+        if (typeof item.label === 'string' && item.label) return item.label;
+        if (typeof item.name === 'string' && item.name) return item.name;
+        if (typeof item.title === 'string' && item.title) return item.title;
+        // Fallback to id if it's a string
+        if (typeof item.id === 'string' && item.id) return item.id;
+      }
+      
+      // Ultimate fallback if nothing worked
+      return '[No Label]';
+    };
+
     container.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -1013,7 +1034,13 @@ window.DepthcraftUIKit = {
     items.forEach(item => {
       const chip = document.createElement('div');
       chip.className = 'classify-item';
-      chip.dataset.id = item.id || item.text || item.label || item;
+      
+      // Use chipLabel for both display text and dataset.id (ensure strings only)
+      const label = chipLabel(item);
+      chip.dataset.id = typeof item === 'object' && item !== null && item.id 
+        ? String(item.id) 
+        : label;
+      
       chip.style.cssText = `
         background: ${this.tokens.colors.primary};
         color: #ffffff;
@@ -1028,7 +1055,9 @@ window.DepthcraftUIKit = {
         transition: all 0.2s ease;
         user-select: none;
       `;
-      chip.textContent = typeof item === 'string' ? item : (item.text || item.label || item.id || '[No Label]');
+      
+      // CRITICAL: Only assign string to textContent
+      chip.textContent = label;
 
       // Tap to select/deselect chip
       chip.addEventListener('click', () => {
