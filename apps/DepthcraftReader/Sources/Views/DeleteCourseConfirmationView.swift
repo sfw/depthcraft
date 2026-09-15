@@ -8,6 +8,8 @@ struct DeleteCourseConfirmationView: View {
     @EnvironmentObject private var store: CourseStore
     
     @State private var confirmationText = ""
+    @State private var deleteError: Error?
+    @State private var showingDeleteError = false
     @FocusState private var isTextFieldFocused: Bool
     
     private var deleteEnabled: Bool {
@@ -15,7 +17,7 @@ struct DeleteCourseConfirmationView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 24) {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -84,6 +86,13 @@ struct DeleteCourseConfirmationView: View {
                     }
                 }
             }
+            .alert("Delete Failed", isPresented: $showingDeleteError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                if let error = deleteError {
+                    Text(error.localizedDescription)
+                }
+            }
         }
         .onAppear {
             isTextFieldFocused = true
@@ -95,7 +104,8 @@ struct DeleteCourseConfirmationView: View {
             try store.deleteCourse(packageId: packageId, packageURL: packageURL)
             isPresented = false
         } catch {
-            print("Failed to delete course: \(error)")
+            deleteError = error
+            showingDeleteError = true
         }
     }
 }
