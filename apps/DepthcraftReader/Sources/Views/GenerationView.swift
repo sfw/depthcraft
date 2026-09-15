@@ -7,6 +7,7 @@ struct GenerationView: View {
     @StateObject private var roleConfig: LLMRoleConfigService
     @EnvironmentObject private var courseStore: CourseStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.navigationPath) private var navigationPath
     
     let extendFromCourse: LoadedCourse?
     
@@ -60,6 +61,17 @@ struct GenerationView: View {
         }
         .navigationTitle(extendFromCourse != nil ? "Extend Course" : "Generate Course")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    navigationPath.wrappedValue.removeAll()
+                } label: {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
+            }
+            
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink {
                     GenerationTimingLogsListView()

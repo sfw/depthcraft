@@ -20,6 +20,18 @@ struct QuizFlowView: View {
     @State private var clozeAnswers: [String: String] = [:]
     @State private var graded = false
     @State private var itemResults: [String: Bool] = [:]
+    
+    private var logoButton: some View {
+        Button {
+            onDismissQuiz()
+            navigationPath.wrappedValue.removeAll()
+        } label: {
+            Image("HomeMark")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 28)
+        }
+    }
 
     private var nextLesson: (unitId: String, lessonId: String, title: String)? {
         guard let course = store.course else { return nil }
@@ -154,6 +166,11 @@ struct QuizFlowView: View {
         .background(Color(uiColor: .systemBackground))
         .navigationTitle("Quiz")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                logoButton
+            }
+        }
         .interactiveDismissDisabled(false)
     }
 

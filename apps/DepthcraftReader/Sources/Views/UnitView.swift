@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UnitView: View {
     @EnvironmentObject private var store: CourseStore
+    @Environment(\.navigationPath) private var navigationPath
     let unitId: String
 
     private var unit: CurriculumUnit? {
@@ -61,6 +62,18 @@ struct UnitView: View {
         }
         .navigationTitle(unit?.title ?? "Unit")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    navigationPath.wrappedValue.removeAll()
+                } label: {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
+            }
+        }
     }
 
     private func cleanMarkdownText(_ text: String) -> String? {

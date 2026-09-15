@@ -344,9 +344,20 @@ struct CourseHomeView: View {
             handleImport(result)
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    navigationPath.wrappedValue.removeAll()
+                } label: {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
+            }
+            
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
+                Button {
+                    navigationPath.wrappedValue.append(.settings)
                 } label: {
                     Image(systemName: "gearshape")
                 }
