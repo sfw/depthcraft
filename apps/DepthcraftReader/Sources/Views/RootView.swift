@@ -44,18 +44,6 @@ struct RootView: View {
             }
         }
         .environment(\.navigationPath, $navigationPath)
-        .onAppear {
-            // Navigate to course home if only one package and it's loaded
-            if store.availablePackages.count == 1 && store.course != nil {
-                navigationPath.append(.courseHome)
-            }
-        }
-        .onChange(of: store.availablePackages.count) { oldCount, newCount in
-            // Navigate to course home if we just loaded a single course
-            if newCount == 1 && store.course != nil && navigationPath.isEmpty {
-                navigationPath.append(.courseHome)
-            }
-        }
         .alert("Course Updated", isPresented: $store.showUpgradeDialog) {
             Button("Apply Update") {
                 store.confirmPackageUpgrade()
