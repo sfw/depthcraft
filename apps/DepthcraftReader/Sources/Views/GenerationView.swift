@@ -69,7 +69,10 @@ struct GenerationView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: 28)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
