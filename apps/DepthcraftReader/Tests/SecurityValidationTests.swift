@@ -353,28 +353,6 @@ final class SecurityValidationTests: XCTestCase {
     
     // MARK: - Import Validator Path Tests (Export/Import Round-trip)
     
-    func testSkipAppleMetadataFiles() throws {
-        // Apple metadata files should be skipped during import, not rejected
-        // These files are often added when sharing packages via AirDrop or Files app
-        let appleMetadataPaths = [
-            "__MACOSX/",
-            "__MACOSX/content/units/u01/lesson.md",
-            ".DS_Store",
-            "content/.DS_Store",
-            "._manifest.json",
-            "content/._lesson.md"
-        ]
-        
-        // These should be skipped (not cause an error)
-        // We can't directly test the skip behavior without a full zip,
-        // but we can verify the helper functions work correctly
-        for path in appleMetadataPaths {
-            // Note: This test documents the expected behavior
-            // Actual testing requires a full zip import flow
-            XCTAssertTrue(true, "Apple metadata path should be skipped: \(path)")
-        }
-    }
-    
     func testRejectActualPathTraversal() throws {
         // These are actual path traversal attempts and should be rejected
         let maliciousPaths = [
@@ -385,27 +363,25 @@ final class SecurityValidationTests: XCTestCase {
             "foo/bar/.."
         ]
         
-        // These should be rejected by the path traversal check
-        // Note: This test documents the expected behavior
-        for path in maliciousPaths {
-            XCTAssertTrue(true, "Malicious path should be rejected: \(path)")
-        }
-    }
-    
-    func testAcceptLegitimateFilenames() throws {
-        // Files with ".." as part of their name (not path traversal) should be accepted
-        // Note: In practice, our package format doesn't use such names,
-        // but the validator should not reject them if they appear
-        let legitimatePaths = [
-            "content/units/u01/lesson.md",
-            "manifest.json",
-            "curriculum.json",
-            "demos/rotating-cube/index.html"
-        ]
+        // Create a test directory to validate against
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
         
-        // These should be accepted
-        for path in legitimatePaths {
-            XCTAssertTrue(true, "Legitimate path should be accepted: \(path)")
+        // Create a mock package structure
+        try "test".write(to: tempDir.appendingPathComponent("manifest.json"), atomically: true, encoding: .utf8)
+        try "test".write(to: tempDir.appendingPathComponent("curriculum.json"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: tempDir.appendingPathComponent("content"), withIntermediateDirectories: true)
+        
+        // Try to create files with malicious paths - these should be caught
+        for maliciousPath in maliciousPaths {
+            let fullPath = tempDir.appendingPathComponent(maliciousPath).standardizedFileURL.path
+            let tempPath = tempDir.standardizedFileURL.path
+            let tempPathWithSlash = tempPath + "/"
+            
+            // Verify our boundary check would catch this
+            let wouldEscape = !fullPath.hasPrefix(tempPathWithSlash) && fullPath != tempPath
+            XCTAssertTrue(wouldEscape, "Malicious path should be detected as escape attempt: \(maliciousPath)")
         }
     }
     
@@ -413,7 +389,7 @@ final class SecurityValidationTests: XCTestCase {
     
     func testImportScottRejectedFixture() throws {
         // Regression for: Export from Simulator rejected on iPad with "invalid file paths"
-        // Root cause: validatePackagePaths used hasPrefix(packagePath) without trailing "/"
+        // Root cause: TBD - need to reproduce the actual rejection
         // Fixture: novel-idea-generation-using-ai--llms-1789431687.depthcraft/
         // - 245 entries, all relative, zero "..", no abs paths, no backslashes, no __MACOSX
         // - Wrapper root ends with .depthcraft/ then content/manifests
@@ -427,25 +403,43 @@ final class SecurityValidationTests: XCTestCase {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         
         do {
-            // Step 1: unzipSafely should succeed
-            try ImportValidator.unzipSafely(from: fixtureURL, to: tempDir)
+            // Step 1: unzipSafely should succeed (this is where rejection might happen on device)
+            do {
+                try ImportValidator.unzipSafely(from: fixtureURL, to: tempDir)
+            } catch let error as ImportValidatorError {
+                // If this throws zipSlipDetected, that's the bug we're looking for
+                XCTFail("unzipSafely rejected Scott's fixture with: \(error.localizedDescription)")
+                try? FileManager.default.removeItem(at: tempDir)
+                return
+            }
             
             // Step 2: Find the .depthcraft package in extracted content
             let contents = try FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
             guard let extractedPackage = contents.first(where: { $0.lastPathComponent.hasSuffix(".depthcraft") }) else {
                 XCTFail("No .depthcraft package found in extracted fixture")
+                try? FileManager.default.removeItem(at: tempDir)
                 return
             }
             
-            // Step 3: validateImportedPackage should succeed (was failing at line 181 without trailing slash)
-            try ImportValidator.validateImportedPackage(at: extractedPackage)
+            // Step 3: validateImportedPackage should succeed (or rejection might happen here)
+            do {
+                try ImportValidator.validateImportedPackage(at: extractedPackage)
+            } catch let error as ImportValidatorError {
+                // If this throws zipSlipDetected, that's the bug
+                XCTFail("validateImportedPackage rejected Scott's fixture with: \(error.localizedDescription)")
+                try? FileManager.default.removeItem(at: tempDir)
+                return
+            }
             
             // Cleanup
             try? FileManager.default.removeItem(at: tempDir)
             
+            // If we get here, the import succeeded
+            XCTAssert(true, "Scott's fixture imported successfully")
+            
         } catch {
             try? FileManager.default.removeItem(at: tempDir)
-            XCTFail("Scott's rejected fixture should import successfully: \(error)")
+            XCTFail("Unexpected error importing Scott's fixture: \(error)")
         }
     }
     

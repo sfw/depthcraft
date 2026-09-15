@@ -190,7 +190,21 @@ struct LibraryView: View {
                 
                 let packageURL: URL
                 
-                if isDirectory.boolValue {
+                // BUGFIX: iOS may treat .depthcraft files as packages (directories) on device.
+                // Check if it's actually a ZIP file before deciding which import path to use.
+                let isActuallyZipFile: Bool = {
+                    // If treated as directory, check if it's really a ZIP by reading magic bytes
+                    if isDirectory.boolValue {
+                        guard let data = try? Data(contentsOf: sourceURL, options: [.mappedIfSafe]) else {
+                            return false
+                        }
+                        // ZIP files start with PK signature (0x504B)
+                        return data.count >= 4 && data[0] == 0x50 && data[1] == 0x4B
+                    }
+                    return false
+                }()
+                
+                if isDirectory.boolValue && !isActuallyZipFile {
                     // Already a directory package - validate and copy
                     try ImportValidator.validateImportedPackage(at: sourceURL)
                     
