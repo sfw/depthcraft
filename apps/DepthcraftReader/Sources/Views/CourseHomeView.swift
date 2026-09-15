@@ -19,18 +19,19 @@ struct CourseHomeView: View {
     @State private var retryError: String?
 
     var body: some View {
-        List {
-            if let course = store.course {
-                // Cover band: title, subtitle, colophon
-                Section {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Restrained home brand mark
-                        Image("HomeMark")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 28)
-                            .accessibilityHidden(true)
-                            .padding(.top, 16)
+        ZStack {
+            List {
+                if let course = store.course {
+                    // Cover band: title, subtitle, colophon
+                    Section {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Restrained home brand mark
+                            Image("HomeMark")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 28)
+                                .accessibilityHidden(true)
+                                .padding(.top, 16)
                         
                         VStack(alignment: .leading, spacing: 8) {
                             Text(course.manifest.title)
@@ -323,6 +324,33 @@ struct CourseHomeView: View {
                 }
             }
         }
+        .disabled(retryingLesson != nil)
+        
+        // Retry progress overlay
+        if let retryingLesson {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.teal)
+                
+                Text("Retrying Lesson")
+                    .font(.headline)
+                
+                Text(retryingLesson.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .padding(24)
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .shadow(radius: 10)
+        }
+        }
     }
     
     private func timeAgo(from isoString: String) -> String {
@@ -526,8 +554,12 @@ extension CourseHomeView {
         
         retryingLesson = lesson
         
-        Task {
+        Task { @MainActor in
             do {
+                #if DEBUG
+                print("📝 Starting retry for lesson: \(lesson.id) - \(lesson.title)")
+                #endif
+                
                 let retryService = LessonRetryService()
                 try await retryService.retryLesson(
                     lesson: lesson,
@@ -535,10 +567,18 @@ extension CourseHomeView {
                     manifest: course.manifest
                 )
                 
+                #if DEBUG
+                print("✅ Retry completed, reloading package")
+                #endif
+                
                 // Reload the package after successful retry
                 store.reloadPackageInPlace(from: course.rootURL)
                 retryingLesson = nil
             } catch {
+                #if DEBUG
+                print("❌ Retry failed: \(error)")
+                #endif
+                
                 retryError = error.localizedDescription
                 showingRetryError = true
                 retryingLesson = nil
