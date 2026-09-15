@@ -36,6 +36,22 @@ enum ImportValidatorError: LocalizedError {
 
 enum ImportValidator {
     
+    /// Check if a URL is actually a ZIP file by reading magic bytes, even if iOS reports it as a directory.
+    /// iOS may treat .depthcraft files as packages on device, causing isDirectory to return true for ZIPs.
+    static func isZipFile(at url: URL) -> Bool {
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
+            return false
+        }
+        defer { try? fileHandle.close() }
+        
+        guard let header = try? fileHandle.read(upToCount: 4), header.count >= 4 else {
+            return false
+        }
+        
+        // ZIP files start with PK signature (0x504B0304 or 0x504B0506)
+        return header[0] == 0x50 && header[1] == 0x4B
+    }
+    
     /// Safely unzips a file with zip-slip protection (iOS-safe, in-process)
     static func unzipSafely(from zipURL: URL, to destinationURL: URL) throws {
         let fileManager = FileManager.default
