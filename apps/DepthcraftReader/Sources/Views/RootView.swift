@@ -4,34 +4,20 @@ struct RootView: View {
     @EnvironmentObject private var store: CourseStore
     @EnvironmentObject private var orchestrator: GenerationOrchestrator
     @State private var navigationPath: [NavigationDestination] = []
-    @State private var showingLibrary = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            Group {
-                if store.isLoading && store.course == nil {
-                    ProgressView("Opening course…")
-                } else if showingLibrary && store.availablePackages.count >= 2 {
-                    LibraryView(onSelectCourse: {
-                        showingLibrary = false
-                    })
-                } else {
-                    CourseHomeView()
-                        .toolbar {
-                            if store.availablePackages.count >= 2 {
-                                ToolbarItem(placement: .topBarTrailing) {
-                                    Button("Library") {
-                                        showingLibrary = true
-                                    }
-                                }
-                            }
-                        }
-                }
+            if store.isLoading && store.course == nil {
+                ProgressView("Opening course…")
+            } else {
+                LibraryView()
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: NavigationDestination.self) { destination in
                 switch destination {
+                case .courseHome:
+                    CourseHomeView()
                 case .unit(let unitId):
                     UnitView(unitId: unitId)
                 case .lesson(let unitId, let lessonId):
@@ -43,6 +29,8 @@ struct RootView: View {
                     } else {
                         GenerationView()
                     }
+                case .settings:
+                    SettingsView()
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -55,15 +43,15 @@ struct RootView: View {
         }
         .environment(\.navigationPath, $navigationPath)
         .onAppear {
-            if store.availablePackages.count >= 2 && store.course == nil {
-                showingLibrary = true
+            // Navigate to course home if only one package and it's loaded
+            if store.availablePackages.count == 1 && store.course != nil {
+                navigationPath.append(.courseHome)
             }
         }
         .onChange(of: store.availablePackages.count) { oldCount, newCount in
-            if newCount >= 2 && store.course == nil {
-                showingLibrary = true
-            } else if newCount < 2 {
-                showingLibrary = false
+            // Navigate to course home if we just loaded a single course
+            if newCount == 1 && store.course != nil && navigationPath.isEmpty {
+                navigationPath.append(.courseHome)
             }
         }
         .alert("Course Updated", isPresented: $store.showUpgradeDialog) {

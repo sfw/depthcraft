@@ -17,13 +17,13 @@ struct LessonPlayerView: View {
     @State private var quiz: QuizDocument?
     @State private var showQuiz = false
     @State private var loadError: String?
-
-    private var lesson: CurriculumLesson? {
-        store.course?.curriculum.lessons[lessonId]
-    }
     
     private var activeNavigationPath: Binding<[NavigationDestination]> {
         navigationPath ?? environmentNavigationPath
+    }
+
+    private var lesson: CurriculumLesson? {
+        store.course?.curriculum.lessons[lessonId]
     }
 
     var body: some View {
@@ -80,6 +80,18 @@ struct LessonPlayerView: View {
         }
         .navigationTitle(lesson?.title ?? "Lesson")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    activeNavigationPath.wrappedValue.removeAll()
+                } label: {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
+            }
+        }
         .navigationDestination(isPresented: $showQuiz) {
             if let quiz {
                 QuizFlowView(

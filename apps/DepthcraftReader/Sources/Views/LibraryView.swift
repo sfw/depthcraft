@@ -7,7 +7,6 @@ struct LibraryView: View {
     @State private var showingImporter = false
     @State private var importError: ImportValidatorError?
     @State private var showingImportError = false
-    let onSelectCourse: () -> Void
     
     private func gridColumns(for width: CGFloat, height: CGFloat) -> [GridItem] {
         let isLandscape = width > height
@@ -46,7 +45,7 @@ struct LibraryView: View {
                         if let mostRecent = packages.first {
                             Button {
                                 store.loadPackage(from: mostRecent.url)
-                                onSelectCourse()
+                                navigationPath.wrappedValue.append(.courseHome)
                             } label: {
                                 HStack(spacing: 8) {
                                     Text("Continue")
@@ -78,7 +77,7 @@ struct LibraryView: View {
                             )
                             .onTapGesture {
                                 store.loadPackage(from: package.url)
-                                onSelectCourse()
+                                navigationPath.wrappedValue.append(.courseHome)
                             }
                         }
                     }
@@ -117,22 +116,9 @@ struct LibraryView: View {
             }
             .background(Color(hex: "#EDE6D9"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if store.course != nil {
-                        Button {
-                            onSelectCourse()
-                        } label: {
-                            Label("Course", systemImage: "arrow.left")
-                                .font(.subheadline)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
-                    }
-                }
-                
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
+                    Button {
+                        navigationPath.wrappedValue.append(.settings)
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -250,7 +236,7 @@ struct LibraryView: View {
                 
                 store.refreshAvailablePackages()
                 store.loadPackage(from: packageURL)
-                onSelectCourse()
+                navigationPath.wrappedValue.append(.courseHome)
             } catch let error as ImportValidatorError {
                 importError = error
                 showingImportError = true

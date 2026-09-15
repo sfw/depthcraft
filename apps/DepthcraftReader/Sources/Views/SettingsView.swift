@@ -4,6 +4,7 @@ struct SettingsView: View {
     @StateObject private var keyStore = APIKeyStore()
     @StateObject private var customEndpointsStore = CustomEndpointsStore()
     @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @Environment(\.navigationPath) private var navigationPath
     @State private var showingKeyEntry: LLMProvider?
     @State private var showingCustomEndpointSheet: CustomEndpointSheet.Mode?
     @State private var keyInput = ""
@@ -65,6 +66,18 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    navigationPath.wrappedValue.removeAll()
+                } label: {
+                    Image("HomeMark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 28)
+                }
+            }
+        }
         .onAppear {
             // Perform migration on first appearance
             customEndpointsStore.migrateLegacyCustomEndpoint(from: keyStore)
