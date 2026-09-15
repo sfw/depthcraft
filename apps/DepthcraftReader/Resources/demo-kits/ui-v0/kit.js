@@ -1013,7 +1013,7 @@ window.DepthcraftUIKit = {
     items.forEach(item => {
       const chip = document.createElement('div');
       chip.className = 'classify-item';
-      chip.dataset.id = item.id || item.text;
+      chip.dataset.id = item.id || item.text || item.label || item;
       chip.style.cssText = `
         background: ${this.tokens.colors.primary};
         color: #ffffff;
@@ -1028,7 +1028,7 @@ window.DepthcraftUIKit = {
         transition: all 0.2s ease;
         user-select: none;
       `;
-      chip.textContent = item.text || item;
+      chip.textContent = typeof item === 'string' ? item : (item.text || item.label || item.id || '[No Label]');
 
       // Tap to select/deselect chip
       chip.addEventListener('click', () => {
