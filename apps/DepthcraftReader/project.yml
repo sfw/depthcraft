@@ -22,10 +22,6 @@ targets:
         type: folder
         buildPhase: resources
         name: demo-kits
-      - path: ../../Fixtures/ai-harness-design.depthcraft
-        type: folder
-        buildPhase: resources
-        name: Fixtures
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.depthcraft.reader

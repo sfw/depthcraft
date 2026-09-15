@@ -18,7 +18,9 @@ enum PackageLoaderError: LocalizedError {
 }
 
 enum PackageLoader {
-    /// Locates the bundled `*.depthcraft` folder. XcodeGen copies the folder into the resource bundle.
+    /// Locates the bundled `*.depthcraft` folder. DEBUG/TEST ONLY — shipping app has no bundled fixtures.
+    /// Tests should load fixtures via test bundle resources or relative paths, not app bundle.
+    #if DEBUG
     static func bundledPackageURL(named name: String = "ai-harness-design.depthcraft") throws -> URL {
         if let url = Bundle.main.url(forResource: name, withExtension: nil) {
             return url
@@ -37,6 +39,7 @@ enum PackageLoader {
         }
         throw PackageLoaderError.missingBundleResource
     }
+    #endif
 
     static func load(from root: URL) throws -> LoadedCourse {
         #if DEBUG

@@ -45,11 +45,12 @@ final class CourseStore: ObservableObject {
             notes = notesStore.load(packageId: loaded.manifest.packageId)
             errorMessage = nil
             
-            // Persist last opened package URL if it's from Documents (not bundled fixture)
-            let bundledURL = try? PackageLoader.bundledPackageURL()
-            if bundledURL == nil || url.path != bundledURL?.path {
-                UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
-            }
+            // Persist last opened package URL
+            UserDefaults.standard.set(url.path, forKey: lastOpenedPackageKey)
+        } catch PackageLoaderError.missingBundleResource {
+            // No packages found — empty library state (course remains nil)
+            course = nil
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -84,8 +85,8 @@ final class CourseStore: ObservableObject {
             }
         }
         
-        // 3. Fall back to bundled fixture
-        return try PackageLoader.bundledPackageURL()
+        // No packages found — throw to trigger empty state
+        throw PackageLoaderError.missingBundleResource
     }
     
     func loadPackage(from url: URL) {
