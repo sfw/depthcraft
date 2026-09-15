@@ -474,6 +474,81 @@ final class SecurityValidationTests: XCTestCase {
         }
     }
     
+    func testPathNormalizationVarPrivateVar() throws {
+        // Regression: Device-specific path mismatch /var vs /private/var causes false zipSlipDetected
+        // On iOS, temp directories may be /var/... but after appendingPathComponent + standardize,
+        // they become /private/var/..., causing prefix check to fail.
+        
+        // Simulate the device scenario
+        let basePath = "/var/mobile/Containers/Data/Application/ABC123/tmp/extract"
+        let basePathWithSlash = basePath + "/"
+        
+        // After appendingPathComponent + standardize, iOS may return /private/var
+        let childPath = "/private/var/mobile/Containers/Data/Application/ABC123/tmp/extract/novel-idea.depthcraft/content/units/u01/lesson.md"
+        
+        // WITHOUT normalization, this check would fail (false positive for zipSlip)
+        let wouldFailWithoutNormalization = !childPath.hasPrefix(basePathWithSlash)
+        XCTAssertTrue(wouldFailWithoutNormalization, 
+                      "Without normalization, /private/var child doesn't match /var base")
+        
+        // WITH normalization (our fix), this check passes
+        let normalizedBase = ImportValidator.normalizePath(basePath)
+        let normalizedBaseWithSlash = normalizedBase + "/"
+        let normalizedChild = ImportValidator.normalizePath(childPath)
+        
+        let passesWithNormalization = normalizedChild.hasPrefix(normalizedBaseWithSlash)
+        XCTAssertTrue(passesWithNormalization,
+                      "With normalization, paths are consistent: \(normalizedChild) starts with \(normalizedBaseWithSlash)")
+        
+        // Verify normalization doesn't break normal paths
+        let normalPath = "/Users/test/Documents/package/content/lesson.md"
+        XCTAssertEqual(ImportValidator.normalizePath(normalPath), normalPath,
+                       "Non-/var paths should pass through unchanged")
+    }
+    
+    func testUnzipWithDeviceLikePathMismatch() throws {
+        // Failing-before regression: Simulate device temp directory with /var vs /private/var mismatch
+        // This test would FAIL before normalization fix, PASS after
+        
+        let bundle = Bundle(for: type(of: self))
+        guard let fixtureURL = bundle.url(forResource: "import-invalid-paths-dogfood", withExtension: "depthcraft") else {
+            XCTFail("Fixture not found")
+            return
+        }
+        
+        // Create a directory that simulates iOS device temp structure
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("device-sim-\(UUID().uuidString)")
+        
+        do {
+            // Extract to temp directory
+            try ImportValidator.unzipSafely(from: fixtureURL, to: tempRoot)
+            
+            // If we get here, normalization worked
+            // Verify the extraction actually created files
+            let contents = try FileManager.default.contentsOfDirectory(at: tempRoot, includingPropertiesForKeys: nil)
+            XCTAssertFalse(contents.isEmpty, "Extraction should have created files")
+            
+            let packageDir = contents.first { $0.lastPathComponent.hasSuffix(".depthcraft") }
+            XCTAssertNotNil(packageDir, "Should find .depthcraft wrapper directory")
+            
+            // Cleanup
+            try? FileManager.default.removeItem(at: tempRoot)
+            
+        } catch let error as ImportValidatorError {
+            try? FileManager.default.removeItem(at: tempRoot)
+            
+            // If this fails with zipSlipDetected, it means normalization didn't work
+            if case .zipSlipDetected(let path) = error {
+                XCTFail("Path normalization failed - legitimate path rejected as zipSlip: \(path)")
+            } else {
+                XCTFail("Unexpected ImportValidatorError: \(error)")
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: tempRoot)
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+    
     // MARK: - Helper Functions
     
     private func createValidManifest() -> PackageManifest {

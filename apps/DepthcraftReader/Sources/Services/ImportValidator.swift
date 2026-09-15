@@ -72,7 +72,9 @@ enum ImportValidator {
             throw ImportValidatorError.invalidPackageStructure("Not a valid ZIP archive")
         }
         
-        let basePathWithSlash = destinationURL.standardizedFileURL.path + "/"
+        // Normalize base path for iOS /var vs /private/var handling
+        let basePath = normalizePath(destinationURL.standardizedFileURL.path)
+        let basePathWithSlash = basePath + "/"
         
         // Extract each entry with zip-slip protection BEFORE writing
         for entry in archive.entries {
@@ -93,10 +95,10 @@ enum ImportValidator {
             }
             
             // Build destination path and verify it's within destinationURL
-            let destinationPath = destinationURL.appendingPathComponent(entryPath).standardizedFileURL.path
+            let destinationPath = normalizePath(destinationURL.appendingPathComponent(entryPath).standardizedFileURL.path)
             
             // Use path + "/" boundary check to prevent escapes
-            if !destinationPath.hasPrefix(basePathWithSlash) && destinationPath != destinationURL.standardizedFileURL.path {
+            if !destinationPath.hasPrefix(basePathWithSlash) && destinationPath != basePath {
                 throw ImportValidatorError.zipSlipDetected(entryPath)
             }
             
@@ -178,6 +180,10 @@ enum ImportValidator {
         let fileManager = FileManager.default
         let enumerator = fileManager.enumerator(atPath: packageURL.path)
         
+        // Normalize package path for iOS /var vs /private/var handling
+        let packagePath = normalizePath(packageURL.standardizedFileURL.path)
+        let packagePathWithSlash = packagePath + "/"
+        
         while let relativePath = enumerator?.nextObject() as? String {
             // Skip Apple metadata files
             if shouldSkipAppleMetadata(relativePath) {
@@ -195,11 +201,9 @@ enum ImportValidator {
             }
             
             // Construct full path and verify it's within package directory
-            let fullPath = packageURL.appendingPathComponent(relativePath).standardizedFileURL.path
-            let packagePath = packageURL.standardizedFileURL.path
-            let packagePathWithSlash = packagePath + "/"
+            let fullPath = normalizePath(packageURL.appendingPathComponent(relativePath).standardizedFileURL.path)
             
-            // Use path + "/" boundary check (matches unzipSafely logic at line 56)
+            // Use path + "/" boundary check (matches unzipSafely logic at line 76)
             if !fullPath.hasPrefix(packagePathWithSlash) && fullPath != packagePath {
                 throw ImportValidatorError.zipSlipDetected(relativePath)
             }
@@ -426,6 +430,18 @@ enum ImportValidator {
         }
         
         return false
+    }
+    
+    /// Normalize path to handle iOS /var vs /private/var inconsistency.
+    /// On iOS, temporary directories may be reported as /var/... or /private/var/...
+    /// and standardizedFileURL doesn't consistently normalize them across security contexts.
+    static func normalizePath(_ path: String) -> String {
+        // iOS: /var and /private/var refer to the same location
+        // Normalize to /private/var for consistent prefix checks
+        if path.hasPrefix("/var/") && !path.hasPrefix("/private/var/") {
+            return "/private" + path
+        }
+        return path
     }
 }
 
