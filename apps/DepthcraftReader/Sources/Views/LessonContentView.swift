@@ -407,15 +407,33 @@ class InlineContentViewController: UIViewController, UIScrollViewDelegate {
                 container.translatesAutoresizingMaskIntoConstraints = false
                 demoHost.view.translatesAutoresizingMaskIntoConstraints = false
                 container.addSubview(demoHost.view)
+                
+                // Pin demo to container with margins (internal constraints)
                 NSLayoutConstraint.activate([
                     demoHost.view.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
                     demoHost.view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
                     demoHost.view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-                    demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24),
-                    demoHost.view.heightAnchor.constraint(equalToConstant: 400)
+                    demoHost.view.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -24)
                 ])
+                
+                // Add container to hierarchy BEFORE activating viewport-relative constraints
                 stackView.addArrangedSubview(container)
                 demoHost.didMove(toParent: self)
+                
+                // Now activate viewport-relative height constraints (container is in hierarchy)
+                // Set demo container height to fill scrollView's visible frame
+                // This ensures demo expands to fill available lesson content area, not just >=400
+                let heightConstraint = container.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor, constant: -48)
+                heightConstraint.priority = .defaultHigh
+                
+                // Fallback minimum for very short viewports
+                let minHeightConstraint = container.heightAnchor.constraint(greaterThanOrEqualToConstant: 448)
+                minHeightConstraint.priority = .required
+                
+                NSLayoutConstraint.activate([
+                    heightConstraint,
+                    minHeightConstraint
+                ])
             }
         }
     }
