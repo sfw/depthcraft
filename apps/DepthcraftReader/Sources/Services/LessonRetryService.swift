@@ -8,6 +8,9 @@ class LessonRetryService {
     private let customEndpointsStore = CustomEndpointsStore()
     private let fileManager = FileManager.default
     
+    /// Callback to notify stage progress during retry
+    var onStageUpdate: ((LessonStage) -> Void)?
+    
     func retryLesson(
         lesson: CurriculumLesson,
         packageURL: URL,
@@ -75,6 +78,7 @@ class LessonRetryService {
         )
         
         // Generate lesson content
+        onStageUpdate?(.writing)
         let (markdown, meta, _) = try await lessonWriter.writeLesson(
             lesson: plannedLesson,
             unit: unit,
@@ -82,6 +86,7 @@ class LessonRetryService {
         )
         
         // Generate quiz
+        onStageUpdate?(.quiz)
         let quiz = try await quizWriter.writeQuiz(
             lessonMarkdown: markdown,
             lesson: plannedLesson,
@@ -89,6 +94,7 @@ class LessonRetryService {
         )
         
         // Generate demo (optional)
+        onStageUpdate?(.demo)
         let demoOutput = try await demoWriter.writeDemos(
             lessonMarkdown: markdown,
             lesson: plannedLesson,

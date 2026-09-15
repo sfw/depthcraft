@@ -12,6 +12,9 @@ final class CourseStore: ObservableObject {
     @Published var pendingPackageUpgrade: LoadedCourse?
     @Published var showUpgradeDialog = false
     
+    /// Per-lesson retry stage tracking (keyed by lessonId)
+    @Published var retryingLessons: [String: LessonStage] = [:]
+    
     private let progressStore = ProgressStore()
     private let notesStore = NotesStore()
     private let fileManager = FileManager.default
@@ -313,6 +316,16 @@ final class CourseStore: ObservableObject {
         }
         
         return failed
+    }
+    
+    /// Update retry stage for a lesson
+    func updateRetryStage(lessonId: String, stage: LessonStage) {
+        retryingLessons[lessonId] = stage
+    }
+    
+    /// Clear retry state for a lesson
+    func clearRetryStage(lessonId: String) {
+        retryingLessons.removeValue(forKey: lessonId)
     }
     
     func libraryPackages() -> [LibraryPackageMetadata] {
