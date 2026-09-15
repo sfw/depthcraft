@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classify Demo Test - Object vs String Labels</title>
+</head>
+<body>
+  <div id="demo"></div>
+  <script type="module">
+    import 'kit:ui-v0/kit.js';
+
+    // Test case: items with text property (correct)
+    const correctItems = [
+      { id: 'item1', text: 'Item with text property' },
+      { id: 'item2', text: 'Another labeled item' }
+    ];
+
+    // Test case: items with label property (should work now)
+    const labelItems = [
+      { id: 'item3', label: 'Item with label property' },
+      { id: 'item4', label: 'Another label-based item' }
+    ];
+
+    // Test case: items with only id (edge case - should show id)
+    const idOnlyItems = [
+      { id: 'just-id-no-text' }
+    ];
+
+    // Test case: string items (should work)
+    const stringItems = ['Simple string item'];
+
+    const allItems = [...correctItems, ...labelItems, ...idOnlyItems, ...stringItems];
+
+    const bins = [
+      { id: 'bin1', label: 'Category A' },
+      { id: 'bin2', label: 'Category B' }
+    ];
+
+    const correctBins = {
+      'item1': 'bin1',
+      'item2': 'bin1',
+      'item3': 'bin2',
+      'item4': 'bin2',
+      'just-id-no-text': 'bin1',
+      'Simple string item': 'bin2'
+    };
+
+    const demo = DepthcraftUIKit.createClassifyBins({
+      containerId: 'demo',
+      items: allItems,
+      bins: bins,
+      correctBins: correctBins,
+      learningGoal: 'Test classify with various item formats'
+    });
+  </script>
+</body>
+</html>

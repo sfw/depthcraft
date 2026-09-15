@@ -992,7 +992,7 @@ window.DepthcraftUIKit = {
     items.forEach(item => {
       const chip = document.createElement('div');
       chip.className = 'classify-item';
-      chip.dataset.id = item.id || item.text;
+      chip.dataset.id = item.id || item.text || item.label || item;
       chip.draggable = true;
       chip.style.cssText = `
         background: ${this.tokens.colors.primary};
@@ -1006,7 +1006,7 @@ window.DepthcraftUIKit = {
         display: flex;
         align-items: center;
       `;
-      chip.textContent = item.text || item;
+      chip.textContent = typeof item === 'string' ? item : (item.text || item.label || item.id || '[No Label]');
 
       // Touch drag (simplified - similar to DragMatch)
       let draggedChip = null;

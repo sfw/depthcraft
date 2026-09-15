@@ -137,7 +137,8 @@ class DemoWriterService: DemoWriterRole {
         
         7. ClassifyBins: Sort items into categorical bins
            - Use: Classification, categorization, sorting
-           - Example: createClassifyBins({ containerId: 'demo', items: [...], bins: [...], correctBins: {...} })
+           - Example: createClassifyBins({ containerId: 'demo', items: [{id: 'item1', text: 'Display Label'}], bins: [{id: 'bin1', label: 'Category Name'}], correctBins: {'item1': 'bin1'} })
+           - CRITICAL: Each item MUST have a 'text' property (the human-readable label shown on the chip). Never omit item.text
         
         8. ChallengeLoop: Try → feedback → retry pattern (local validation only)
            - Use: Practice problems, code exercises, format practice
