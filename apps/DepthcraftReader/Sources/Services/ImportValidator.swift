@@ -36,6 +36,27 @@ enum ImportValidatorError: LocalizedError {
 
 enum ImportValidator {
     
+    /// Check if a URL is actually a ZIP file by reading magic bytes, even if iOS reports it as a directory.
+    /// iOS may treat .depthcraft files as packages on device, causing isDirectory to return true for ZIPs.
+    ///
+    /// Fail-open for .depthcraft: If magic bytes cannot be read (security-scoped URL restrictions),
+    /// return true to prefer unzip path for files with .depthcraft extension.
+    static func isZipFile(at url: URL) -> Bool {
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
+            // Cannot open for reading - fail-open for .depthcraft to prefer unzip path
+            return url.pathExtension == "depthcraft" || url.lastPathComponent.hasSuffix(".depthcraft")
+        }
+        defer { try? fileHandle.close() }
+        
+        guard let header = try? fileHandle.read(upToCount: 4), header.count >= 4 else {
+            // Cannot read header - fail-open for .depthcraft to prefer unzip path
+            return url.pathExtension == "depthcraft" || url.lastPathComponent.hasSuffix(".depthcraft")
+        }
+        
+        // ZIP files start with PK signature (0x504B0304 or 0x504B0506)
+        return header[0] == 0x50 && header[1] == 0x4B
+    }
+    
     /// Safely unzips a file with zip-slip protection (iOS-safe, in-process)
     static func unzipSafely(from zipURL: URL, to destinationURL: URL) throws {
         let fileManager = FileManager.default
@@ -51,14 +72,21 @@ enum ImportValidator {
             throw ImportValidatorError.invalidPackageStructure("Not a valid ZIP archive")
         }
         
-        let basePathWithSlash = destinationURL.standardizedFileURL.path + "/"
+        // Normalize base path for iOS /var vs /private/var handling
+        let basePath = normalizePath(destinationURL.standardizedFileURL.path)
+        let basePathWithSlash = basePath + "/"
         
         // Extract each entry with zip-slip protection BEFORE writing
         for entry in archive.entries {
             let entryPath = entry.path
             
-            // REFUSE paths with .. or absolute paths BEFORE writing
-            if entryPath.contains("..") {
+            // SKIP Apple metadata files that may be added during export/sharing
+            if shouldSkipAppleMetadata(entryPath) {
+                continue
+            }
+            
+            // REFUSE path traversal attempts (../ or /../) or absolute paths BEFORE writing
+            if hasPathTraversal(entryPath) {
                 throw ImportValidatorError.zipSlipDetected(entryPath)
             }
             
@@ -67,10 +95,10 @@ enum ImportValidator {
             }
             
             // Build destination path and verify it's within destinationURL
-            let destinationPath = destinationURL.appendingPathComponent(entryPath).standardizedFileURL.path
+            let destinationPath = normalizePath(destinationURL.appendingPathComponent(entryPath).standardizedFileURL.path)
             
             // Use path + "/" boundary check to prevent escapes
-            if !destinationPath.hasPrefix(basePathWithSlash) && destinationPath != destinationURL.standardizedFileURL.path {
+            if !destinationPath.hasPrefix(basePathWithSlash) && destinationPath != basePath {
                 throw ImportValidatorError.zipSlipDetected(entryPath)
             }
             
@@ -152,9 +180,18 @@ enum ImportValidator {
         let fileManager = FileManager.default
         let enumerator = fileManager.enumerator(atPath: packageURL.path)
         
+        // Normalize package path for iOS /var vs /private/var handling
+        let packagePath = normalizePath(packageURL.standardizedFileURL.path)
+        let packagePathWithSlash = packagePath + "/"
+        
         while let relativePath = enumerator?.nextObject() as? String {
+            // Skip Apple metadata files
+            if shouldSkipAppleMetadata(relativePath) {
+                continue
+            }
+            
             // Check for path traversal attempts
-            if relativePath.contains("..") {
+            if hasPathTraversal(relativePath) {
                 throw ImportValidatorError.zipSlipDetected(relativePath)
             }
             
@@ -164,10 +201,10 @@ enum ImportValidator {
             }
             
             // Construct full path and verify it's within package directory
-            let fullPath = packageURL.appendingPathComponent(relativePath).standardizedFileURL.path
-            let packagePath = packageURL.standardizedFileURL.path
+            let fullPath = normalizePath(packageURL.appendingPathComponent(relativePath).standardizedFileURL.path)
             
-            if !fullPath.hasPrefix(packagePath) {
+            // Use path + "/" boundary check (matches unzipSafely logic at line 76)
+            if !fullPath.hasPrefix(packagePathWithSlash) && fullPath != packagePath {
                 throw ImportValidatorError.zipSlipDetected(relativePath)
             }
         }
@@ -359,6 +396,52 @@ enum ImportValidator {
         } catch {
             throw ImportValidatorError.schemaValidationFailed("Could not decode \(name): \(error.localizedDescription)")
         }
+    }
+    
+    /// Skip Apple metadata files that may be added during export/sharing
+    private static func shouldSkipAppleMetadata(_ path: String) -> Bool {
+        // Skip __MACOSX directory (macOS resource forks)
+        if path.hasPrefix("__MACOSX/") || path == "__MACOSX" {
+            return true
+        }
+        
+        // Skip .DS_Store files (Finder metadata)
+        let components = path.split(separator: "/")
+        if components.last == ".DS_Store" {
+            return true
+        }
+        
+        // Skip AppleDouble files (._filename)
+        if let lastComponent = components.last, lastComponent.hasPrefix("._") {
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Check for actual path traversal attempts (../ or /../), not just any ".." substring
+    private static func hasPathTraversal(_ path: String) -> Bool {
+        // Normalize path separators
+        let normalized = path.replacingOccurrences(of: "\\", with: "/")
+        
+        // Check for explicit traversal patterns
+        if normalized.hasPrefix("../") || normalized.contains("/../") || normalized.hasSuffix("/..") || normalized == ".." {
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Normalize path to handle iOS /var vs /private/var inconsistency.
+    /// On iOS, temporary directories may be reported as /var/... or /private/var/...
+    /// and standardizedFileURL doesn't consistently normalize them across security contexts.
+    static func normalizePath(_ path: String) -> String {
+        // iOS: /var and /private/var refer to the same location
+        // Normalize to /private/var for consistent prefix checks
+        if path.hasPrefix("/var/") && !path.hasPrefix("/private/var/") {
+            return "/private" + path
+        }
+        return path
     }
 }
 
